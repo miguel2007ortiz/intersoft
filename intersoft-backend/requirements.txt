@@ -1,0 +1,16 @@
+# ════════════════════════════════════════════════════════════
+# InterSoft — Dependencias
+# Objetivo: Python 3.14.6
+#
+# IMPORTANTE sobre compatibilidad:
+#   Django 4.2 y 5.1 NO soportan Python 3.14.
+#   Django 5.2 LTS fue la primera version compatible con 3.14.
+#   Usamos 5.2 LTS porque tiene soporte de seguridad hasta abril 2028.
+#   (Django 6.0 tambien funciona con 3.14, pero su soporte es mas corto.)
+# ════════════════════════════════════════════════════════════
+
+Django>=5.2,<6.0
+mysqlclient>=2.3.0
+djangorestframework>=3.16.0
+python-decouple>=3.8
+Pillow>=11.0.0

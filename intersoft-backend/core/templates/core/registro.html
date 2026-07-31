@@ -1,0 +1,83 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrar negocio - InterSoft</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'core/css/styles.css' %}" rel="stylesheet">
+</head>
+<body>
+<div class="auth-wrapper">
+    <div class="auth-card" style="max-width: 560px;">
+        <div class="brand">
+            <h1><i class="bi bi-shop"></i> InterSoft</h1>
+            <p>Registra tu negocio y empieza a vender</p>
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <h6 class="text-sena fw-bold mb-3"><i class="bi bi-building"></i> Datos del negocio</h6>
+            <div class="row g-3 mb-2">
+                <div class="col-12">
+                    <label class="form-label">{{ form.empresa_nombre.label }}</label>
+                    {{ form.empresa_nombre }}
+                    {% if form.empresa_nombre.errors %}<div class="text-danger small">{{ form.empresa_nombre.errors|striptags }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.nit.label }}</label>
+                    {{ form.nit }}
+                    {% if form.nit.errors %}<div class="text-danger small">{{ form.nit.errors|striptags }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.empresa_email.label }}</label>
+                    {{ form.empresa_email }}
+                    {% if form.empresa_email.errors %}<div class="text-danger small">{{ form.empresa_email.errors|striptags }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h6 class="text-sena fw-bold mb-3 mt-4"><i class="bi bi-person"></i> Tu cuenta de acceso</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.nombre.label }}</label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}<div class="text-danger small">{{ form.nombre.errors|striptags }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.username.label }}</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}<div class="text-danger small">{{ form.username.errors|striptags }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.password1.label }}</label>
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}<div class="text-danger small">{{ form.password1.errors|striptags }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.password2.label }}</label>
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}<div class="text-danger small">{{ form.password2.errors|striptags }}</div>{% endif %}
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-sena w-100 py-2">
+                <i class="bi bi-check-circle"></i> Crear mi negocio
+            </button>
+        </form>
+
+        <hr class="my-4">
+        <p class="text-center mb-0">
+            Ya tienes cuenta?
+            <a href="{% url 'core:login' %}" class="text-sena fw-bold text-decoration-none">Inicia sesion</a>
+        </p>
+    </div>
+</div>
+</body>
+</html>

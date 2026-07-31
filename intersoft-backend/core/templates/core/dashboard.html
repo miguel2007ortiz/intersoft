@@ -1,0 +1,135 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Dashboard — InterSoft{% endblock %}
+{% block empresa_nombre %}{{ empresa.nombre }}{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-speedometer2 text-sena"></i> Dashboard</h2>
+    <span class="badge bg-secondary">{{ empresa.get_plan_display }}</span>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small">Ingresos</div>
+                    <h4 class="mb-0">${{ ingresos_totales|floatformat:0 }}</h4>
+                </div>
+                <i class="bi bi-cash-stack icon text-success"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small">Ventas</div>
+                    <h4 class="mb-0">{{ num_ventas }}</h4>
+                </div>
+                <i class="bi bi-cart-check icon text-primary"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small">Productos</div>
+                    <h4 class="mb-0">{{ num_productos }}</h4>
+                </div>
+                <i class="bi bi-box-seam icon text-warning"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small">Clientes</div>
+                    <h4 class="mb-0">{{ num_clientes }}</h4>
+                </div>
+                <i class="bi bi-people icon text-info"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Productos con stock bajo -->
+    <div class="col-md-6">
+        <div class="card card-kpi">
+            <div class="card-header bg-white fw-bold">
+                <i class="bi bi-exclamation-triangle text-danger"></i> Stock crítico
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Producto</th><th>Stock</th><th>Mínimo</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for p in productos_stock_bajo %}
+                        <tr>
+                            <td>{{ p.nombre }}</td>
+                            <td><span class="badge bg-danger">{{ p.stock }}</span></td>
+                            <td>{{ p.stock_minimo }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-3">Todo el stock está en orden ✓</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Últimas ventas -->
+    <div class="col-md-6">
+        <div class="card card-kpi">
+            <div class="card-header bg-white fw-bold">
+                <i class="bi bi-clock-history text-sena"></i> Últimas ventas
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Factura</th><th>Cliente</th><th>Total</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for v in ultimas_ventas %}
+                        <tr>
+                            <td><small>{{ v.numero_factura }}</small></td>
+                            <td>{{ v.cliente.nombre }}</td>
+                            <td>${{ v.total|floatformat:0 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-3">Aún no hay ventas</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Accesos rápidos -->
+<div class="row g-3 mt-2">
+    <div class="col-md-4">
+        <a href="{% url 'core:crear_venta' %}" class="btn btn-sena w-100 py-3">
+            <i class="bi bi-plus-circle"></i> Nueva Venta
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{% url 'core:crear_producto' %}" class="btn btn-outline-success w-100 py-3">
+            <i class="bi bi-box"></i> Nuevo Producto
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{% url 'core:crear_cliente' %}" class="btn btn-outline-secondary w-100 py-3">
+            <i class="bi bi-person-plus"></i> Nuevo Cliente
+        </a>
+    </div>
+</div>
+{% endblock %}

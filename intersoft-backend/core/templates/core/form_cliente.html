@@ -1,0 +1,27 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ accion }} Cliente — InterSoft{% endblock %}
+{% block empresa_nombre %}{{ empresa.nombre }}{% endblock %}
+{% block nav_clientes %}active{% endblock %}
+{% block content %}
+<h2 class="mb-4"><i class="bi bi-person-plus text-sena"></i> {{ accion }} Cliente</h2>
+<div class="card card-kpi">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                {% for field in form %}
+                <div class="col-md-6">
+                    <label class="form-label">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<div class="text-danger small">{{ field.errors|striptags }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-4">
+                <button type="submit" class="btn btn-sena"><i class="bi bi-check-circle"></i> Guardar</button>
+                <a href="{% url 'core:lista_clientes' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,131 @@
+/* ════════════════════════════════════════════════════════════
+   InterSoft — Hoja de estilos principal
+   Se carga desde las plantillas con:  {% static 'core/css/styles.css' %}
+   Paleta institucional SENA (verde).
+   ════════════════════════════════════════════════════════════ */
+
+:root {
+    --sena-green: #39A900;
+    --sena-dark: #2E7D00;
+    --sena-light: #eaf7e6;
+}
+
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: #f5f6f8;
+}
+
+/* ── Navbar ─────────────────────────────────────────────── */
+.navbar-sena {
+    background-color: var(--sena-dark);
+}
+
+.navbar-sena .navbar-brand,
+.navbar-sena .nav-link,
+.navbar-sena span {
+    color: #fff !important;
+}
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.sidebar {
+    background-color: #fff;
+    min-height: calc(100vh - 56px);
+    border-right: 1px solid #e0e0e0;
+    padding-top: 1rem;
+}
+
+.sidebar .nav-link {
+    color: #333;
+    border-radius: 8px;
+    margin: 3px 8px;
+    padding: 10px 15px;
+    transition: all 0.2s;
+}
+
+.sidebar .nav-link:hover {
+    background-color: var(--sena-light);
+    color: var(--sena-dark);
+}
+
+.sidebar .nav-link.active {
+    background-color: var(--sena-green);
+    color: #fff;
+}
+
+/* ── Botones ────────────────────────────────────────────── */
+.btn-sena {
+    background-color: var(--sena-green);
+    border: none;
+    color: #fff;
+}
+
+.btn-sena:hover {
+    background-color: var(--sena-dark);
+    color: #fff;
+}
+
+/* ── Tarjetas KPI ───────────────────────────────────────── */
+.card-kpi {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.card-kpi .icon {
+    font-size: 2rem;
+    opacity: 0.8;
+}
+
+/* ── Utilidades ─────────────────────────────────────────── */
+.text-sena {
+    color: var(--sena-green);
+}
+
+/* ── Autenticación (login / registro) ───────────────────── */
+.auth-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--sena-dark) 0%, var(--sena-green) 100%);
+    padding: 20px;
+}
+
+.auth-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    max-width: 460px;
+    padding: 40px;
+}
+
+.auth-card .brand {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.auth-card .brand h1 {
+    color: var(--sena-dark);
+    font-weight: 700;
+    font-size: 1.8rem;
+}
+
+.auth-card .brand p {
+    color: #888;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .auth-card {
+        padding: 28px 22px;
+    }
+}
