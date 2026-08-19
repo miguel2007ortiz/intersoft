@@ -8,12 +8,12 @@
   </div>
 </header>
 
-<section class="hero">
+<section class="hero" appBrilloCursor>
   <span class="orbe-fondo orbe-a"></span>
   <span class="orbe-fondo orbe-b"></span>
 
   <div class="contenedor hero-int">
-    <p class="etiqueta aparecer">Gestion empresarial para MiPymes</p>
+    <p class="etiqueta aparecer insignia-pulso">Gestion empresarial para MiPymes</p>
     <h1 class="aparecer" style="--retraso: 90ms">
       Tu negocio ordenado,<br />
       <span class="resaltado">sin hojas de calculo</span>
@@ -31,11 +31,11 @@
 
 <section class="beneficios">
   <div class="contenedor">
-    <h2 class="titulo-seccion">Todo lo que necesita tu negocio</h2>
+    <h2 class="titulo-seccion" appRevelarAlEntrar>Todo lo que necesita tu negocio</h2>
 
     <div class="grilla">
       @for (b of beneficios; track b.titulo; let i = $index) {
-        <article class="tarjeta tarjeta-flot aparecer" [style.--retraso.ms]="i * 90">
+        <article class="tarjeta tarjeta-flot" appRevelarAlEntrar appInclinar3d [style.--retraso.ms]="i * 90">
           <span class="icono" aria-hidden="true">
             @switch (b.icono) {
               @case ('inventario') {
@@ -83,7 +83,7 @@
 </section>
 
 <section class="llamado">
-  <div class="contenedor llamado-int">
+  <div class="contenedor llamado-int" appRevelarAlEntrar>
     <div>
       <h2>Empieza hoy con tu negocio</h2>
       <p>Crear la cuenta toma menos de dos minutos y no necesitas tarjeta.</p>

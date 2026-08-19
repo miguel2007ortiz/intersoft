@@ -6,7 +6,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 45%, #16301a, var(--oscuro) 70%);
+  background: radial-gradient(circle at 50% 45%, #14264a, var(--oscuro) 70%);
   animation: ciclo-fondo 2.4s ease forwards;
 }
 @keyframes ciclo-fondo {
@@ -36,7 +36,7 @@
 /* El circulo y el check se "dibujan" con stroke-dashoffset. */
 .marca { width: 76px; height: 76px; margin-bottom: var(--e4); }
 .marca-aro {
-  stroke: var(--verde); stroke-width: 4; fill: none;
+  stroke: var(--primario); stroke-width: 4; fill: none;
   stroke-dasharray: 214; stroke-dashoffset: 214;
   animation: dibujar-aro .7s cubic-bezier(.65,0,.35,1) .1s forwards;
 }

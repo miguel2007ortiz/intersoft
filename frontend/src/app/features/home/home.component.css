@@ -12,10 +12,18 @@
 .acciones { display: flex; gap: var(--e3); }
 
 .logo { font-size: 22px; font-weight: 700; color: var(--tinta); text-decoration: none; }
-.logo span { color: var(--verde); }
+.logo span { color: var(--primario); }
 
-/* Hero con orbes animados de fondo */
-.hero { position: relative; overflow: hidden; padding: var(--e8) 0; background: var(--verde-suave); }
+/* Hero con orbes animados de fondo y resplandor que sigue el cursor */
+.hero {
+  position: relative; overflow: hidden; padding: var(--e8) 0; background: var(--primario-suave);
+  --brillo-x: 50%; --brillo-y: 30%;
+}
+.hero::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(420px circle at var(--brillo-x) var(--brillo-y), rgba(38,87,217,.16), transparent 70%);
+}
 .hero-int { position: relative; z-index: 1; text-align: center; }
 .orbe-a { width: 380px; height: 380px; top: -80px; left: -60px; }
 .orbe-b { width: 300px; height: 300px; bottom: -100px; right: -40px; animation-delay: 1.2s; }
@@ -28,11 +36,11 @@
   padding: var(--e1) var(--e4);
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--verde-osc);
+  color: var(--primario-osc);
   margin: 0 0 var(--e4);
 }
 .hero h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.15; margin: 0 0 var(--e4); }
-.resaltado { color: var(--verde-osc); }
+.resaltado { color: var(--primario-osc); }
 .entrada { max-width: 640px; margin: 0 auto var(--e6); color: var(--gris); font-size: 17px; }
 .hero-acciones { display: flex; gap: var(--e3); justify-content: center; flex-wrap: wrap; }
 
@@ -49,13 +57,13 @@
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: var(--verde-suave);
-  color: var(--verde-osc);
+  background: var(--primario-suave);
+  color: var(--primario-osc);
 }
 .icono svg { width: 26px; height: 26px; }
 
 /* Llamado a la accion */
-.llamado { padding: var(--e7) 0; background: var(--verde-suave); }
+.llamado { padding: var(--e7) 0; background: var(--primario-suave); }
 .llamado-int {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--e5); flex-wrap: wrap;

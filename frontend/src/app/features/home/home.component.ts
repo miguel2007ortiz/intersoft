@@ -1,9 +1,12 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { BrilloCursorDirective } from '../../shared/directives/brillo-cursor.directive';
+import { Inclinar3dDirective } from '../../shared/directives/inclinar-3d.directive';
+import { RevelarAlEntrarDirective } from '../../shared/directives/revelar-al-entrar.directive';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink],
+  imports: [RouterLink, BrilloCursorDirective, Inclinar3dDirective, RevelarAlEntrarDirective],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
 })

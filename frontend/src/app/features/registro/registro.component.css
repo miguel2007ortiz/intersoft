@@ -8,7 +8,7 @@ legend {
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: var(--verde-osc);
+  color: var(--primario-osc);
   margin-bottom: var(--e3);
   padding: 0;
 }
@@ -25,7 +25,7 @@ legend {
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--verde-osc);
+  color: var(--primario-osc);
   cursor: pointer;
   padding: var(--e1) var(--e2);
 }
@@ -39,4 +39,4 @@ legend {
   font-size: 14.5px;
   text-align: center;
 }
-.enlaces a { color: var(--verde-osc); font-weight: 600; }
+.enlaces a { color: var(--primario-osc); font-weight: 600; }

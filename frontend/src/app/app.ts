@@ -2,10 +2,11 @@ import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { WelcomeOverlayComponent } from './shared/welcome-overlay/welcome-overlay.component';
 import { CookieBannerComponent } from './shared/cookie-banner/cookie-banner.component';
+import { NavProgressComponent } from './shared/nav-progress/nav-progress.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, WelcomeOverlayComponent, CookieBannerComponent],
+  imports: [RouterOutlet, WelcomeOverlayComponent, CookieBannerComponent, NavProgressComponent],
   templateUrl: './app.html',
 })
 export class App {}

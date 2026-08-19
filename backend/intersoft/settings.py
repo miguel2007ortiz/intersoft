@@ -15,7 +15,7 @@ SECRET_KEY = config(
     'SECRET_KEY',
     default='django-insecure-cambia-esta-clave-en-produccion-intersoft-2026'
 )
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
     default='localhost,127.0.0.1',
@@ -106,6 +106,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'EXCEPTION_HANDLER': 'core.exceptions.manejador_excepciones',
 }
 
 SIMPLE_JWT = {
@@ -113,11 +114,54 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:4200', 'http://127.0.0.1:4200']
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:4200,http://127.0.0.1:4200',
+    cast=lambda v: [s.strip() for s in v.split(',')]
+)
 
 MAX_INTENTOS_LOGIN = 5
 MINUTOS_BLOQUEO = 15
 
-FRONTEND_URL = 'http://localhost:4200'
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:4200')
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'no-responder@intersoft.co'
+
+# -- Logging -----------------------------------------------------
+# Con DEBUG=False, Django ya no muestra tracebacks ni datos de
+# conexion en el navegador; los errores quedan registrados aqui
+# para que el equipo los pueda revisar sin exponerlos al publico.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'intersoft.log',
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}

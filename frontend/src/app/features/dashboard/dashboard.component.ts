@@ -1,13 +1,15 @@
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { Inclinar3dDirective } from '../../shared/directives/inclinar-3d.directive';
 
 @Component({
   selector: 'app-dashboard',
+  imports: [Inclinar3dDirective],
   template: `
     <header class="barra">
       <div class="contenedor barra-int">
-        <span class="logo">Inter<span class="verde">Soft</span></span>
+        <span class="logo">Inter<span class="acento">Soft</span></span>
         <div class="usuario">
           <span>{{ auth.usuario()?.nombre }} · {{ auth.usuario()?.rol }}</span>
           <button class="btn btn-secundario" (click)="salir()">Cerrar sesion</button>
@@ -22,10 +24,10 @@ import { AuthService } from '../../core/services/auth.service';
     </section>
     <main class="contenedor modulos">
       @for (m of modulos; track m.titulo) {
-        <article class="tarjeta modulo tarjeta-flot">
+        <article class="tarjeta modulo tarjeta-flot" appInclinar3d>
           <h2>{{ m.titulo }}</h2>
           <p>{{ m.texto }}</p>
-          <span class="estado">Proximamente</span>
+          <span class="estado insignia-pulso">Proximamente</span>
         </article>
       }
     </main>
@@ -44,7 +46,7 @@ import { AuthService } from '../../core/services/auth.service';
         gap: var(--e4);
       }
       .logo { font-size: 22px; font-weight: 700; }
-      .verde { color: var(--verde); }
+      .acento { color: var(--primario); }
       .usuario {
         display: flex;
         align-items: center;
@@ -54,7 +56,7 @@ import { AuthService } from '../../core/services/auth.service';
       }
 
       .bienvenida {
-        background: var(--verde-suave);
+        background: var(--primario-suave);
         padding: var(--e7) 0;
         margin-bottom: var(--e7);
       }
@@ -71,8 +73,8 @@ import { AuthService } from '../../core/services/auth.service';
       .modulo p { margin: 0 0 var(--e4); color: var(--gris); font-size: 15px; }
       .estado {
         display: inline-block;
-        background: var(--verde-suave);
-        color: var(--verde-osc);
+        background: var(--primario-suave);
+        color: var(--primario-osc);
         border-radius: 999px;
         padding: var(--e1) var(--e3);
         font-size: 12.5px;

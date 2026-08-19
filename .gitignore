@@ -6,6 +6,7 @@ __pycache__/
 .env
 media/
 staticfiles/
+backend/logs/*.log
 
 # Node / Angular
 node_modules/

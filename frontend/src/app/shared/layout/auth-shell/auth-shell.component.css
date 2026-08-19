@@ -8,7 +8,7 @@
 .barra-int { display: flex; align-items: center; justify-content: space-between; gap: var(--e4); }
 
 .logo { font-size: 22px; font-weight: 700; color: var(--tinta); text-decoration: none; }
-.logo span { color: var(--verde); }
+.logo span { color: var(--primario); }
 
 .lema { font-size: 14px; color: var(--gris); }
 
