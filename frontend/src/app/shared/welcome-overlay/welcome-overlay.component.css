@@ -1,0 +1,71 @@
+/* Ciclo completo de 2.4s: aparece, se sostiene y se va. */
+.fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, #16301a, var(--oscuro) 70%);
+  animation: ciclo-fondo 2.4s ease forwards;
+}
+@keyframes ciclo-fondo {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+.orbe {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(6px);
+  background: radial-gradient(circle, var(--brillo), transparent 70%);
+  animation: orbe-flota 3s ease-in-out infinite;
+}
+.orbe-1 { width: 320px; height: 320px; top: 12%; left: 8%; }
+.orbe-2 { width: 240px; height: 240px; bottom: 10%; right: 10%; animation-delay: .6s; }
+@keyframes orbe-flota {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-20px) scale(1.06); }
+}
+
+.tarjeta-bienvenida { position: relative; text-align: center; color: #fff; padding: var(--e6); }
+
+/* El circulo y el check se "dibujan" con stroke-dashoffset. */
+.marca { width: 76px; height: 76px; margin-bottom: var(--e4); }
+.marca-aro {
+  stroke: var(--verde); stroke-width: 4; fill: none;
+  stroke-dasharray: 214; stroke-dashoffset: 214;
+  animation: dibujar-aro .7s cubic-bezier(.65,0,.35,1) .1s forwards;
+}
+.marca-check {
+  stroke: #fff; stroke-width: 5; fill: none;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 60; stroke-dashoffset: 60;
+  animation: dibujar-check .45s cubic-bezier(.65,0,.35,1) .65s forwards;
+}
+@keyframes dibujar-aro   { to { stroke-dashoffset: 0; } }
+@keyframes dibujar-check { to { stroke-dashoffset: 0; } }
+
+.saludo, .nombre, .sub {
+  margin: 0;
+  opacity: 0;
+  animation: subir-texto .5s cubic-bezier(.22,1,.36,1) forwards;
+}
+.saludo { font-size: 15px; letter-spacing: .12em; text-transform: uppercase;
+          color: rgba(255,255,255,.72); animation-delay: .8s; }
+.nombre { font-size: clamp(30px, 6vw, 46px); line-height: 1.2; margin: var(--e2) 0;
+          animation-delay: .95s; }
+.sub    { font-size: 15px; color: rgba(255,255,255,.66); animation-delay: 1.1s; }
+@keyframes subir-texto {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fondo, .orbe, .marca-aro, .marca-check, .saludo, .nombre, .sub { animation: none !important; }
+  .saludo, .nombre, .sub { opacity: 1; }
+  .marca-aro, .marca-check { stroke-dashoffset: 0; }
+}

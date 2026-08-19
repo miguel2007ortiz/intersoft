@@ -1,0 +1,100 @@
+<app-auth-shell>
+  <div class="tarjeta caja-auth aparecer">
+    <h1>Crear cuenta</h1>
+    <p class="subtitulo">Registra tu negocio y su primer administrador.</p>
+
+    @if (error(); as e) {
+      <div class="aviso aviso-error" role="alert">{{ e.mensaje }}</div>
+    }
+
+    <form [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
+      <fieldset formGroupName="empresa">
+        <legend>Datos del negocio</legend>
+
+        <div class="campo">
+          <label for="emp-nombre">Nombre del negocio</label>
+          <input id="emp-nombre" type="text" formControlName="nombre" placeholder="Tienda El Progreso" />
+          @if (empresa.nombre.touched && empresa.nombre.invalid) {
+            <p class="mensaje-error">
+              @if (empresa.nombre.hasError('required')) { Escribe el nombre del negocio. }
+              @else { Debe tener al menos 3 caracteres. }
+            </p>
+          }
+        </div>
+
+        <div class="campo">
+          <label for="emp-nit">NIT</label>
+          <input id="emp-nit" type="text" inputmode="numeric" formControlName="nit" placeholder="900123456" />
+          @if (empresa.nit.touched && empresa.nit.invalid) {
+            <p class="mensaje-error">El NIT son 9 digitos, sin puntos ni guiones.</p>
+          }
+        </div>
+      </fieldset>
+
+      <fieldset formGroupName="administrador">
+        <legend>Administrador de la cuenta</legend>
+
+        <div class="campo">
+          <label for="adm-nombre">Nombre completo</label>
+          <input id="adm-nombre" type="text" formControlName="nombre" autocomplete="name"
+                 placeholder="Ana Torres" />
+          @if (admin.nombre.touched && admin.nombre.invalid) {
+            <p class="mensaje-error">Escribe tu nombre completo (minimo 3 caracteres).</p>
+          }
+        </div>
+
+        <div class="campo">
+          <label for="adm-email">Correo electronico</label>
+          <input id="adm-email" type="email" formControlName="email" autocomplete="email"
+                 placeholder="ana@elprogreso.co" />
+          @if (admin.email.pending) {
+            <p class="ayuda">Verificando disponibilidad...</p>
+          } @else if (admin.email.touched && admin.email.invalid) {
+            <p class="mensaje-error">
+              @if (admin.email.hasError('required')) { Escribe tu correo. }
+              @else if (admin.email.hasError('emailEnUso')) { Ya existe una cuenta con este correo. }
+              @else { Ese correo no tiene un formato valido. }
+            </p>
+          } @else if (admin.email.valid && admin.email.touched) {
+            <p class="ayuda ok">Correo disponible.</p>
+          }
+        </div>
+
+        <div class="campo">
+          <label for="adm-password">Contraseña</label>
+          <div class="campo-password">
+            <input id="adm-password" [type]="verPassword() ? 'text' : 'password'"
+                   formControlName="password" autocomplete="new-password" />
+            <button type="button" class="ver" (click)="verPassword.set(!verPassword())"
+                    [attr.aria-label]="verPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+              {{ verPassword() ? 'Ocultar' : 'Ver' }}
+            </button>
+          </div>
+          @if (admin.password.touched && admin.password.hasError('fuerza')) {
+            <p class="mensaje-error">La contraseña necesita: {{ faltantesPassword().join(', ') }}.</p>
+          } @else if (admin.password.touched && admin.password.hasError('required')) {
+            <p class="mensaje-error">Escribe una contraseña.</p>
+          } @else {
+            <p class="ayuda">Minimo 8 caracteres, con mayuscula, minuscula y numero.</p>
+          }
+        </div>
+
+        <div class="campo">
+          <label for="adm-password2">Repite la contraseña</label>
+          <input id="adm-password2" type="password" formControlName="password2" autocomplete="new-password" />
+          @if (grupoAdmin.hasError('passwordsDistintas') && admin.password2.touched) {
+            <p class="mensaje-error">Las contraseñas no coinciden.</p>
+          }
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn btn-primario btn-bloque" [disabled]="cargando()">
+        {{ cargando() ? 'Creando cuenta...' : 'Crear cuenta' }}
+      </button>
+    </form>
+
+    <div class="enlaces">
+      <span>¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesion</a></span>
+    </div>
+  </div>
+</app-auth-shell>

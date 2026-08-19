@@ -1,0 +1,114 @@
+<header class="barra">
+  <div class="contenedor barra-int">
+    <a routerLink="/" class="logo">Inter<span>Soft</span></a>
+    <nav class="acciones">
+      <a routerLink="/login" class="btn btn-secundario">Iniciar sesion</a>
+      <a routerLink="/registro" class="btn btn-primario">Crear cuenta</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <span class="orbe-fondo orbe-a"></span>
+  <span class="orbe-fondo orbe-b"></span>
+
+  <div class="contenedor hero-int">
+    <p class="etiqueta aparecer">Gestion empresarial para MiPymes</p>
+    <h1 class="aparecer" style="--retraso: 90ms">
+      Tu negocio ordenado,<br />
+      <span class="resaltado">sin hojas de calculo</span>
+    </h1>
+    <p class="entrada aparecer" style="--retraso: 180ms">
+      InterSoft reune inventario, ventas y clientes en un solo lugar. Empieza gratis y
+      administra tu empresa desde cualquier navegador.
+    </p>
+    <div class="hero-acciones aparecer" style="--retraso: 270ms">
+      <a routerLink="/registro" class="btn btn-primario">Crear cuenta gratis</a>
+      <a routerLink="/login" class="btn btn-secundario">Ya tengo cuenta</a>
+    </div>
+  </div>
+</section>
+
+<section class="beneficios">
+  <div class="contenedor">
+    <h2 class="titulo-seccion">Todo lo que necesita tu negocio</h2>
+
+    <div class="grilla">
+      @for (b of beneficios; track b.titulo; let i = $index) {
+        <article class="tarjeta tarjeta-flot aparecer" [style.--retraso.ms]="i * 90">
+          <span class="icono" aria-hidden="true">
+            @switch (b.icono) {
+              @case ('inventario') {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7l9-4 9 4-9 4-9-4z" />
+                  <path d="M3 12l9 4 9-4" />
+                  <path d="M3 17l9 4 9-4" />
+                </svg>
+              }
+              @case ('ventas') {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4h2l2.5 12h9L20 8H7" />
+                  <circle cx="10" cy="20" r="1.4" />
+                  <circle cx="17" cy="20" r="1.4" />
+                </svg>
+              }
+              @case ('tienda') {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 9l1.5-5h15L21 9" />
+                  <path d="M4 9v11h16V9" />
+                  <path d="M9 20v-6h6v6" />
+                </svg>
+              }
+              @case ('reportes') {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 20V4" />
+                  <path d="M4 20h16" />
+                  <rect x="7" y="12" width="3" height="5" />
+                  <rect x="12" y="8" width="3" height="9" />
+                  <rect x="17" y="5" width="3" height="12" />
+                </svg>
+              }
+            }
+          </span>
+          <h3>{{ b.titulo }}</h3>
+          <p>{{ b.texto }}</p>
+        </article>
+      }
+    </div>
+  </div>
+</section>
+
+<section class="llamado">
+  <div class="contenedor llamado-int">
+    <div>
+      <h2>Empieza hoy con tu negocio</h2>
+      <p>Crear la cuenta toma menos de dos minutos y no necesitas tarjeta.</p>
+    </div>
+    <a routerLink="/registro" class="btn btn-primario">Crear cuenta gratis</a>
+  </div>
+</section>
+
+<footer class="pie">
+  <div class="contenedor pie-int">
+    <div>
+      <span class="logo logo-claro">Inter<span>Soft</span></span>
+      <p>Tu mejor aliado en la gestion empresarial.</p>
+    </div>
+    <div>
+      <h4>Contacto</h4>
+      <p>soporte&#64;intersoft.co</p>
+      <p>+57 300 123 4567</p>
+    </div>
+    <div>
+      <h4>Siguenos</h4>
+      <p class="redes">Facebook · Instagram · LinkedIn</p>
+    </div>
+  </div>
+  <div class="contenedor derechos">
+    <small>© 2026 InterSoft. Proyecto formativo SENA.</small>
+  </div>
+</footer>

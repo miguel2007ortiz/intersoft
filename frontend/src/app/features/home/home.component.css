@@ -1,0 +1,82 @@
+/* Header sticky con desenfoque */
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--linea);
+  padding: var(--e3) 0;
+}
+.barra-int { display: flex; align-items: center; justify-content: space-between; gap: var(--e4); }
+.acciones { display: flex; gap: var(--e3); }
+
+.logo { font-size: 22px; font-weight: 700; color: var(--tinta); text-decoration: none; }
+.logo span { color: var(--verde); }
+
+/* Hero con orbes animados de fondo */
+.hero { position: relative; overflow: hidden; padding: var(--e8) 0; background: var(--verde-suave); }
+.hero-int { position: relative; z-index: 1; text-align: center; }
+.orbe-a { width: 380px; height: 380px; top: -80px; left: -60px; }
+.orbe-b { width: 300px; height: 300px; bottom: -100px; right: -40px; animation-delay: 1.2s; }
+
+.etiqueta {
+  display: inline-block;
+  background: var(--blanco);
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  padding: var(--e1) var(--e4);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--verde-osc);
+  margin: 0 0 var(--e4);
+}
+.hero h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.15; margin: 0 0 var(--e4); }
+.resaltado { color: var(--verde-osc); }
+.entrada { max-width: 640px; margin: 0 auto var(--e6); color: var(--gris); font-size: 17px; }
+.hero-acciones { display: flex; gap: var(--e3); justify-content: center; flex-wrap: wrap; }
+
+/* Grilla de beneficios */
+.beneficios { padding: var(--e8) 0; }
+.titulo-seccion { text-align: center; font-size: clamp(24px, 4vw, 32px); margin: 0 0 var(--e7); }
+.grilla { display: grid; gap: var(--e5); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.grilla h3 { margin: var(--e3) 0 var(--e2); font-size: 18px; }
+.grilla p { margin: 0; color: var(--gris); font-size: 15px; }
+
+.icono {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--verde-suave);
+  color: var(--verde-osc);
+}
+.icono svg { width: 26px; height: 26px; }
+
+/* Llamado a la accion */
+.llamado { padding: var(--e7) 0; background: var(--verde-suave); }
+.llamado-int {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--e5); flex-wrap: wrap;
+}
+.llamado h2 { margin: 0 0 var(--e1); font-size: 26px; }
+.llamado p { margin: 0; color: var(--gris); }
+
+/* Pie oscuro */
+.pie { background: var(--oscuro); color: rgba(255, 255, 255, 0.72); padding: var(--e7) 0 var(--e5); }
+.pie-int { display: grid; gap: var(--e5); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.pie h4 { color: #fff; margin: 0 0 var(--e2); font-size: 15px; }
+.pie p { margin: 0 0 var(--e1); font-size: 14.5px; }
+.logo-claro { color: #fff; }
+.derechos {
+  margin-top: var(--e5);
+  padding-top: var(--e4);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .barra-int { flex-direction: column; }
+  .llamado-int { justify-content: center; text-align: center; }
+}

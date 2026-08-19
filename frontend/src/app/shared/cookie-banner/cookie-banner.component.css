@@ -1,0 +1,33 @@
+.aviso-cookies {
+  position: fixed;
+  left: 50%;
+  bottom: var(--e5);
+  transform: translateX(-50%);
+  z-index: 900;
+  width: min(760px, 92%);
+  display: flex;
+  align-items: center;
+  gap: var(--e4);
+  padding: var(--e4) var(--e5);
+  background: var(--blanco);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  animation: subir-aviso .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+.aviso-cookies p { margin: 0; font-size: 14.5px; color: var(--gris); }
+.aviso-cookies .btn { flex-shrink: 0; }
+
+@keyframes subir-aviso {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 640px) {
+  .aviso-cookies { flex-direction: column; align-items: stretch; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aviso-cookies { animation: none; }
+}

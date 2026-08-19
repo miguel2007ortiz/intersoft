@@ -1,0 +1,15 @@
+@if (welcome.activo()) {
+  <div class="fondo" role="status" aria-live="polite" (click)="cerrar()">
+    <span class="orbe orbe-1"></span>
+    <span class="orbe orbe-2"></span>
+    <div class="tarjeta-bienvenida" (click)="$event.stopPropagation()">
+      <svg class="marca" viewBox="0 0 76 76" fill="none" aria-hidden="true">
+        <circle class="marca-aro" cx="38" cy="38" r="34" />
+        <path class="marca-check" d="M23 39.5 L33.5 50 L54 27" />
+      </svg>
+      <p class="saludo">Bienvenido de nuevo</p>
+      <h1 class="nombre">{{ primerNombre(welcome.nombre()) }}</h1>
+      <p class="sub">Tu sesion esta lista</p>
+    </div>
+  </div>
+}

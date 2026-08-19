@@ -1,0 +1,33 @@
+.envoltorio { min-height: 100dvh; display: flex; flex-direction: column; }
+
+.barra {
+  background: var(--blanco);
+  border-bottom: 1px solid var(--linea);
+  padding: var(--e4) 0;
+}
+.barra-int { display: flex; align-items: center; justify-content: space-between; gap: var(--e4); }
+
+.logo { font-size: 22px; font-weight: 700; color: var(--tinta); text-decoration: none; }
+.logo span { color: var(--verde); }
+
+.lema { font-size: 14px; color: var(--gris); }
+
+.contenido {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--e7) var(--e4);
+}
+
+.pie {
+  background: var(--oscuro);
+  color: rgba(255, 255, 255, 0.72);
+  padding: var(--e5) 0;
+  font-size: 14px;
+}
+.pie-int { display: flex; align-items: center; justify-content: space-between; gap: var(--e4); }
+
+@media (max-width: 640px) {
+  .lema { display: none; }
+  .pie-int { flex-direction: column; gap: var(--e2); text-align: center; }
+}
