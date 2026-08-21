@@ -1,5 +1,7 @@
-"""Control de acceso de la fase 2: la administracion de seguridad
-(usuarios y roles) queda reservada al rol ADMINISTRADOR."""
+"""Control de acceso por rol:
+- fase 2: la administracion de seguridad queda reservada al ADMINISTRADOR.
+- fase 3: clientes y productos los gestiona el personal interno
+  (ADMINISTRADOR o EMPLEADO); el rol CLIENTE queda excluido."""
 
 from rest_framework.permissions import BasePermission
 
@@ -10,3 +12,16 @@ class EsAdministrador(BasePermission):
     def has_permission(self, request, view) -> bool:
         perfil = getattr(request.user, "perfil", None)
         return bool(perfil and not perfil.deleted_at and perfil.rol.nombre == "ADMINISTRADOR")
+
+
+class EsPersonal(BasePermission):
+    """ADMINISTRADOR o EMPLEADO con cuenta activa (fase 3)."""
+
+    message = "Solo el personal de la empresa (ADMINISTRADOR o EMPLEADO) puede hacer esto."
+
+    ROLES_PERSONAL = {"ADMINISTRADOR", "EMPLEADO"}
+
+    def has_permission(self, request, view) -> bool:
+        perfil = getattr(request.user, "perfil", None)
+        return bool(perfil and not perfil.deleted_at
+                    and perfil.rol.nombre in self.ROLES_PERSONAL)

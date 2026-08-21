@@ -16,9 +16,6 @@ p.gris { margin: var(--e1) 0 0; }
 .volver { color: var(--primario); text-decoration: none; font-weight: 600; font-size: 14.5px; }
 .volver:hover { text-decoration: underline; }
 
-.logo { font-size: 22px; font-weight: 700; }
-.acento { color: var(--primario); }
-
 .formulario { max-width: 760px; margin-bottom: var(--e6); }
 .formulario h2 { margin-bottom: var(--e5); font-size: 20px; }
 .fila-doble {

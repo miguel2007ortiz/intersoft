@@ -8,7 +8,6 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
   imports: [RouterLink, PanelShellComponent],
   template: `
     <app-panel-shell>
-      <span panelHeader class="logo">Inter<span class="acento">Soft</span></span>
       <a panelHeader routerLink="/dashboard" class="volver">&larr; Volver al panel</a>
 
       <section class="contenedor seccion">
@@ -28,8 +27,6 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
   `,
   styles: [
     `
-      .logo { font-size: 22px; font-weight: 700; }
-      .acento { color: var(--primario); }
       .volver { color: var(--primario); text-decoration: none; font-weight: 600; font-size: 14.5px; }
       .volver:hover { text-decoration: underline; }
 

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
+import { personalGuard } from './core/guards/personal.guard';
 
 export const routes: Routes = [
   {
@@ -46,6 +47,20 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/configuracion/configuracion.component').then((m) => m.ConfiguracionComponent),
+  },
+  {
+    path: 'clientes',
+    title: 'Clientes — InterSoft',
+    canActivate: [authGuard, personalGuard],
+    loadComponent: () =>
+      import('./features/catalogo/clientes/clientes.component').then((m) => m.ClientesComponent),
+  },
+  {
+    path: 'productos',
+    title: 'Productos — InterSoft',
+    canActivate: [authGuard, personalGuard],
+    loadComponent: () =>
+      import('./features/catalogo/productos/productos.component').then((m) => m.ProductosComponent),
   },
   {
     path: 'admin/usuarios',
