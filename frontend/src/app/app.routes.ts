@@ -39,5 +39,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
   },
+  {
+    path: 'configuracion',
+    title: 'Configuracion — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/configuracion/configuracion.component').then((m) => m.ConfiguracionComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
