@@ -1,6 +1,8 @@
-from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
-from core.models import Empresa, Usuario, Categoria, Producto, Cliente, Venta
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
+
+from core.models import Empresa, Categoria, Producto, Cliente, Venta
 from cuentas.models import Perfil
 
 
@@ -8,6 +10,8 @@ class Command(BaseCommand):
     help = 'Carga datos de demostracion en la base de datos.'
 
     def handle(self, *args, **options):
+        call_command('seed_roles')
+
         empresa, _ = Empresa.objects.get_or_create(
             nit='900123456',
             defaults={'nombre': 'Tienda El Progreso', 'email': 'contacto@elprogreso.co',
@@ -17,17 +21,24 @@ class Command(BaseCommand):
             user = User.objects.create_user(
                 username='ana@elprogreso.co', password='demo12345',
                 first_name='Ana Torres', email='ana@elprogreso.co')
+            from cuentas.models import Rol
             Perfil.objects.create(usuario=user, empresa=empresa,
-                                  rol='ADMINISTRADOR', es_propietario=True)
+                                  rol=Rol.de_nombre('ADMINISTRADOR'), es_propietario=True)
 
-        usuarios_data = [('Ana Torres', 'ana@elprogreso.co', 'admin'),
-                         ('Luis Perez', 'luis@elprogreso.co', 'vendedor')]
+        cuentas_data = [('Ana Torres', 'ana@elprogreso.co'),
+                        ('Luis Perez', 'luis@elprogreso.co')]
         usuarios = []
-        for nombre, email, rol in usuarios_data:
-            u, _ = Usuario.objects.get_or_create(
-                empresa=empresa, email=email,
-                defaults={'nombre': nombre, 'rol': rol, 'password_hash': 'demo'})
-            usuarios.append(u)
+        for nombre, email in cuentas_data:
+            user, _ = User.objects.get_or_create(
+                username=email,
+                defaults={'first_name': nombre.split(' ', 1)[0],
+                          'last_name': nombre.split(' ', 1)[1] if ' ' in nombre else '',
+                          'email': email})
+            from cuentas.models import Rol
+            perfil, _ = Perfil.objects.get_or_create(
+                usuario=user,
+                defaults={'empresa': empresa, 'rol': Rol.de_nombre('EMPLEADO')})
+            usuarios.append(user)
 
         cat_calzado, _ = Categoria.objects.get_or_create(empresa=empresa, nombre='Calzado')
         cat_ropa, _ = Categoria.objects.get_or_create(empresa=empresa, nombre='Ropa')

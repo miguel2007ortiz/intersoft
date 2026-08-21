@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Perfil, TokenRecuperacion
+from .models import ActividadUsuario, Perfil, TokenRecuperacion
 from .serializers import (
     ConfirmarRecuperacionSerializer, LoginSerializer,
     RegistroSerializer, SolicitarRecuperacionSerializer,
@@ -26,11 +26,19 @@ class LoginView(APIView):
         email = entrada.validated_data["email"]
         password = entrada.validated_data["password"]
 
-        perfil = Perfil.objects.filter(usuario__email__iexact=email).select_related("usuario").first()
+        perfil = (Perfil.objects.filter(usuario__email__iexact=email)
+                  .select_related("usuario", "rol").first())
 
         if perfil and perfil.esta_bloqueado():
+            ActividadUsuario.registrar(perfil.usuario, "LOGIN_BLOQUEADO",
+                                       f"Cuenta bloqueada: {email}")
             return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil.fecha_desbloqueo},
                             status=status.HTTP_423_LOCKED)
+
+        # La cuenta desactivada o borrada no debe consumir intentos ni
+        # recibir un mensaje de credenciales invalidas.
+        if perfil and (not perfil.usuario.is_active or perfil.deleted_at):
+            return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
 
         usuario = authenticate(request, username=email, password=password)
 
@@ -39,9 +47,15 @@ class LoginView(APIView):
             if perfil:
                 perfil.registrar_intento_fallido()
                 restantes = perfil.intentos_restantes()
+                ActividadUsuario.registrar(perfil.usuario, "LOGIN_FALLIDO",
+                                           f"Contrasena invalida para {email}")
                 if perfil.esta_bloqueado():
+                    ActividadUsuario.registrar(perfil.usuario, "CUENTA_BLOQUEADA",
+                                               f"Se superaron los intentos: {email}")
                     return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil.fecha_desbloqueo},
                                     status=status.HTTP_423_LOCKED)
+            else:
+                ActividadUsuario.registrar(None, "LOGIN_FALLIDO", f"Correo inexistente: {email}")
             return Response({"codigo": "CREDENCIALES_INVALIDAS", "intentos_restantes": restantes},
                             status=status.HTTP_401_UNAUTHORIZED)
 
@@ -51,11 +65,12 @@ class LoginView(APIView):
         perfil.reiniciar_intentos()
         refresh = RefreshToken.for_user(usuario)
         nombre = (usuario.get_full_name() or usuario.username).strip()
+        ActividadUsuario.registrar(usuario, "LOGIN_EXITOSO", email)
 
         return Response({
             "access": str(refresh.access_token), "refresh": str(refresh),
             "usuario": {"id": str(perfil.id), "email": usuario.email, "nombre": nombre,
-                        "rol": perfil.rol, "empresa": str(perfil.empresa_id)},
+                        "rol": perfil.nombre_rol, "empresa": str(perfil.empresa_id)},
         })
 
 
@@ -68,7 +83,8 @@ class RegistroEmpresaView(APIView):
         if not entrada.is_valid():
             return Response({"codigo": "DATOS_INVALIDOS", "detalle": "Revisa los datos del formulario.",
                              "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
-        entrada.save()
+        usuario = entrada.save()
+        ActividadUsuario.registrar(usuario, "REGISTRO_EMPRESA", usuario.email)
         return Response(status=status.HTTP_201_CREATED)
 
 
@@ -93,16 +109,18 @@ class SolicitarRecuperacionView(APIView):
         entrada.is_valid(raise_exception=True)
         email = entrada.validated_data["email"]
 
-        perfil = Perfil.objects.filter(usuario__email__iexact=email).select_related("usuario").first()
+        perfil = (Perfil.objects.filter(usuario__email__iexact=email)
+                  .select_related("usuario").first())
         if perfil and perfil.usuario.is_active:
             token = TokenRecuperacion.emitir(perfil, minutos=30)
             enlace = f"{settings.FRONTEND_URL}/restablecer?token={token}"
             send_mail(
-                subject="Restablece tu contraseña de InterSoft",
+                subject="Restablece tu contrasena de InterSoft",
                 message=f"Abre este enlace (vence en 30 minutos): {enlace}",
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[perfil.usuario.email], fail_silently=True,
             )
+            ActividadUsuario.registrar(perfil.usuario, "SOLICITUD_RECUPERACION", email)
         return Response(status=status.HTTP_200_OK)   # SIEMPRE 200
 
 
@@ -113,7 +131,7 @@ class ConfirmarRecuperacionView(APIView):
     def post(self, request):
         entrada = ConfirmarRecuperacionSerializer(data=request.data)
         if not entrada.is_valid():
-            return Response({"codigo": "DATOS_INVALIDOS", "detalle": "La contraseña no cumple los requisitos."},
+            return Response({"codigo": "DATOS_INVALIDOS", "detalle": "La contrasena no cumple los requisitos."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         token_plano = entrada.validated_data["token"]
@@ -131,4 +149,5 @@ class ConfirmarRecuperacionView(APIView):
         registro.usado = True
         registro.save(update_fields=["usado"])
         registro.perfil.reiniciar_intentos()
+        ActividadUsuario.registrar(usuario, "PASSWORD_RESTABLECIDO", usuario.email)
         return Response(status=status.HTTP_200_OK)

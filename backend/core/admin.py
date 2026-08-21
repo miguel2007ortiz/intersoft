@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Empresa, Usuario, Categoria, Producto, Cliente, Venta
+from .models import (Empresa, Categoria, Producto, Cliente, Venta,
+                     DetalleVenta, MovimientoInventario, Notificacion)
 
 
 @admin.register(Empresa)
@@ -10,12 +11,10 @@ class EmpresaAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'created_at', 'updated_at', 'deleted_at')
 
 
-@admin.register(Usuario)
-class UsuarioAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'email', 'empresa', 'rol', 'activo', 'ultimo_login')
-    list_filter = ('empresa', 'rol', 'activo')
-    search_fields = ('nombre', 'email')
-    readonly_fields = ('id', 'created_at', 'updated_at', 'deleted_at')
+class DetalleVentaInline(admin.TabularInline):
+    model = DetalleVenta
+    extra = 0
+    readonly_fields = ('id', 'created_at', 'updated_at')
 
 
 @admin.register(Categoria)
@@ -49,3 +48,27 @@ class VentaAdmin(admin.ModelAdmin):
     search_fields = ('numero_factura', 'cliente__nombre')
     readonly_fields = ('id', 'numero_factura', 'fecha', 'created_at', 'updated_at', 'deleted_at')
     date_hierarchy = 'fecha'
+    inlines = [DetalleVentaInline]
+
+
+@admin.register(DetalleVenta)
+class DetalleVentaAdmin(admin.ModelAdmin):
+    list_display = ('venta', 'producto', 'cantidad', 'precio_unitario', 'subtotal')
+    search_fields = ('venta__numero_factura', 'producto__nombre')
+
+
+@admin.register(MovimientoInventario)
+class MovimientoInventarioAdmin(admin.ModelAdmin):
+    list_display = ('producto', 'tipo', 'cantidad', 'usuario', 'motivo', 'created_at')
+    list_filter = ('tipo', 'producto__empresa')
+    search_fields = ('producto__nombre', 'motivo')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'deleted_at')
+    date_hierarchy = 'created_at'
+
+
+@admin.register(Notificacion)
+class NotificacionAdmin(admin.ModelAdmin):
+    list_display = ('mensaje', 'usuario', 'leida', 'created_at')
+    list_filter = ('leida',)
+    search_fields = ('mensaje', 'usuario__email')
+    readonly_fields = ('id', 'created_at', 'updated_at')

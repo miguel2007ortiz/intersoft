@@ -1,3 +1,235 @@
-from django.test import TestCase
+import re
 
-# Create your tests here.
+from django.contrib.auth.models import User
+from django.core import mail
+from django.core.management import call_command
+from django.db import IntegrityError, transaction
+from django.test import TestCase
+from django.urls import reverse
+
+from core.models import Empresa
+
+from .models import ActividadUsuario, Perfil, Rol, RolPermiso
+
+
+class BaseCuentasTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.empresa = Empresa.objects.create(nombre="Tienda Test", nit="900999999")
+
+    @classmethod
+    def crear_cuenta(cls, email="maria@test.co", password="Clave12345",
+                     rol="EMPLEADO", activo=True):
+        user = User.objects.create_user(username=email, email=email,
+                                        password=password, first_name="Maria")
+        perfil = Perfil.objects.create(usuario=user, empresa=cls.empresa,
+                                       rol=Rol.de_nombre(rol))
+        if not activo:
+            user.is_active = False
+            user.save()
+        return user, perfil
+
+    def login(self, email, password):
+        return self.client.post(reverse("auth-login"),
+                                {"email": email, "password": password},
+                                content_type="application/json")
+
+
+class RolesYPermisosTest(BaseCuentasTest):
+    def test_seed_crea_tres_roles(self):
+        call_command("seed_roles")
+        nombres = set(Rol.objects.values_list("nombre", flat=True))
+        self.assertEqual(nombres, {"ADMINISTRADOR", "EMPLEADO", "CLIENTE"})
+
+    def test_seed_es_idempotente(self):
+        call_command("seed_roles")
+        total_antes = RolPermiso.objects.count()
+        call_command("seed_roles")
+        self.assertEqual(RolPermiso.objects.count(), total_antes)
+        self.assertEqual(Rol.objects.count(), 3)
+
+    def test_administrador_tiene_todos_los_permisos(self):
+        call_command("seed_roles")
+        _, perfil = self.crear_cuenta(rol="ADMINISTRADOR")
+        self.assertTrue(perfil.tiene_permiso("usuarios.gestionar"))
+        self.assertTrue(perfil.tiene_permiso("ventas.gestionar"))
+
+    def test_empleado_no_gestiona_usuarios(self):
+        call_command("seed_roles")
+        _, perfil = self.crear_cuenta(rol="EMPLEADO")
+        self.assertTrue(perfil.tiene_permiso("ventas.gestionar"))
+        self.assertFalse(perfil.tiene_permiso("usuarios.gestionar"))
+
+
+class LoginTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta()
+
+    def test_login_exitoso_devuelve_tokens_y_rol(self):
+        respuesta = self.login("maria@test.co", "Clave12345")
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertIn("access", datos)
+        self.assertIn("refresh", datos)
+        self.assertEqual(datos["usuario"]["rol"], "EMPLEADO")
+        self.assertEqual(datos["usuario"]["email"], "maria@test.co")
+
+    def test_login_normaliza_email(self):
+        respuesta = self.login("MARIA@TEST.CO", "Clave12345")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_credenciales_invalidas_devuelve_401(self):
+        respuesta = self.login("maria@test.co", "incorrecta")
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()["codigo"], "CREDENCIALES_INVALIDAS")
+
+    def test_correo_inexistente_no_revela_intentos(self):
+        respuesta = self.login("fantasma@test.co", "loquesea123")
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertIsNone(respuesta.json()["intentos_restantes"])
+
+    def test_usuario_inactivo_devuelve_403(self):
+        _, _ = self.crear_cuenta(email="inactivo@test.co", activo=False)
+        respuesta = self.login("inactivo@test.co", "Clave12345")
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()["codigo"], "USUARIO_INACTIVO")
+
+
+class BloqueoPorIntentosTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email="luis@test.co")
+
+    def test_bloqueo_tras_maximo_intentos(self):
+        for intento in range(1, 6):
+            respuesta = self.login("luis@test.co", f"mala-{intento}")
+            if intento < 5:
+                self.assertEqual(respuesta.status_code, 401)
+                esperado = 5 - intento
+                self.assertEqual(respuesta.json()["intentos_restantes"], esperado)
+            else:
+                self.assertEqual(respuesta.status_code, 423)
+                self.assertEqual(respuesta.json()["codigo"], "CUENTA_BLOQUEADA")
+
+    def test_password_correcto_no_entra_estando_bloqueado(self):
+        for intento in range(5):
+            self.login("luis@test.co", f"mala-{intento}")
+        respuesta = self.login("luis@test.co", "Clave12345")
+        self.assertEqual(respuesta.status_code, 423)
+
+    def test_login_exitoso_reinicia_intentos(self):
+        self.login("luis@test.co", "mala-1")
+        self.login("luis@test.co", "Clave12345")
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.intentos_fallidos, 0)
+
+
+class RecuperacionPasswordTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, _ = cls.crear_cuenta(email="ana@test.co")
+
+    def solicitar(self, email="ana@test.co"):
+        return self.client.post(reverse("auth-password-reset"),
+                                {"email": email}, content_type="application/json")
+
+    def extraer_token(self, cuerpo):
+        coincidencia = re.search(r"token=([\w-]+)", cuerpo)
+        return coincidencia.group(1) if coincidencia else None
+
+    def test_solicitud_envia_correo_con_token(self):
+        respuesta = self.solicitar()
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIsNotNone(self.extraer_token(mail.outbox[0].body))
+
+    def test_email_desconocido_responde_igual_sin_correo(self):
+        respuesta = self.solicitar("nadie@test.co")
+        self.assertEqual(respuesta.status_code, 200)   # no se revela si existe
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_confirmar_cambio_de_password(self):
+        self.solicitar()
+        token = self.extraer_token(mail.outbox[0].body)
+        respuesta = self.client.post(
+            reverse("auth-password-reset-confirmar"),
+            {"token": token, "password": "NuevaClave99"},
+            content_type="application/json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NuevaClave99"))
+        # ademas desbloquea y limpia intentos
+        perfil = self.user.perfil
+        perfil.refresh_from_db()
+        self.assertFalse(perfil.esta_bloqueado())
+
+    def test_token_usado_no_vale_dos_veces(self):
+        self.solicitar()
+        token = self.extraer_token(mail.outbox[0].body)
+        self.client.post(reverse("auth-password-reset-confirmar"),
+                         {"token": token, "password": "NuevaClave99"},
+                         content_type="application/json")
+        respuesta = self.client.post(
+            reverse("auth-password-reset-confirmar"),
+            {"token": token, "password": "OtraClave77"},
+            content_type="application/json")
+        self.assertEqual(respuesta.json()["codigo"], "TOKEN_INVALIDO")
+
+    def test_password_nueva_debe_ser_segura(self):
+        self.solicitar()
+        token = self.extraer_token(mail.outbox[0].body)
+        respuesta = self.client.post(
+            reverse("auth-password-reset-confirmar"),
+            {"token": token, "password": "debil"},
+            content_type="application/json")
+        self.assertEqual(respuesta.status_code, 400)
+
+
+class AuditoriaTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, _ = cls.crear_cuenta(email="audit@test.co")
+
+    def test_login_exitoso_queda_registrado(self):
+        self.login("audit@test.co", "Clave12345")
+        self.assertTrue(ActividadUsuario.objects.filter(
+            usuario=self.user, accion="LOGIN_EXITOSO").exists())
+
+    def test_login_fallido_queda_registrado(self):
+        self.login("audit@test.co", "equivocada")
+        registro = ActividadUsuario.objects.filter(
+            usuario=self.user, accion="LOGIN_FALLIDO").latest("fecha")
+        self.assertIn("audit@test.co", registro.detalle)
+
+    def test_intento_con_correo_inexistente_se_audita_anonimo(self):
+        self.login("fantasma@test.co", "cualquier1")
+        registro = ActividadUsuario.objects.filter(
+            accion="LOGIN_FALLIDO", usuario__isnull=True).latest("fecha")
+        self.assertIn("fantasma@test.co", registro.detalle)
+
+
+class EmailUnicoTest(BaseCuentasTest):
+    def test_bd_rechaza_emails_duplicados(self):
+        User.objects.create_user(username="uno@test.co", email="repetido@test.co",
+                                 password="Clave12345")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(username="dos@test.co",
+                                         email="REPETIDO@test.co",
+                                         password="Clave12345")
+
+    def test_endpoint_email_disponible(self):
+        self.crear_cuenta(email="tomado@test.co")
+        libre = self.client.get(reverse("auth-email-disponible"), {"email": "nuevo@test.co"})
+        tomado = self.client.get(reverse("auth-email-disponible"), {"email": "tomado@test.co"})
+        self.assertTrue(libre.json()["disponible"])
+        self.assertFalse(tomado.json()["disponible"])

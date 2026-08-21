@@ -1,10 +1,63 @@
 import hashlib
 import uuid
 from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from django.utils.crypto import get_random_string
+
+
+class Rol(models.Model):
+    """Rol de la plataforma. Los nombres estan fijos por fase 1:
+    ADMINISTRADOR, EMPLEADO y CLIENTE."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    nombre = models.CharField(max_length=30, unique=True)
+    descripcion = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        db_table = "rol"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre.title()
+
+    @classmethod
+    def de_nombre(cls, nombre: str) -> "Rol":
+        """Obtiene o crea un rol por nombre; evita fallos si el seed no corrio."""
+        rol, _ = cls.objects.get_or_create(nombre=nombre)
+        return rol
+
+
+class Permiso(models.Model):
+    """Accion puntual del sistema, p. ej. 'ventas.gestionar'."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    codigo = models.CharField(max_length=60, unique=True)
+    descripcion = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        db_table = "permiso"
+        ordering = ["codigo"]
+
+    def __str__(self):
+        return self.codigo
+
+
+class RolPermiso(models.Model):
+    """Asignacion de permisos a cada rol (N:M con tabla intermedia)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    rol = models.ForeignKey(Rol, on_delete=models.CASCADE, related_name="rol_permisos")
+    permiso = models.ForeignKey(Permiso, on_delete=models.CASCADE, related_name="rol_permisos")
+
+    class Meta:
+        db_table = "rol_permiso"
+        unique_together = ("rol", "permiso")
+
+    def __str__(self):
+        return f"{self.rol.nombre}: {self.permiso.codigo}"
 
 
 class Perfil(models.Model):
@@ -15,7 +68,7 @@ class Perfil(models.Model):
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                    related_name="perfil")
     empresa = models.ForeignKey("core.Empresa", on_delete=models.PROTECT, related_name="perfiles")
-    rol = models.CharField(max_length=20, choices=ROLES, default="EMPLEADO")
+    rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name="perfiles")
     es_propietario = models.BooleanField(default=False)
     intentos_fallidos = models.PositiveSmallIntegerField(default=0)
     fecha_desbloqueo = models.DateTimeField(null=True, blank=True)
@@ -26,7 +79,14 @@ class Perfil(models.Model):
         verbose_name_plural = "Perfiles"
 
     def __str__(self):
-        return f"{self.usuario.email} ({self.rol})"
+        return f"{self.usuario.email} ({self.rol.nombre})"
+
+    @property
+    def nombre_rol(self) -> str:
+        return self.rol.nombre
+
+    def tiene_permiso(self, codigo: str) -> bool:
+        return RolPermiso.objects.filter(rol=self.rol, permiso__codigo=codigo).exists()
 
     def esta_bloqueado(self) -> bool:
         return bool(self.fecha_desbloqueo and self.fecha_desbloqueo > timezone.now())
@@ -51,6 +111,32 @@ class Perfil(models.Model):
             self.intentos_fallidos = 0
             self.fecha_desbloqueo = None
             self.save(update_fields=["intentos_fallidos", "fecha_desbloqueo"])
+
+
+class ActividadUsuario(models.Model):
+    """Auditoria automatica: registra cada accion de escritura del sistema.
+    `usuario` puede ser nulo para eventos de cuentas inexistentes (p. ej.
+    intentos de login con correos desconocidos)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name="actividades")
+    accion = models.CharField(max_length=120)
+    detalle = models.CharField(max_length=255, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "actividad_usuario"
+        ordering = ["-fecha"]
+        verbose_name_plural = "Actividades de usuarios"
+
+    def __str__(self):
+        actor = self.usuario.email if self.usuario else "anonimo"
+        return f"{actor} - {self.accion}"
+
+    @classmethod
+    def registrar(cls, usuario=None, accion: str = "", detalle: str = "") -> None:
+        cls.objects.create(usuario=usuario, accion=accion[:120], detalle=detalle[:255])
 
 
 class TokenRecuperacion(models.Model):
