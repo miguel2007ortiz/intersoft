@@ -233,3 +233,208 @@ class EmailUnicoTest(BaseCuentasTest):
         tomado = self.client.get(reverse("auth-email-disponible"), {"email": "tomado@test.co"})
         self.assertTrue(libre.json()["disponible"])
         self.assertFalse(tomado.json()["disponible"])
+
+# ==================== FASE 2: administracion de seguridad ====================
+from rest_framework.test import APIClient
+
+from .models import Permiso
+
+
+class BaseSeguridadTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.empresa = Empresa.objects.create(nombre="Tienda Admin", nit="900888888")
+        call_command("seed_roles")
+        cls.admin = User.objects.create_user(username="admin@test.co", email="admin@test.co",
+                                             password="Clave12345", first_name="Admin")
+        Perfil.objects.create(usuario=cls.admin, empresa=cls.empresa,
+                              rol=Rol.de_nombre("ADMINISTRADOR"), es_propietario=True)
+        cls.api = APIClient()
+        cls.api.force_authenticate(cls.admin)
+
+    @classmethod
+    def crear_cuenta_empresa(cls, email, rol="EMPLEADO", activo=True):
+        user = User.objects.create_user(username=email, email=email,
+                                        password="Clave12345", first_name="Empleado")
+        perfil = Perfil.objects.create(usuario=user, empresa=cls.empresa,
+                                       rol=Rol.de_nombre(rol))
+        if not activo:
+            user.is_active = False
+            user.save()
+        return user, perfil
+
+
+class AccesoSeguridadTest(BaseSeguridadTest):
+    def test_anonimo_recibe_401(self):
+        respuesta = APIClient().get("/api/seguridad/usuarios/")
+        self.assertEqual(respuesta.status_code, 401)
+
+    def test_empleado_recibe_403(self):
+        user, _ = self.crear_cuenta_empresa("emp@test.co")
+        api = APIClient()
+        api.force_authenticate(user)
+        for ruta in ("/api/seguridad/usuarios/", "/api/seguridad/roles/", "/api/seguridad/permisos/"):
+            self.assertEqual(api.get(ruta).status_code, 403, ruta)
+
+
+class CrudUsuariosTest(BaseSeguridadTest):
+    def test_crear_usuario(self):
+        respuesta = self.api.post("/api/seguridad/usuarios/", {
+            "nombre": "Nuevo Empleado", "email": "nuevo@test.co",
+            "password": "Clave12345", "rol": "EMPLEADO"}, format="json")
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()["rol"], "EMPLEADO")
+        self.assertTrue(ActividadUsuario.objects.filter(accion="USUARIO_CREADO").exists())
+
+    def test_email_duplicado_rechazado(self):
+        self.crear_cuenta_empresa("ocupado@test.co")
+        respuesta = self.api.post("/api/seguridad/usuarios/", {
+            "nombre": "Duplicado", "email": "OCUPADO@test.co",
+            "password": "Clave12345", "rol": "EMPLEADO"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("Usa otro", str(respuesta.json()["errores"]))
+
+    def test_rol_inexistente_rechazado(self):
+        respuesta = self.api.post("/api/seguridad/usuarios/", {
+            "nombre": "Sin Rol", "email": "sinrol@test.co",
+            "password": "Clave12345", "rol": "JEFE"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_password_debil_rechazada(self):
+        respuesta = self.api.post("/api/seguridad/usuarios/", {
+            "nombre": "Debil", "email": "debil@test.co",
+            "password": "abc", "rol": "EMPLEADO"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_editar_usuario_cambia_rol_y_correo(self):
+        _, perfil = self.crear_cuenta_empresa("viejo@test.co")
+        respuesta = self.api.put(f"/api/seguridad/usuarios/{perfil.id}/", {
+            "nombre": "Renombrado", "email": "renombrado@test.co",
+            "rol": "CLIENTE"}, format="json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["rol"], "CLIENTE")
+
+    def test_patch_parcial_solo_rol(self):
+        """Regresion: PATCH con un solo campo no debe fallar (fase 2)."""
+        _, perfil = self.crear_cuenta_empresa("parcial@test.co")
+        respuesta = self.api.patch(f"/api/seguridad/usuarios/{perfil.id}/",
+                                   {"rol": "CLIENTE"}, format="json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["rol"], "CLIENTE")
+        self.assertEqual(respuesta.json()["email"], "parcial@test.co")
+
+    def test_editar_con_email_de_otro_rechazado(self):
+        self.crear_cuenta_empresa("tomado@test.co")
+        _, perfil = self.crear_cuenta_empresa("libre@test.co")
+        respuesta = self.api.patch(f"/api/seguridad/usuarios/{perfil.id}/", {
+            "email": "tomado@test.co"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_desactivar_y_reactivar(self):
+        _, perfil = self.crear_cuenta_empresa("temporal@test.co")
+        r1 = self.api.post(f"/api/seguridad/usuarios/{perfil.id}/desactivar/")
+        self.assertFalse(r1.json()["activo"])
+        r2 = self.api.post(f"/api/seguridad/usuarios/{perfil.id}/reactivar/")
+        self.assertTrue(r2.json()["activo"])
+        self.assertTrue(ActividadUsuario.objects.filter(accion="USUARIO_DESACTIVADO").exists())
+
+    def test_no_puede_desactivarse_a_si_mismo(self):
+        mi_perfil = self.admin.perfil
+        respuesta = self.api.post(f"/api/seguridad/usuarios/{mi_perfil.id}/desactivar/")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "AUTODESACTIVACION_PROHIBIDA")
+
+
+class CrudRolesTest(BaseSeguridadTest):
+    def test_listar_roles_con_permisos(self):
+        respuesta = self.api.get("/api/seguridad/roles/")
+        self.assertEqual(respuesta.status_code, 200)
+        admin = next(r for r in respuesta.json()["resultados"] if r["nombre"] == "ADMINISTRADOR")
+        self.assertEqual(len(admin["permisos"]), 8)
+        self.assertTrue(admin["es_sistema"])
+
+    def test_catalogo_de_permisos(self):
+        respuesta = self.api.get("/api/seguridad/permisos/")
+        self.assertEqual(respuesta.json()["total"], 8)
+
+    def test_crear_rol_con_permisos(self):
+        respuesta = self.api.post("/api/seguridad/roles/", {
+            "nombre": "SUPERVISOR", "descripcion": "Vigila ventas",
+            "permisos": ["ventas.gestionar", "reportes.ver"]}, format="json")
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(sorted(respuesta.json()["permisos"]),
+                         ["reportes.ver", "ventas.gestionar"])
+
+    def test_permiso_inexistente_rechazado(self):
+        respuesta = self.api.post("/api/seguridad/roles/", {
+            "nombre": "FANTASMA", "permisos": ["no.existe"]}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_nombre_duplicado_rechazado(self):
+        respuesta = self.api.post("/api/seguridad/roles/", {
+            "nombre": "empleado", "permisos": []}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_editar_permisos_de_rol(self):
+        _, _ = self.crear_cuenta_empresa("x@test.co")
+        creado = self.api.post("/api/seguridad/roles/", {
+            "nombre": "AUXILIAR", "permisos": []}, format="json").json()
+        respuesta = self.api.patch(f"/api/seguridad/roles/{creado['id']}/", {
+            "permisos": ["clientes.gestionar"]}, format="json")
+        self.assertEqual(respuesta.json()["permisos"], ["clientes.gestionar"])
+
+    def test_no_renombrar_rol_del_sistema(self):
+        rol = Rol.objects.get(nombre="ADMINISTRADOR")
+        respuesta = self.api.patch(f"/api/seguridad/roles/{rol.id}/", {
+            "nombre": "JEFE_TOTAL"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+
+    def test_eliminar_rol_sin_usuarios(self):
+        creado = self.api.post("/api/seguridad/roles/", {
+            "nombre": "PASANTE", "permisos": []}, format="json").json()
+        respuesta = self.api.delete(f"/api/seguridad/roles/{creado['id']}/")
+        self.assertEqual(respuesta.status_code, 204)
+        self.assertFalse(Rol.objects.filter(nombre="PASANTE").exists())
+
+    def test_no_eliminar_rol_con_usuarios_activos(self):
+        user = User.objects.create_user(username="conrol@test.co", email="conrol@test.co",
+                                        password="Clave12345", first_name="Con Rol")
+        Perfil.objects.create(usuario=user, empresa=self.empresa,
+                              rol=Rol.de_nombre("AUXILIAR_VENTAS"))
+        rol = Rol.objects.get(nombre="AUXILIAR_VENTAS")
+        respuesta = self.api.delete(f"/api/seguridad/roles/{rol.id}/")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_CON_USUARIOS_ACTIVOS")
+        self.assertIn("Reasignalos", respuesta.json()["detalle"])
+
+    def test_no_eliminar_roles_del_sistema(self):
+        for nombre in ("ADMINISTRADOR", "EMPLEADO", "CLIENTE"):
+            rol = Rol.objects.get(nombre=nombre)
+            respuesta = self.api.delete(f"/api/seguridad/roles/{rol.id}/")
+            self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+
+    def test_clonar_rol_duplica_permisos_con_nombre_temporal(self):
+        origen = Rol.objects.get(nombre="EMPLEADO")
+        clon = self.api.post(f"/api/seguridad/roles/{origen.id}/clonar/").json()
+        self.assertEqual(clon["nombre"], "EMPLEADO (COPIA)")
+        self.assertEqual(sorted(clon["permisos"]), sorted(
+            RolPermiso.objects.filter(rol=origen)
+            .values_list("permiso__codigo", flat=True)))
+        # segundo clon recibe nombre distinto
+        otro = self.api.post(f"/api/seguridad/roles/{origen.id}/clonar/").json()
+        self.assertNotEqual(clon["nombre"], otro["nombre"])
+
+    def test_acciones_quedan_auditadas(self):
+        self.api.post("/api/seguridad/usuarios/", {
+            "nombre": "Auditado", "email": "auditado@test.co",
+            "password": "Clave12345", "rol": "EMPLEADO"}, format="json")
+        creado = self.api.post("/api/seguridad/roles/", {
+            "nombre": "AUDITADO", "permisos": []}, format="json").json()
+        self.api.post(f"/api/seguridad/roles/{creado['id']}/clonar/")
+        self.api.delete(f"/api/seguridad/roles/{creado['id']}/")
+
+        acciones = set(ActividadUsuario.objects.values_list("accion", flat=True))
+        esperadas = {"USUARIO_CREADO", "ROL_CREADO", "ROL_ELIMINADO", "ROL_CLONADO"}
+        faltantes = esperadas - acciones
+        self.assertEqual(faltantes, set(), f"Faltan auditorias: {faltantes}")

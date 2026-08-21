@@ -25,6 +25,10 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
           </button>
           @if (menuAbierto()) {
             <div class="menu-desplegable" role="menu">
+              @if (auth.esAdministrador()) {
+                <a routerLink="/admin/usuarios" (click)="cerrarMenu()">Usuarios</a>
+                <a routerLink="/admin/roles" (click)="cerrarMenu()">Roles y permisos</a>
+              }
               <a routerLink="/configuracion" (click)="cerrarMenu()">Configuracion</a>
               <button type="button" role="menuitem" class="peligro" (click)="salir()">Cerrar sesion</button>
             </div>

@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
 
 export const routes: Routes = [
   {
@@ -45,6 +46,20 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/configuracion/configuracion.component').then((m) => m.ConfiguracionComponent),
+  },
+  {
+    path: 'admin/usuarios',
+    title: 'Usuarios — InterSoft',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./features/administracion/usuarios/usuarios.component').then((m) => m.UsuariosComponent),
+  },
+  {
+    path: 'admin/roles',
+    title: 'Roles y permisos — InterSoft',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./features/administracion/roles/roles.component').then((m) => m.RolesComponent),
   },
   { path: '**', redirectTo: '' },
 ];

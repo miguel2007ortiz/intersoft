@@ -1,0 +1,85 @@
+.pagina { padding-top: var(--e6); padding-bottom: var(--e8); }
+
+.cabecera {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e4);
+  margin-bottom: var(--e5);
+}
+h1 { margin: 0 0 var(--e1); font-size: clamp(24px, 4vw, 30px); }
+.gris { color: var(--gris); margin: 0; font-size: 14.5px; }
+p.gris { margin-top: var(--e1); }
+
+.acciones { display: flex; align-items: center; gap: var(--e3); }
+.volver { color: var(--primario); text-decoration: none; font-weight: 600; font-size: 14.5px; }
+.volver:hover { text-decoration: underline; }
+
+.logo { font-size: 22px; font-weight: 700; }
+.acento { color: var(--primario); }
+
+.formulario { max-width: 640px; margin-bottom: var(--e6); }
+.formulario h2 { margin: 0 0 var(--e5); font-size: 20px; }
+.fila-doble {
+  display: grid;
+  gap: var(--e4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.acciones-form {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e3);
+  margin-top: var(--e2);
+}
+
+.sin-relleno { padding: 0; overflow: hidden; }
+
+.tabla { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.tabla th {
+  text-align: left;
+  background: var(--primario-suave);
+  color: var(--primario-osc);
+  padding: var(--e3) var(--e4);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tabla td {
+  padding: var(--e3) var(--e4);
+  border-top: 1px solid var(--linea);
+  vertical-align: middle;
+}
+.tabla tbody tr:hover { background: #f8faff; }
+
+.insignia {
+  display: inline-block;
+  background: var(--primario-suave);
+  color: var(--primario-osc);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.insignia.ok { background: #E6F5F3; color: var(--ok); }
+.insignia.inactiva { background: #FBEBEA; color: var(--error); }
+
+.celda-acciones { display: flex; gap: var(--e3); white-space: nowrap; }
+
+.enlace {
+  border: 0;
+  background: none;
+  color: var(--primario);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.enlace:hover { text-decoration: underline; }
+.enlace.peligro { color: var(--error); }
+
+.centrado { text-align: center; padding: var(--e5); }
+
+@media (max-width: 720px) {
+  .cabecera { flex-direction: column; align-items: stretch; }
+  .tabla th:nth-child(2), .tabla td:nth-child(2) { display: none; }
+}
