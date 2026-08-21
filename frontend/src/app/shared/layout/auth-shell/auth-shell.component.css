@@ -15,7 +15,8 @@
   pointer-events: none;
   background: radial-gradient(420px circle at var(--brillo-x) var(--brillo-y), rgba(38, 87, 217, 0.16), transparent 70%);
 }
-.barra, .contenido, .pie { position: relative; z-index: 1; }
+.barra, .contenido, app-site-footer { position: relative; z-index: 1; }
+app-site-footer { display: block; }
 
 .barra {
   background: var(--blanco);
@@ -36,15 +37,6 @@
   padding: var(--e7) var(--e4);
 }
 
-.pie {
-  background: var(--oscuro);
-  color: rgba(255, 255, 255, 0.72);
-  padding: var(--e5) 0;
-  font-size: 14px;
-}
-.pie-int { display: flex; align-items: center; justify-content: space-between; gap: var(--e4); }
-
 @media (max-width: 640px) {
   .lema { display: none; }
-  .pie-int { flex-direction: column; gap: var(--e2); text-align: center; }
 }

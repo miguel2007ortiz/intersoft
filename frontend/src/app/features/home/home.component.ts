@@ -3,10 +3,11 @@ import { RouterLink } from '@angular/router';
 import { BrilloCursorDirective } from '../../shared/directives/brillo-cursor.directive';
 import { Inclinar3dDirective } from '../../shared/directives/inclinar-3d.directive';
 import { RevelarAlEntrarDirective } from '../../shared/directives/revelar-al-entrar.directive';
+import { SiteFooterComponent } from '../../shared/layout/site-footer/site-footer.component';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, BrilloCursorDirective, Inclinar3dDirective, RevelarAlEntrarDirective],
+  imports: [RouterLink, BrilloCursorDirective, Inclinar3dDirective, RevelarAlEntrarDirective, SiteFooterComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
 })

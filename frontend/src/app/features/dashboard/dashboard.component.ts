@@ -2,66 +2,55 @@ import { Component, HostListener, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { Inclinar3dDirective } from '../../shared/directives/inclinar-3d.directive';
+import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [Inclinar3dDirective, RouterLink],
+  imports: [Inclinar3dDirective, RouterLink, PanelShellComponent],
   template: `
-    <header class="barra">
-      <div class="contenedor barra-int">
-        <span class="logo">Inter<span class="acento">Soft</span></span>
-        <div class="usuario">
-          <span>{{ auth.usuario()?.nombre }} · {{ auth.usuario()?.rol }}</span>
-          <div class="menu-wrap" (click)="$event.stopPropagation()">
-            <button
-              type="button"
-              class="btn-menu"
-              [class.abierto]="menuAbierto()"
-              [attr.aria-expanded]="menuAbierto()"
-              aria-label="Abrir menu"
-              (click)="alternarMenu()"
-            >
-              <span></span><span></span><span></span>
-            </button>
-            @if (menuAbierto()) {
-              <div class="menu-desplegable" role="menu">
-                <a routerLink="/configuracion" (click)="cerrarMenu()">Configuracion</a>
-                <button type="button" role="menuitem" class="peligro" (click)="salir()">Cerrar sesion</button>
-              </div>
-            }
-          </div>
+    <app-panel-shell>
+      <span panelHeader class="logo">Inter<span class="acento">Soft</span></span>
+      <div panelHeader class="usuario">
+        <span>{{ auth.usuario()?.nombre }} · {{ auth.usuario()?.rol }}</span>
+        <div class="menu-wrap" (click)="$event.stopPropagation()">
+          <button
+            type="button"
+            class="btn-menu"
+            [class.abierto]="menuAbierto()"
+            [attr.aria-expanded]="menuAbierto()"
+            aria-label="Abrir menu"
+            (click)="alternarMenu()"
+          >
+            <span></span><span></span><span></span>
+          </button>
+          @if (menuAbierto()) {
+            <div class="menu-desplegable" role="menu">
+              <a routerLink="/configuracion" (click)="cerrarMenu()">Configuracion</a>
+              <button type="button" role="menuitem" class="peligro" (click)="salir()">Cerrar sesion</button>
+            </div>
+          }
         </div>
       </div>
-    </header>
-    <section class="bienvenida">
-      <div class="contenedor">
-        <h1>Hola, {{ auth.usuario()?.nombre }}</h1>
-        <p>Desde aqui administraras inventario, ventas y reportes de tu negocio.</p>
-      </div>
-    </section>
-    <main class="contenedor modulos">
-      @for (m of modulos; track m.titulo) {
-        <article class="tarjeta modulo tarjeta-flot" appInclinar3d>
-          <h2>{{ m.titulo }}</h2>
-          <p>{{ m.texto }}</p>
-          <span class="estado insignia-pulso">Proximamente</span>
-        </article>
-      }
-    </main>
+
+      <section class="bienvenida">
+        <div class="contenedor">
+          <h1>Hola, {{ auth.usuario()?.nombre }}</h1>
+          <p>Desde aqui administraras inventario, ventas y reportes de tu negocio.</p>
+        </div>
+      </section>
+      <section class="contenedor modulos">
+        @for (m of modulos; track m.titulo) {
+          <article class="tarjeta modulo tarjeta-flot" appInclinar3d>
+            <h2>{{ m.titulo }}</h2>
+            <p>{{ m.texto }}</p>
+            <span class="estado insignia-pulso">Proximamente</span>
+          </article>
+        }
+      </section>
+    </app-panel-shell>
   `,
   styles: [
     `
-      .barra {
-        background: #fff;
-        border-bottom: 1px solid var(--linea);
-        padding: var(--e3) 0;
-      }
-      .barra-int {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--e4);
-      }
       .logo { font-size: 22px; font-weight: 700; }
       .acento { color: var(--primario); }
       .usuario {
@@ -157,10 +146,6 @@ import { Inclinar3dDirective } from '../../shared/directives/inclinar-3d.directi
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-      }
-
-      @media (max-width: 640px) {
-        .barra-int { flex-direction: column; }
       }
     `,
   ],

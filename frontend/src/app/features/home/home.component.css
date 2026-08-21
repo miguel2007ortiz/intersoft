@@ -71,19 +71,6 @@
 .llamado h2 { margin: 0 0 var(--e1); font-size: 26px; }
 .llamado p { margin: 0; color: var(--gris); }
 
-/* Pie oscuro */
-.pie { background: var(--oscuro); color: rgba(255, 255, 255, 0.72); padding: var(--e7) 0 var(--e5); }
-.pie-int { display: grid; gap: var(--e5); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.pie h4 { color: #fff; margin: 0 0 var(--e2); font-size: 15px; }
-.pie p { margin: 0 0 var(--e1); font-size: 14.5px; }
-.logo-claro { color: #fff; }
-.derechos {
-  margin-top: var(--e5);
-  padding-top: var(--e4);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  text-align: center;
-}
-
 @media (max-width: 640px) {
   .barra-int { flex-direction: column; }
   .llamado-int { justify-content: center; text-align: center; }
