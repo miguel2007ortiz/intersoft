@@ -5,6 +5,7 @@ django-cors-headers>=4.4
 python-decouple>=3.8
 Pillow>=11.0.0
 mysqlclient>=2.2
+gunicorn>=22.0
 
 # Alternativa pura en Python a mysqlclient (si mysqlclient no compila en
 # Windows). intersoft/__init__.py la detecta y activa automaticamente.

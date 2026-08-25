@@ -1,0 +1,68 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: intersoft_db
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_USER: ${DB_USER:-intersoft}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-intersoft2026}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-cambia-esta-clave-en-produccion-intersoft-2026}
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,backend,127.0.0.1
+      DB_NAME: ${DB_NAME:-intersoft_db}
+      DB_USER: ${DB_USER:-intersoft}
+      DB_PASSWORD: ${DB_PASSWORD:-intersoft2026}
+      DB_HOST: db
+      DB_PORT: "3306"
+      CORS_ALLOWED_ORIGINS: http://localhost,http://localhost:80
+      FRONTEND_URL: http://localhost
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_data:/app/media
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mysql_data:
+  media_data:
