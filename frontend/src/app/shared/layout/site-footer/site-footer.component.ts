@@ -1,26 +1,16 @@
 import { Component } from '@angular/core';
 
+/** Pie minimo y compartido por toda la app: nombre, tagline y copyright.
+ * Se retiraron telefono, correo y redes sociales porque eran datos de
+ * ejemplo sin destino real (ver AUDITORIA.md, seccion 9.2). */
 @Component({
   selector: 'app-site-footer',
   template: `
     <footer class="pie">
       <div class="contenedor pie-int">
-        <div class="marca">
-          <span class="logo">Inter<span>Soft</span></span>
-          <p>Tu mejor aliado en la gestion empresarial.</p>
-        </div>
-        <div>
-          <h4>Contacto</h4>
-          <p>soporte&#64;intersoft.co</p>
-          <p>+57 300 123 4567</p>
-        </div>
-        <div>
-          <h4>Siguenos</h4>
-          <p class="redes">Facebook · Instagram · LinkedIn</p>
-        </div>
-      </div>
-      <div class="contenedor derechos">
-        <small>© 2026 InterSoft. Proyecto formativo SENA.</small>
+        <span class="logo">Inter<span>Soft</span></span>
+        <p class="lema">Tu mejor aliado en la gestion empresarial.</p>
+        <p class="derechos">© 2026 InterSoft. Proyecto formativo SENA.</p>
       </div>
     </footer>
   `,
@@ -29,34 +19,20 @@ import { Component } from '@angular/core';
       .pie {
         background: var(--oscuro);
         color: rgba(255, 255, 255, 0.72);
-        padding: var(--e7) 0 var(--e5);
-        font-size: 14.5px;
+        padding: var(--e5) 0;
+        font-size: 14px;
       }
       .pie-int {
-        display: grid;
-        gap: var(--e5);
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-      .logo { font-size: 22px; font-weight: 700; color: #fff; text-decoration: none; }
-      .logo span { color: #7ea2f5; }
-      .marca p { margin: var(--e1) 0 0; max-width: 280px; }
-      h4 { color: #fff; margin: 0 0 var(--e2); font-size: 15px; letter-spacing: 0.02em; }
-      p { margin: 0 0 var(--e1); }
-      .redes { color: rgba(255, 255, 255, 0.72); }
-
-      .derechos {
-        margin-top: var(--e5);
-        padding-top: var(--e4);
-        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--e1);
         text-align: center;
-        font-size: 13.5px;
-        color: rgba(255, 255, 255, 0.55);
       }
-
-      @media (max-width: 640px) {
-        .pie-int { text-align: center; }
-        .marca p { margin-inline: auto; }
-      }
+      .logo { font-size: 18px; font-weight: 700; color: #fff; }
+      .logo span { color: #7ea2f5; }
+      .lema { margin: 0; }
+      .derechos { margin: var(--e1) 0 0; font-size: 12.5px; color: rgba(255, 255, 255, 0.55); }
     `,
   ],
 })

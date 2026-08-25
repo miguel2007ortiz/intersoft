@@ -6,6 +6,7 @@ export interface Usuario {
   nombre: string;
   rol: RolUsuario;
   empresa: string;
+  empresa_nombre: string;
 }
 
 export interface LoginRequest {

@@ -1,6 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
@@ -8,7 +7,7 @@ import { ErrorSeguridad, UsuarioAdmin } from '../../../core/models/seguridad.mod
 
 @Component({
   selector: 'app-usuarios',
-  imports: [ReactiveFormsModule, RouterLink, PanelShellComponent],
+  imports: [ReactiveFormsModule, PanelShellComponent],
   templateUrl: './usuarios.component.html',
   styleUrl: './usuarios.component.css',
 })

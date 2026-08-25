@@ -12,10 +12,6 @@ h2 { margin: 0 0 var(--e5); font-size: 20px; }
 .gris { color: var(--gris); font-size: 14.5px; }
 p.gris { margin: var(--e1) 0 0; }
 
-.acciones { display: flex; align-items: center; gap: var(--e3); }
-.volver { color: var(--primario); text-decoration: none; font-weight: 600; font-size: 14.5px; }
-.volver:hover { text-decoration: underline; }
-
 .formulario { max-width: 720px; margin-bottom: var(--e6); }
 .fila-doble, .fila-triple {
   display: grid;
@@ -64,7 +60,7 @@ p.gris { margin: var(--e1) 0 0; }
   border-top: 1px solid var(--linea);
   vertical-align: middle;
 }
-.tabla tbody tr:hover { background: #f8faff; }
+.tabla tbody tr:hover { background: var(--fila-hover); }
 
 .linea-dato { display: block; }
 .celda-acciones { display: flex; gap: var(--e3); white-space: nowrap; }

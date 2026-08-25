@@ -1,69 +1,56 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
-import { Inclinar3dDirective } from '../../shared/directives/inclinar-3d.directive';
+import { CatalogoService } from '../../core/services/catalogo.service';
+import { Producto } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 
+/** Resumen del dia. Stock bajo y valor de inventario se calculan de verdad
+ * a partir de /api/productos/ (ya existe). Ventas y facturas todavia no
+ * tienen API en el backend (ver AUDITORIA.md, seccion 4): en vez de
+ * mostrar un "$0" que pareceria un dato real, se marcan como "sin datos
+ * aun" para no confundir "no hay ventas" con "no se puede saber". */
 @Component({
   selector: 'app-dashboard',
-  imports: [Inclinar3dDirective, PanelShellComponent],
-  template: `
-    <app-panel-shell>
-      <section class="bienvenida">
-        <div class="contenedor">
-          <h1>Hola, {{ auth.usuario()?.nombre }}</h1>
-          <p>Desde aqui administraras inventario, ventas y reportes de tu negocio.</p>
-        </div>
-      </section>
-      <section class="contenedor modulos">
-        @for (m of modulos; track m.titulo) {
-          <article class="tarjeta modulo tarjeta-flot" appInclinar3d>
-            <h2>{{ m.titulo }}</h2>
-            <p>{{ m.texto }}</p>
-            <span class="estado insignia-pulso">Proximamente</span>
-          </article>
-        }
-      </section>
-    </app-panel-shell>
-  `,
-  styles: [
-    `
-
-      .bienvenida {
-        background: var(--primario-suave);
-        padding: var(--e7) 0;
-        margin-bottom: var(--e7);
-      }
-      .bienvenida h1 { margin: 0 0 var(--e2); font-size: clamp(26px, 5vw, 36px); }
-      .bienvenida p { margin: 0; color: var(--gris); }
-
-      .modulos {
-        display: grid;
-        gap: var(--e5);
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        padding-bottom: var(--e8);
-      }
-      .modulo h2 { margin: 0 0 var(--e2); font-size: 19px; }
-      .modulo p { margin: 0 0 var(--e4); color: var(--gris); font-size: 15px; }
-      .estado {
-        display: inline-block;
-        background: var(--primario-suave);
-        color: var(--primario-osc);
-        border-radius: 999px;
-        padding: var(--e1) var(--e3);
-        font-size: 12.5px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-    `,
-  ],
+  imports: [RouterLink, PanelShellComponent],
+  templateUrl: './dashboard.component.html',
+  styleUrl: './dashboard.component.css',
 })
 export class DashboardComponent {
   readonly auth = inject(AuthService);
+  private readonly catalogo = inject(CatalogoService);
 
-  readonly modulos = [
-    { titulo: 'Inventario', texto: 'Control de stock, alertas de minimos y movimientos de producto.' },
-    { titulo: 'Ventas y facturacion', texto: 'Registra ventas en el mostrador y genera la factura al instante.' },
-    { titulo: 'Reportes', texto: 'Cuanto vendiste, que se mueve y que esta quieto, en un vistazo.' },
-  ];
+  readonly cargandoInventario = signal(true);
+  readonly productosStockBajo = signal<Producto[]>([]);
+  readonly valorInventario = signal(0);
+
+  /** Clientes/Productos (y por tanto estas metricas) son del personal
+   * interno: mismo criterio que ya usan el sidebar y el personalGuard. */
+  readonly tieneInventario = computed(() => this.auth.usuario()?.rol !== 'CLIENTE');
+
+  constructor() {
+    if (this.tieneInventario()) {
+      this.catalogo.listarProductos({ activo: true }).subscribe({
+        next: ({ resultados }) => {
+          this.productosStockBajo.set(resultados.filter((p) => p.stock_bajo));
+          this.valorInventario.set(
+            resultados.reduce((suma, p) => suma + Number(p.precio) * p.stock, 0),
+          );
+          this.cargandoInventario.set(false);
+        },
+        error: () => this.cargandoInventario.set(false),
+      });
+    } else {
+      this.cargandoInventario.set(false);
+    }
+  }
+
+  /** "Daniel Velasco Ruiz" -> "Daniel" (mismo criterio que WelcomeOverlayComponent) */
+  primerNombre(): string {
+    return (this.auth.usuario()?.nombre ?? '').trim().split(' ')[0] || 'de nuevo';
+  }
+
+  formatearValor(valor: number): string {
+    return valor.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+  }
 }

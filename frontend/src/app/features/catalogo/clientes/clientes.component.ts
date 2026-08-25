@@ -1,6 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
@@ -12,7 +11,7 @@ const TIPOS_DOCUMENTO = ['CC', 'NIT', 'CE', 'PAS'] as const;
 
 @Component({
   selector: 'app-clientes',
-  imports: [ReactiveFormsModule, RouterLink, PanelShellComponent],
+  imports: [ReactiveFormsModule, PanelShellComponent],
   templateUrl: './clientes.component.html',
   styleUrl: './clientes.component.css',
 })

@@ -1,6 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { SeguridadService } from '../../../core/services/seguridad.service';
 import {
@@ -9,7 +8,7 @@ import {
 
 @Component({
   selector: 'app-roles',
-  imports: [ReactiveFormsModule, RouterLink, PanelShellComponent],
+  imports: [ReactiveFormsModule, PanelShellComponent],
   templateUrl: './roles.component.html',
   styleUrl: './roles.component.css',
 })
@@ -25,6 +24,8 @@ export class RolesComponent {
 
   readonly editando = signal<RolAdmin | null>(null);
   readonly formularioAbierto = signal(false);
+  /** id del rol desplegado en el acordeon (uno a la vez) */
+  readonly expandido = signal<string | null>(null);
 
   /** codigos de permisos marcados en el formulario */
   readonly seleccionados = signal<Set<string>>(new Set());
@@ -63,6 +64,10 @@ export class RolesComponent {
     this.seleccionados.set(new Set());
     this.error.set(null);
     this.formularioAbierto.set(true);
+  }
+
+  alternarAcordeon(id: string): void {
+    this.expandido.update((actual) => (actual === id ? null : id));
   }
 
   abrirEdicion(rol: RolAdmin): void {

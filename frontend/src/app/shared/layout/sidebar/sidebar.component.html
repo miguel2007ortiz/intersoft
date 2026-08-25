@@ -1,0 +1,105 @@
+@if (abierto() && !esEscritorio()) {
+  <div class="fondo-drawer" (click)="cerrar.emit()"></div>
+}
+
+<nav
+  class="sidebar"
+  [class.abierta]="abierto()"
+  [class.colapsada]="colapsado()"
+  [attr.inert]="!abierto() && !esEscritorio() ? '' : null"
+  aria-label="Navegacion principal"
+>
+  <ul>
+    @if (auth.usuario()?.rol !== 'CLIENTE') {
+      <li>
+        <a
+          routerLink="/dashboard"
+          routerLinkActive="activo"
+          [routerLinkActiveOptions]="{ exact: true }"
+          (click)="cerrar.emit()"
+          title="Panel"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 10.5 12 3l9 7.5" />
+            <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+          </svg>
+          <span>Panel</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/clientes" routerLinkActive="activo" (click)="cerrar.emit()" title="Clientes">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="8" r="3" />
+            <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+            <circle cx="17" cy="8" r="2.4" />
+            <path d="M15.5 14.2c2.4.5 4.5 2.6 4.5 5.8" />
+          </svg>
+          <span>Clientes</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/productos" routerLinkActive="activo" (click)="cerrar.emit()" title="Productos">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 8 12 3l9 5-9 5-9-5Z" />
+            <path d="M3 8v9l9 5 9-5V8" />
+            <path d="M12 13v9" />
+          </svg>
+          <span>Productos</span>
+        </a>
+      </li>
+    }
+    @if (auth.esAdministrador()) {
+      <li>
+        <a routerLink="/admin/usuarios" routerLinkActive="activo" (click)="cerrar.emit()" title="Usuarios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="9" cy="11" r="2.2" />
+            <path d="M6.2 16c.4-1.8 1.7-2.8 2.8-2.8s2.4 1 2.8 2.8" />
+            <path d="M15 10h4M15 14h4" />
+          </svg>
+          <span>Usuarios</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/admin/roles" routerLinkActive="activo" (click)="cerrar.emit()" title="Roles">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
+            <path d="M9.5 12l1.8 1.8L15 10.2" />
+          </svg>
+          <span>Roles</span>
+        </a>
+      </li>
+    }
+    <li>
+      <a routerLink="/configuracion" routerLinkActive="activo" (click)="cerrar.emit()" title="Configuracion">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+        </svg>
+        <span>Configuracion</span>
+      </a>
+    </li>
+  </ul>
+
+  <button
+    type="button"
+    class="btn-colapsar"
+    (click)="alternarColapso()"
+    [attr.aria-expanded]="!colapsado()"
+    [attr.aria-label]="colapsado() ? 'Expandir menu' : 'Contraer menu'"
+    [title]="colapsado() ? 'Expandir menu' : 'Contraer menu'"
+  >
+    <svg class="icono-colapsar" viewBox="0 0 24 24" width="18" height="18" fill="none"
+         stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+    <span>Contraer</span>
+  </button>
+</nav>

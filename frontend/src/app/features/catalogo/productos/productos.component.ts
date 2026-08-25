@@ -1,6 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import {
@@ -9,7 +8,7 @@ import {
 
 @Component({
   selector: 'app-productos',
-  imports: [ReactiveFormsModule, RouterLink, PanelShellComponent],
+  imports: [ReactiveFormsModule, PanelShellComponent],
   templateUrl: './productos.component.html',
   styleUrl: './productos.component.css',
 })

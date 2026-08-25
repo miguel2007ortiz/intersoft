@@ -27,7 +27,7 @@ class LoginView(APIView):
         password = entrada.validated_data["password"]
 
         perfil = (Perfil.objects.filter(usuario__email__iexact=email)
-                  .select_related("usuario", "rol").first())
+                  .select_related("usuario", "rol", "empresa").first())
 
         if perfil and perfil.esta_bloqueado():
             ActividadUsuario.registrar(perfil.usuario, "LOGIN_BLOQUEADO",
@@ -70,7 +70,8 @@ class LoginView(APIView):
         return Response({
             "access": str(refresh.access_token), "refresh": str(refresh),
             "usuario": {"id": str(perfil.id), "email": usuario.email, "nombre": nombre,
-                        "rol": perfil.nombre_rol, "empresa": str(perfil.empresa_id)},
+                        "rol": perfil.nombre_rol, "empresa": str(perfil.empresa_id),
+                        "empresa_nombre": perfil.empresa.nombre},
         })
 
 

@@ -1,0 +1,66 @@
+<header class="topbar">
+  <div class="topbar-int">
+    <button
+      type="button"
+      class="btn-drawer"
+      [class.abierto]="menuAbierto()"
+      [attr.aria-expanded]="menuAbierto()"
+      aria-label="Abrir menu de navegacion"
+      (click)="alternarMenu.emit()"
+    >
+      <span></span><span></span><span></span>
+    </button>
+
+    <a routerLink="/dashboard" class="marca" aria-label="Ir al inicio">
+      <svg
+        class="icono-inicio"
+        viewBox="0 0 24 24"
+        width="22"
+        height="22"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+      </svg>
+      <span>Inter<span class="acento">Soft</span></span>
+    </a>
+
+    @if (auth.usuario()?.empresa_nombre) {
+      <span class="separador" aria-hidden="true"></span>
+      <span class="empresa">{{ auth.usuario()?.empresa_nombre }}</span>
+    }
+
+    <div class="usuario-bloque">
+      <div class="usuario-info">
+        <span class="usuario-nombre">{{ auth.usuario()?.nombre }}</span>
+        <span class="pill-rol">{{ auth.usuario()?.rol }}</span>
+      </div>
+      <button
+        type="button"
+        class="btn-salir"
+        (click)="salir()"
+        aria-label="Cerrar sesion"
+        title="Cerrar sesion"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M15 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9" />
+          <path d="M18 15l4-3-4-3" />
+          <path d="M11 12h9" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>

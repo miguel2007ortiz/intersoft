@@ -12,10 +12,6 @@ h2 { margin: 0 0 var(--e5); font-size: 20px; }
 .gris { color: var(--gris); font-size: 14.5px; }
 p.gris { margin: var(--e1) 0 0; }
 
-.acciones { display: flex; align-items: center; gap: var(--e3); }
-.volver { color: var(--primario); text-decoration: none; font-weight: 600; font-size: 14.5px; }
-.volver:hover { text-decoration: underline; }
-
 .formulario { max-width: 760px; margin-bottom: var(--e6); }
 .fila-doble, .fila-triple {
   display: grid;
@@ -88,7 +84,7 @@ textarea { resize: vertical; }
   border-top: 1px solid var(--linea);
   vertical-align: middle;
 }
-.tabla tbody tr:hover { background: #f8faff; }
+.tabla tbody tr:hover { background: var(--fila-hover); }
 
 .linea-dato { display: block; }
 
@@ -101,9 +97,9 @@ textarea { resize: vertical; }
   font-size: 12.5px;
   font-weight: 700;
 }
-.insignia.ok { background: #E6F5F3; color: var(--ok); }
-.insignia.inactiva { background: #FBEBEA; color: var(--error); }
-.insignia.alerta { background: #FDF3E3; color: #B26A00; margin-left: var(--e1); }
+.insignia.ok { background: var(--ok-fondo); border: 1px solid var(--ok-borde); color: var(--ok); }
+.insignia.inactiva { background: var(--error-fondo); border: 1px solid var(--error-borde); color: var(--error); }
+.insignia.alerta { background: var(--alerta-fondo); border: 1px solid var(--alerta-borde); color: var(--alerta); margin-left: var(--e1); }
 
 .celda-acciones { display: flex; gap: var(--e3); white-space: nowrap; }
 

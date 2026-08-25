@@ -1,0 +1,91 @@
+.encabezado { padding: var(--e6) 0 var(--e5); }
+.encabezado h1 { margin: 0 0 var(--e1); font-size: clamp(24px, 4vw, 32px); }
+.saludo { margin: 0; color: var(--gris); font-size: 15px; }
+
+.bloque { padding-bottom: var(--e6); }
+.bloque-final { padding-bottom: var(--e8); }
+
+/* ------------------------------- KPIs ------------------------------------ */
+.grid-kpis {
+  display: grid;
+  gap: var(--e4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.kpi {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e4);
+  background: var(--tarjeta);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+}
+.kpi-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--primario-suave);
+  color: var(--primario-osc);
+  flex-shrink: 0;
+}
+.kpi-icono--alerta { background: var(--alerta-fondo); color: var(--alerta); }
+
+.kpi-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi-etiqueta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gris);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.kpi-valor { font-size: 22px; font-weight: 700; color: var(--tinta); line-height: 1.3; }
+.kpi-valor--vacio { color: var(--gris); font-weight: 600; font-size: 19px; }
+.kpi-nota { font-size: 11.5px; color: var(--gris); }
+
+/* --------------------------- Actividad / Alertas -------------------------- */
+.bloque-columnas {
+  display: grid;
+  gap: var(--e5);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: stretch;
+}
+.columna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+.titulo-tarjeta { margin: 0; font-size: 15.5px; }
+
+.vacio-texto { flex: 1; margin: 0; color: var(--gris); font-size: 14px; }
+.ok-texto {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ok);
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.lista-alertas { flex: 1; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lista-alertas li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e3);
+  font-size: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--linea);
+}
+.lista-alertas li:last-child { border-bottom: 0; padding-bottom: 0; }
+.gris { color: var(--gris); white-space: nowrap; }
+
+.columna .btn { align-self: flex-start; }
+
+/* ------------------------------ Acciones rapidas -------------------------- */
+.bloque-final .titulo-tarjeta { margin-bottom: var(--e3); }
+.fila-acciones { display: flex; gap: var(--e3); flex-wrap: wrap; }
+.fila-acciones .btn { flex: 1; min-width: 160px; }
