@@ -22,4 +22,7 @@ urlpatterns = [
 
     # Checkout
     path("tienda/checkout/", views_tienda.CheckoutView.as_view()),
+
+    # Pedidos del comprador
+    path("tienda/pedidos/", views_tienda.MisPedidosView.as_view()),
 ]

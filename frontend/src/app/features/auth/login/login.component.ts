@@ -70,8 +70,13 @@ export class LoginComponent implements OnDestroy {
         this.cargando.set(false);
         const nombre = this.auth.usuario()?.nombre;
         if (nombre) this.welcome.mostrar(nombre);
-        const destino = this.ruta.snapshot.queryParamMap.get('redirigir') ?? '/dashboard';
-        this.router.navigateByUrl(destino);
+        let destino = this.ruta.snapshot.queryParamMap.get('redirigir');
+        // Los compradores del marketplace (CLIENTE sin empresa) van a la tienda.
+        const usuario = this.auth.usuario();
+        if (!destino && usuario && usuario.rol === 'CLIENTE' && !usuario.empresa) {
+          destino = '/catalogo';
+        }
+        this.router.navigateByUrl(destino ?? '/dashboard');
       },
       error: (e: ErrorAuth) => {
         this.cargando.set(false);

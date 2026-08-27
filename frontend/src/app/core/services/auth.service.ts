@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, map, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ErrorAuth, LoginRequest, LoginResponse, RegistroRequest, Usuario } from '../models/auth.model';
+import { ErrorAuth, LoginRequest, LoginResponse, RegistroCompradorRequest, RegistroRequest, Usuario } from '../models/auth.model';
 
 const CLAVE_TOKEN = 'intersoft.token';
 const CLAVE_USUARIO = 'intersoft.usuario';
@@ -36,6 +36,12 @@ export class AuthService {
 
   registrarEmpresa(datos: RegistroRequest): Observable<void> {
     return this.http.post<void>(`${this.api}/auth/registro/`, datos).pipe(
+      catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))),
+    );
+  }
+
+  registrarComprador(datos: RegistroCompradorRequest): Observable<void> {
+    return this.http.post<void>(`${this.api}/auth/registro/comprador/`, datos).pipe(
       catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))),
     );
   }

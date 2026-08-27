@@ -6,7 +6,7 @@
 - catalogo de categorias para el formulario de productos.
 Toda accion queda auditada en actividad_usuario."""
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -18,8 +18,8 @@ from cuentas.permissions import EsPersonal
 
 from .models import Categoria, Cliente, Producto
 from .serializers_catalogo import (
-    CategoriaSerializer, ClienteEscrituraSerializer, ClienteLecturaSerializer,
-    ProductoEscrituraSerializer, ProductoLecturaSerializer,
+    CategoriaSerializer, ClienteDetalleSerializer, ClienteEscrituraSerializer,
+    ClienteLecturaSerializer, ProductoEscrituraSerializer, ProductoLecturaSerializer,
 )
 
 
@@ -32,20 +32,43 @@ def respuesta_datos_invalidos(errores):
 # ------------------------------ Clientes -----------------------------------
 
 class ClientesView(APIView):
-    """GET lista (con busqueda opcional) / POST crea cliente."""
+    """GET lista (con busqueda, filtro de estado y paginacion) / POST crea cliente."""
     permission_classes = [IsAuthenticated, EsPersonal]
+    POR_PAGINA = 25
 
     def get(self, request):
-        clientes = Cliente.objects.filter(empresa=request.user.perfil.empresa,
-                                          deleted_at__isnull=True)
+        clientes = Cliente.objects.filter(empresa=request.user.perfil.empresa)
+
+        estado = request.query_params.get("estado", "activos")
+        if estado == "activos":
+            clientes = clientes.filter(deleted_at__isnull=True)
+        elif estado == "inactivos":
+            clientes = clientes.filter(deleted_at__isnull=False)
+        # estado == "todos": sin filtro adicional
+
         busqueda = request.query_params.get("busqueda", "").strip()
         if busqueda:
             clientes = clientes.filter(
                 Q(nombre__icontains=busqueda)
                 | Q(numero_documento__icontains=busqueda)
                 | Q(email__icontains=busqueda))
-        datos = ClienteLecturaSerializer(clientes.order_by("nombre"), many=True).data
-        return Response({"resultados": datos, "total": len(datos)})
+
+        clientes = clientes.order_by("nombre")
+        total = clientes.count()
+        try:
+            pagina = max(int(request.query_params.get("pagina", 1)), 1)
+        except (TypeError, ValueError):
+            pagina = 1
+        inicio = (pagina - 1) * self.POR_PAGINA
+        datos = ClienteLecturaSerializer(
+            clientes[inicio:inicio + self.POR_PAGINA], many=True).data
+        return Response({
+            "resultados": datos,
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": self.POR_PAGINA,
+            "total_paginas": max((total + self.POR_PAGINA - 1) // self.POR_PAGINA, 1),
+        })
 
     def post(self, request):
         entrada = ClienteEscrituraSerializer(data=request.data,
@@ -53,8 +76,19 @@ class ClientesView(APIView):
         if not entrada.is_valid():
             return respuesta_datos_invalidos(entrada.errors)
 
-        with transaction.atomic():
-            cliente = entrada.save()
+        try:
+            with transaction.atomic():
+                cliente = entrada.save()
+        except IntegrityError:
+            # Defensa ante condicion de carrera: dos solicitudes casi
+            # simultaneas pasaron el validate() (que ya cubre el caso
+            # normal) antes de que cualquiera de las dos insertara. La
+            # constraint de BD no distingue activos/inactivos (CU-CLI-01).
+            return Response({
+                "codigo": "DOCUMENTO_DUPLICADO",
+                "detalle": "Ese documento ya fue registrado (posible doble envio). "
+                           "Actualiza el listado antes de reintentar.",
+            }, status=status.HTTP_400_BAD_REQUEST)
         ActividadUsuario.registrar(request.user, "CLIENTE_CREADO",
                                    f"{cliente.nombre} ({cliente.tipo_documento} "
                                    f"{cliente.numero_documento})")
@@ -63,18 +97,21 @@ class ClientesView(APIView):
 
 
 class ClienteDetalleView(APIView):
-    """GET / PUT-PATCH / DELETE (borrado logico)."""
+    """GET (incluye ultimas 5 ventas) / PUT-PATCH / DELETE (borrado logico).
+
+    No filtra por deleted_at: un cliente desactivado tambien debe poder
+    verse y reactivarse desde su propio detalle."""
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def obtener_cliente(self, request, id):
         return (Cliente.objects.filter(empresa=request.user.perfil.empresa,
-                                       deleted_at__isnull=True, id=id).first())
+                                       id=id).first())
 
     def get(self, request, id):
         cliente = self.obtener_cliente(request, id)
         if cliente is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(ClienteLecturaSerializer(cliente).data)
+        return Response(ClienteDetalleSerializer(cliente).data)
 
     def put(self, request, id):
         return self.editar(request, id, parcial=False)
@@ -92,8 +129,15 @@ class ClienteDetalleView(APIView):
         if not entrada.is_valid():
             return respuesta_datos_invalidos(entrada.errors)
 
-        with transaction.atomic():
-            cliente = entrada.save()
+        try:
+            with transaction.atomic():
+                cliente = entrada.save()
+        except IntegrityError:
+            return Response({
+                "codigo": "DOCUMENTO_DUPLICADO",
+                "detalle": "Ese documento ya fue registrado (posible doble envio). "
+                           "Actualiza el listado antes de reintentar.",
+            }, status=status.HTTP_400_BAD_REQUEST)
         ActividadUsuario.registrar(request.user, "CLIENTE_EDITADO",
                                    f"{cliente.nombre} ({cliente.tipo_documento} "
                                    f"{cliente.numero_documento})")
@@ -108,6 +152,36 @@ class ClienteDetalleView(APIView):
             cliente.soft_delete()   # conserva historial de ventas
         ActividadUsuario.registrar(request.user, "CLIENTE_ELIMINADO", nombre)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ClienteEstadoView(APIView):
+    """POST desactiva o reactiva un cliente. Desactivar reusa el mismo
+    borrado logico que DELETE (conserva historial); reactivar limpia
+    deleted_at para que vuelva a aparecer en el listado de activos."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def post(self, request, id, accion):
+        cliente = ClienteDetalleView().obtener_cliente(request, id)
+        if cliente is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if accion not in ("desactivar", "reactivar"):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        deseado_activo = accion == "reactivar"
+        if cliente.esta_activo == deseado_activo:
+            # CU-CLI-05 E1: repetir la misma accion es idempotente, no un
+            # error. El estado no cambia pero la respuesta es 200, nunca 500
+            # ni 400 (evita que un doble-click o un reintento rompan la UI).
+            return Response(ClienteDetalleSerializer(cliente).data)
+
+        if deseado_activo:
+            cliente.deleted_at = None
+            cliente.save(update_fields=["deleted_at"])
+        else:
+            cliente.soft_delete()
+        evento = "CLIENTE_REACTIVADO" if deseado_activo else "CLIENTE_DESACTIVADO"
+        ActividadUsuario.registrar(request.user, evento, cliente.nombre)
+        return Response(ClienteDetalleSerializer(cliente).data)
 
 
 # ------------------------------ Productos ----------------------------------

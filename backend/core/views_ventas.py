@@ -393,13 +393,15 @@ class AlertasView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def get(self, request):
-        alertas = Notificacion.objects.filter(leida=False)
+        alertas = Notificacion.objects.filter(
+            empresa=_obtener_empresa(request), leida=False)
         datos = NotificacionLecturaSerializer(
             alertas.order_by('-created_at')[:50], many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request, id):
-        alerta = Notificacion.objects.filter(id=id).first()
+        alerta = Notificacion.objects.filter(
+            empresa=_obtener_empresa(request), id=id).first()
         if not alerta:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -418,7 +420,8 @@ class AlertaActualizarStockView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def post(self, request, id):
-        alerta = Notificacion.objects.filter(id=id).first()
+        empresa = _obtener_empresa(request)
+        alerta = Notificacion.objects.filter(empresa=empresa, id=id).first()
         if not alerta:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -442,7 +445,7 @@ class AlertaActualizarStockView(APIView):
 
         sku = match.group(1)
         producto = Producto.objects.filter(
-            sku=sku, deleted_at__isnull=True).first()
+            empresa=empresa, sku=sku, deleted_at__isnull=True).first()
         if not producto:
             return Response(
                 {"codigo": "PRODUCTO_NO_ENCONTRADO",

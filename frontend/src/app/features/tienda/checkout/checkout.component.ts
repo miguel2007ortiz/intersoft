@@ -21,8 +21,16 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
         <div class="exito-box">
           <div class="exito-icono">✓</div>
           <h2>Compra realizada exitosamente</h2>
-          <p>Factura: <strong>{{ exito()!.numero_factura }}</strong></p>
-          <p>Total: <strong>\${{ exito()!.total | number }}</strong></p>
+          <ul class="exito-ventas">
+            @for (v of exito()!.ventas; track v.venta_id) {
+              <li>
+                <strong>{{ v.empresa_nombre }}</strong>
+                <span>Factura {{ v.numero_factura }}</span>
+                <span class="total">\${{ v.total | number }}</span>
+              </li>
+            }
+          </ul>
+          <p class="total-general">Total pagado: <strong>\${{ exito()!.total | number }}</strong></p>
           <p class="transaccion">Transaccion: {{ exito()!.transaccion_id }}</p>
           <div class="exito-acciones">
             <a routerLink="/catalogo" class="btn-seguir">Seguir comprando</a>
@@ -139,6 +147,18 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
       background: #ecfdf3; border: 1px solid #d1fadf; border-radius: 12px;
       padding: 32px; text-align: center; color: #067647;
     }
+    .exito-ventas {
+      list-style: none; margin: 0 auto var(--e4); padding: 0;
+      max-width: 360px; text-align: left; font-size: 14px;
+    }
+    .exito-ventas li {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: var(--e2); padding: 10px 0; border-bottom: 1px solid #d1fadf;
+    }
+    .exito-ventas li:last-child { border-bottom: 0; }
+    .exito-ventas span { color: #067647; }
+    .exito-ventas .total { font-weight: 700; }
+    .total-general { font-size: 16px !important; margin-top: var(--e2) !important; }
     .exito-icono {
       width: 60px; height: 60px; border-radius: 50%; background: #067647;
       color: #fff; font-size: 28px; font-weight: 700;

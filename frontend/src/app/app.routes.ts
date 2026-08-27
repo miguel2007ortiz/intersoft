@@ -6,8 +6,9 @@ import { personalGuard } from './core/guards/personal.guard';
 export const routes: Routes = [
   {
     path: '',
-    title: 'InterSoft',
-    loadComponent: () => import('./features/home/home.component').then((m) => m.HomeComponent),
+    title: 'Marketplace — InterSoft',
+    loadComponent: () =>
+      import('./features/tienda/catalogo/catalogo.component').then((m) => m.CatalogoComponent),
   },
   {
     path: 'login',
@@ -18,6 +19,14 @@ export const routes: Routes = [
     path: 'registro',
     title: 'Crear cuenta — InterSoft',
     loadComponent: () => import('./features/registro/registro.component').then((m) => m.RegistroComponent),
+  },
+  {
+    path: 'registro-comprador',
+    title: 'Crear cuenta de comprador — InterSoft',
+    loadComponent: () =>
+      import('./features/registro-comprador/registro-comprador.component').then(
+        (m) => m.RegistroCompradorComponent,
+      ),
   },
   {
     path: 'recuperar',
@@ -127,6 +136,13 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/tienda/checkout/checkout.component').then((m) => m.CheckoutComponent),
+  },
+  {
+    path: 'pedidos',
+    title: 'Mis pedidos — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/tienda/pedidos/pedidos.component').then((m) => m.PedidosComponent),
   },
   {
     path: 'facturacion',

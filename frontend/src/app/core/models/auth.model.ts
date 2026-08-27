@@ -5,8 +5,8 @@ export interface Usuario {
   email: string;
   nombre: string;
   rol: RolUsuario;
-  empresa: string;
-  empresa_nombre: string;
+  empresa: string | null;
+  empresa_nombre: string | null;
 }
 
 export interface LoginRequest {
@@ -23,6 +23,17 @@ export interface LoginResponse {
 export interface RegistroRequest {
   empresa: { nombre: string; nit: string };
   administrador: { nombre: string; email: string; password: string };
+}
+
+export interface RegistroCompradorRequest {
+  nombre: string;
+  email: string;
+  password: string;
+  tipo_documento: string;
+  numero_documento: string;
+  telefono?: string;
+  direccion?: string;
+  ciudad?: string;
 }
 
 export type CodigoErrorAuth =

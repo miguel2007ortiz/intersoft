@@ -23,20 +23,22 @@ class UsuarioLecturaSerializer(serializers.Serializer):
     ultimo_login = serializers.DateTimeField(source="usuario.last_login")
 
 
-def validar_rol_existe(nombre: str) -> str:
-    nombre = (nombre or "").strip().upper()
-    if not Rol.objects.filter(nombre=nombre).exists():
-        raise serializers.ValidationError("El rol indicado no existe.")
-    return nombre
-
-
 class UsuarioCreacionSerializer(serializers.Serializer):
     """Valida datos para crear una cuenta con su perfil (rol obligatorio)."""
 
     nombre = serializers.CharField(min_length=3, max_length=120)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, validators=[validar_fuerza_password])
-    rol = serializers.CharField(validators=[validar_rol_existe])
+    rol = serializers.CharField()
+
+    def validate_rol(self, valor):
+        nombre = (valor or "").strip().upper()
+        empresa = self.context.get("empresa")
+        if not empresa or not Rol.objects.filter(
+                nombre=nombre).filter(empresa=empresa).exists() \
+                and not Rol.objects.filter(nombre=nombre, empresa__isnull=True).exists():
+            raise serializers.ValidationError("El rol indicado no existe.")
+        return nombre
 
     def validate_email(self, valor):
         valor = valor.strip().lower()
@@ -49,9 +51,19 @@ class UsuarioCreacionSerializer(serializers.Serializer):
 class UsuarioEdicionSerializer(serializers.Serializer):
     nombre = serializers.CharField(min_length=3, max_length=120)
     email = serializers.EmailField()
-    rol = serializers.CharField(validators=[validar_rol_existe])
+    rol = serializers.CharField()
     password = serializers.CharField(write_only=True, required=False,
                                      validators=[validar_fuerza_password])
+
+    def validate_rol(self, valor):
+        nombre = (valor or "").strip().upper()
+        empresa = self.context.get("empresa")
+        visible = Rol.objects.filter(nombre=nombre, empresa__isnull=True).exists() or (
+            empresa is not None and Rol.objects.filter(
+                nombre=nombre, empresa=empresa).exists())
+        if not visible:
+            raise serializers.ValidationError("El rol indicado no existe.")
+        return nombre
 
     def validate_email(self, valor):
         valor = valor.strip().lower()
@@ -92,7 +104,17 @@ class RolEscrituraSerializer(serializers.Serializer):
 
     def validate_nombre(self, valor):
         valor = valor.strip().upper()
+        empresa = self.context.get("empresa") if self.context else None
+
+        # Un rol no puede usar el nombre de un rol base del sistema.
+        if valor in ROLES_DEL_SISTEMA:
+            raise serializers.ValidationError("Este nombre esta reservado. Elige otro.")
+
         consulta = Rol.objects.filter(nombre__iexact=valor)
+        if empresa is not None:
+            # La unicidad de los roles personalizados es por empresa; los
+            # que son de otras empresas no colisionan.
+            consulta = consulta.filter(empresa=empresa)
         if self.instance is not None:
             consulta = consulta.exclude(pk=self.instance.pk)
         if consulta.exists():

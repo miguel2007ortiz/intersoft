@@ -438,3 +438,80 @@ class CrudRolesTest(BaseSeguridadTest):
         esperadas = {"USUARIO_CREADO", "ROL_CREADO", "ROL_ELIMINADO", "ROL_CLONADO"}
         faltantes = esperadas - acciones
         self.assertEqual(faltantes, set(), f"Faltan auditorias: {faltantes}")
+
+
+class AislamientoRolesTenantTest(TestCase):
+    """Regresion: los roles personalizados de una empresa no deben ser
+    visibles ni modificables por los administradores de otra empresa."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("seed_roles")
+        cls.empresa_a = Empresa.objects.create(nombre="Tienda A", nit="900111111")
+        cls.empresa_b = Empresa.objects.create(nombre="Tienda B", nit="900222222")
+
+        cls.admin_a = User.objects.create_user(username="admina@test.co",
+                                               email="admina@test.co",
+                                               password="Clave12345", first_name="Admin A")
+        Perfil.objects.create(usuario=cls.admin_a, empresa=cls.empresa_a,
+                              rol=Rol.de_nombre("ADMINISTRADOR"), es_propietario=True)
+
+        cls.admin_b = User.objects.create_user(username="adminb@test.co",
+                                               email="adminb@test.co",
+                                               password="Clave12345", first_name="Admin B")
+        Perfil.objects.create(usuario=cls.admin_b, empresa=cls.empresa_b,
+                              rol=Rol.de_nombre("ADMINISTRADOR"), es_propietario=True)
+
+        cls.api_a = APIClient()
+        cls.api_a.force_authenticate(cls.admin_a)
+        cls.api_b = APIClient()
+        cls.api_b.force_authenticate(cls.admin_b)
+
+    def test_dos_empresas_pueden_tener_roles_de_mismo_nombre(self):
+        # La empresa A crea un rol "SUPERVISOR"
+        creado = self.api_a.post("/api/seguridad/roles/", {
+            "nombre": "SUPERVISOR", "permisos": ["ventas.gestionar"]}, format="json")
+        self.assertEqual(creado.status_code, 201)
+
+        # La empresa B puede crear otro "SUPERVISOR" sin colision
+        creado_b = self.api_b.post("/api/seguridad/roles/", {
+            "nombre": "SUPERVISOR", "permisos": ["reportes.ver"]}, format="json")
+        self.assertEqual(creado_b.status_code, 201)
+
+        # Ambos sobreviven en la base y son distintos
+        self.assertEqual(Rol.objects.filter(nombre="SUPERVISOR").count(), 2)
+
+    def test_empresa_b_no_ve_los_roles_personalizados_de_empresa_a(self):
+        creado = self.api_a.post("/api/seguridad/roles/", {
+            "nombre": "GERENTE", "permisos": []}, format="json").json()
+
+        lista = self.api_b.get("/api/seguridad/roles/").json()
+        nombres = [r["nombre"] for r in lista["resultados"]]
+        self.assertNotIn("GERENTE", nombres)
+
+        # La empresa B no puede consultar ni modificar el rol de la empresa A
+        detalle = self.api_b.get(f"/api/seguridad/roles/{creado['id']}/")
+        self.assertEqual(detalle.status_code, 404)
+        edicion = self.api_b.patch(f"/api/seguridad/roles/{creado['id']}/",
+                                   {"permisos": ["reportes.ver"]}, format="json")
+        self.assertEqual(edicion.status_code, 404)
+        borrado = self.api_b.delete(f"/api/seguridad/roles/{creado['id']}/")
+        self.assertEqual(borrado.status_code, 404)
+
+        # El rol sigue intacto para la empresa A
+        detalle_a = self.api_a.get(f"/api/seguridad/roles/{creado['id']}/")
+        self.assertEqual(detalle_a.status_code, 200)
+
+    def test_empresa_b_no_clona_rol_de_empresa_a(self):
+        creado = self.api_a.post("/api/seguridad/roles/", {
+            "nombre": "JEFE", "permisos": []}, format="json").json()
+        clon = self.api_b.post(f"/api/seguridad/roles/{creado['id']}/clonar/")
+        self.assertEqual(clon.status_code, 404)
+
+    def test_admin_b_no_asigna_rol_de_empresa_a_a_sus_usuarios(self):
+        self.api_a.post("/api/seguridad/roles/", {
+            "nombre": "SECRETARIA", "permisos": []}, format="json")
+        respuesta = self.api_b.post("/api/seguridad/usuarios/", {
+            "nombre": "Nuevo B", "email": "nuevob@test.co",
+            "password": "Clave12345", "rol": "SECRETARIA"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)

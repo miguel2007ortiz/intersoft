@@ -9,7 +9,7 @@ from rest_framework import serializers
 
 from cuentas.models import Perfil
 
-from .models import Categoria, Cliente, Producto
+from .models import Categoria, Cliente, Producto, Venta
 
 
 # ------------------------------ Clientes -----------------------------------
@@ -18,11 +18,12 @@ class ClienteLecturaSerializer(serializers.ModelSerializer):
     usuario_id = serializers.SerializerMethodField()
     usuario_email = serializers.SerializerMethodField()
     total_compras = serializers.SerializerMethodField()
+    activo = serializers.BooleanField(source="esta_activo", read_only=True)
 
     class Meta:
         model = Cliente
         fields = ["id", "nombre", "tipo_documento", "numero_documento",
-                  "email", "telefono", "direccion", "ciudad",
+                  "email", "telefono", "direccion", "ciudad", "activo",
                   "usuario_id", "usuario_email", "total_compras", "created_at"]
 
     def get_usuario_id(self, cliente):
@@ -33,6 +34,27 @@ class ClienteLecturaSerializer(serializers.ModelSerializer):
 
     def get_total_compras(self, cliente):
         return str(cliente.total_compras)
+
+
+class VentaResumenSerializer(serializers.ModelSerializer):
+    """Resumen de una venta para el historial del detalle de cliente
+    (no expone lineas ni datos de facturacion, solo lo esencial)."""
+
+    class Meta:
+        model = Venta
+        fields = ["id", "numero_factura", "fecha", "total", "estado"]
+
+
+class ClienteDetalleSerializer(ClienteLecturaSerializer):
+    """Igual que el listado, mas las ultimas 5 ventas del cliente."""
+    ultimas_ventas = serializers.SerializerMethodField()
+
+    class Meta(ClienteLecturaSerializer.Meta):
+        fields = ClienteLecturaSerializer.Meta.fields + ["ultimas_ventas"]
+
+    def get_ultimas_ventas(self, cliente):
+        ventas = cliente.ventas.filter(deleted_at__isnull=True).order_by("-fecha")[:5]
+        return VentaResumenSerializer(ventas, many=True).data
 
 
 class ClienteEscrituraSerializer(serializers.ModelSerializer):
@@ -72,20 +94,33 @@ class ClienteEscrituraSerializer(serializers.ModelSerializer):
         tipo = datos.get("tipo_documento", getattr(self.instance, "tipo_documento", ""))
         numero = datos.get("numero_documento",
                            getattr(self.instance, "numero_documento", ""))
+        # OJO: la constraint de BD (empresa, tipo_documento, numero_documento) no
+        # distingue clientes activos de inactivos, asi que esta consulta NO debe
+        # filtrar por deleted_at: si no se detecta aqui un conflicto contra un
+        # cliente inactivo, el create() de mas abajo revienta con IntegrityError
+        # (500). Ver fase 4, CU-CLI-01 A2/E1.
         consulta = (Cliente.objects.filter(empresa=self.context["empresa"],
                                            tipo_documento=tipo,
-                                           numero_documento=numero,
-                                           deleted_at__isnull=True))
+                                           numero_documento=numero))
         if self.instance:
             consulta = consulta.exclude(pk=self.instance.pk)
         otro = consulta.select_related("usuario").first()
         if otro is not None:
-            # Regla fase 3: rechazar informando el registro en conflicto
+            if otro.esta_activo:
+                # E1: conflicto con un cliente activo. Rechazo simple.
+                raise serializers.ValidationError({
+                    "numero_documento":
+                        f"El documento {tipo} {numero} ya esta registrado para el "
+                        f"cliente {otro.nombre} (registro en conflicto, creado el "
+                        f"{otro.created_at:%d/%m/%Y}).",
+                })
+            # A2: el registro en conflicto esta inactivo. No se crea un
+            # duplicado; se ofrece el id para que la UI proponga reactivarlo.
             raise serializers.ValidationError({
                 "numero_documento":
-                    f"El documento {tipo} {numero} ya esta registrado para el "
-                    f"cliente {otro.nombre} (registro en conflicto, creado el "
-                    f"{otro.created_at:%d/%m/%Y}).",
+                    f"Ya existe un cliente inactivo con el documento {tipo} {numero} "
+                    f"({otro.nombre}). Reactivalo en vez de crear uno nuevo.",
+                "cliente_inactivo_id": str(otro.id),
             })
         return datos
 

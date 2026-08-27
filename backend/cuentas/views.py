@@ -12,7 +12,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import ActividadUsuario, Perfil, TokenRecuperacion
 from .serializers import (
     ConfirmarRecuperacionSerializer, LoginSerializer,
-    RegistroSerializer, SolicitarRecuperacionSerializer,
+    RegistroCompradorSerializer, RegistroSerializer,
+    SolicitarRecuperacionSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,8 +75,9 @@ class LoginView(APIView):
         return Response({
             "access": str(refresh.access_token), "refresh": str(refresh),
             "usuario": {"id": str(perfil.id), "email": usuario.email, "nombre": nombre,
-                        "rol": perfil.nombre_rol, "empresa": str(perfil.empresa_id),
-                        "empresa_nombre": perfil.empresa.nombre},
+                        "rol": perfil.nombre_rol,
+                        "empresa": str(perfil.empresa_id) if perfil.empresa_id else None,
+                        "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None},
         })
 
 
@@ -90,6 +92,20 @@ class RegistroEmpresaView(APIView):
                              "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
         usuario = entrada.save()
         ActividadUsuario.registrar(usuario, "REGISTRO_EMPRESA", usuario.email)
+        return Response(status=status.HTTP_201_CREATED)
+
+
+class RegistroCompradorView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        entrada = RegistroCompradorSerializer(data=request.data)
+        if not entrada.is_valid():
+            return Response({"codigo": "DATOS_INVALIDOS", "detalle": "Revisa los datos del formulario.",
+                             "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
+        usuario = entrada.save()
+        ActividadUsuario.registrar(usuario, "REGISTRO_COMPRADOR", usuario.email)
         return Response(status=status.HTTP_201_CREATED)
 
 

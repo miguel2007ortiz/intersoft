@@ -3,7 +3,13 @@
     <header class="cabecera">
       <div>
         <h1>Clientes</h1>
-        <p class="gris">Directorio de clientes de tu empresa con su historial de compras.</p>
+        <p class="gris">
+          @if (!cargando()) {
+            {{ total() }} {{ estado() === 'activos' ? 'clientes activos' : estado() === 'inactivos' ? 'clientes inactivos' : 'clientes en total' }}
+          } @else {
+            Directorio de clientes de tu empresa con su historial de compras.
+          }
+        </p>
       </div>
       @if (!formularioAbierto()) {
         <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo cliente</button>
@@ -97,11 +103,25 @@
     <div class="buscador">
       <input type="search" placeholder="Buscar por nombre, documento o correo..."
              [value]="busqueda()" (input)="buscar($event)" />
+      <select aria-label="Filtrar por estado" [value]="estado()" (change)="filtrarPorEstado($event)">
+        <option value="activos">Activos</option>
+        <option value="inactivos">Inactivos</option>
+        <option value="todos">Todos</option>
+      </select>
     </div>
 
     <div class="tarjeta sin-relleno">
       @if (cargando()) {
         <p class="gris centrado">Cargando clientes...</p>
+      } @else if (!clientes().length && hayBusqueda()) {
+        <p class="gris centrado">No se encontraron clientes para «{{ busqueda() }}».
+          <button type="button" class="enlace" (click)="limpiarBusqueda()">Limpiar busqueda</button>
+        </p>
+      } @else if (!clientes().length) {
+        <div class="centrado vacio-onboarding">
+          <p class="gris">Todavia no hay clientes registrados.</p>
+          <button type="button" class="btn btn-primario" (click)="abrirCreacion()">Registrar el primero</button>
+        </div>
       } @else {
         <table class="tabla">
           <thead>
@@ -111,6 +131,7 @@
               <th>Contacto</th>
               <th>Cuenta vinculada</th>
               <th>Compras</th>
+              <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
@@ -125,16 +146,32 @@
                 </td>
                 <td>{{ c.usuario_email || '—' }}</td>
                 <td>${{ c.total_compras }}</td>
+                <td>
+                  <span class="badge" [class]="c.activo ? 'activo' : 'inactivo'">
+                    {{ c.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
                 <td class="celda-acciones">
                   <button type="button" class="enlace" (click)="abrirEdicion(c)">Editar</button>
-                  <button type="button" class="enlace peligro" (click)="eliminar(c)">Eliminar</button>
+                  @if (c.activo) {
+                    <button type="button" class="enlace peligro" (click)="desactivar(c)">Desactivar</button>
+                  } @else {
+                    <button type="button" class="enlace" (click)="reactivar(c)">Reactivar</button>
+                  }
                 </td>
               </tr>
-            } @empty {
-              <tr><td colspan="6" class="centrado gris">Todavia no hay clientes registrados.</td></tr>
             }
           </tbody>
         </table>
+        @if (totalPaginas() > 1) {
+          <div class="paginador">
+            <button type="button" class="btn btn-secundario" [disabled]="pagina() <= 1"
+                    (click)="irPagina(pagina() - 1)">&larr; Anterior</button>
+            <span class="gris">Pagina {{ pagina() }} de {{ totalPaginas() }}</span>
+            <button type="button" class="btn btn-secundario" [disabled]="pagina() >= totalPaginas()"
+                    (click)="irPagina(pagina() + 1)">Siguiente &rarr;</button>
+          </div>
+        }
       }
     </div>
   </section>

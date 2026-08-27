@@ -94,7 +94,10 @@ class Producto(TimeStampedModel):
 class Cliente(TimeStampedModel):
     TIPO_DOC_CHOICES = [('CC', 'Cedula de Ciudadania'), ('NIT', 'NIT'),
                         ('CE', 'Cedula de Extranjeria'), ('PAS', 'Pasaporte')]
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='clientes')
+    # `empresa` puede ser None para los compradores del marketplace, que no
+    # pertenecen a ninguna empresa vendedora (su cliente es global).
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='clientes')
     # Cuenta opcional del portal (tabla usuario real: auth_user + Perfil)
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name='perfil_cliente')
@@ -107,7 +110,9 @@ class Cliente(TimeStampedModel):
     ciudad = models.CharField(max_length=80, blank=True)
 
     class Meta:
-        # Documento unico DENTRO de cada empresa (multi-tenant)
+        # Documento unico DENTRO de cada empresa (multi-tenant). En MySQL los
+        # NULL se consideran distintos, asi que los clientes del marketplace
+        # (empresa=None) no colisionan entre si ni con los de las empresas.
         unique_together = ('empresa', 'tipo_documento', 'numero_documento')
         ordering = ['nombre']
 
@@ -256,7 +261,8 @@ class Notificacion(TimeStampedModel):
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['empresa', 'estado']),
-                   models.Index(fields=['usuario', 'leida'])]
+                   models.Index(fields=['usuario', 'leida']),
+                   models.Index(fields=['empresa', 'leida'])]
 
     def __str__(self):
         return f"{self.get_estado_display()} ({self.tipo}): {self.mensaje[:60]}"
@@ -285,10 +291,16 @@ class Cupon(TimeStampedModel):
 
 
 class Carrito(TimeStampedModel):
-    """Carrito de compras de un usuario (1 carrito activo por usuario)."""
+    """Carrito de compras de un usuario (1 carrito activo por usuario).
+
+    En el marketplace el carrito pertenece al comprador (no a una empresa
+    vendedora), por eso `empresa` puede ser None. El checkout agrupa los
+    items por empresa vendedora para generar una venta por cada una.
+    """
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                    related_name='carrito')
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='carritos')
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='carritos')
     cupon = models.ForeignKey(Cupon, on_delete=models.SET_NULL, null=True, blank=True,
                              related_name='carritos')
 
