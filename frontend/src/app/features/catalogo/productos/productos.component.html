@@ -1,0 +1,160 @@
+<app-panel-shell>
+  <section class="contenedor pagina">
+    <header class="cabecera">
+      <div>
+        <h1>Productos</h1>
+        <p class="gris">Catalogo de tu empresa: precios, existencias y alertas de stock.</p>
+      </div>
+      @if (!formularioAbierto()) {
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo producto</button>
+      }
+    </header>
+
+    @if (exito()) {
+      <div class="aviso aviso-ok">{{ exito() }}</div>
+    }
+    @if (error() && !formularioAbierto()) {
+      <div class="aviso aviso-error">{{ error() }}</div>
+    }
+
+    @if (formularioAbierto()) {
+      <form class="tarjeta formulario" [formGroup]="formulario" (ngSubmit)="enviar()">
+        <h2>{{ editando() ? 'Editar producto' : 'Nuevo producto' }}</h2>
+
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="nombre">Nombre</label>
+            <input id="nombre" type="text" formControlName="nombre" placeholder="Tenis Run 42" />
+            @if (campoInvalido('nombre')) {
+              <p class="mensaje-error">Escribe el nombre del producto.</p>
+            }
+          </div>
+          <div class="campo">
+            <label for="sku">SKU</label>
+            <input id="sku" type="text" formControlName="sku" placeholder="SKU-R1" />
+            @if (campoInvalido('sku')) {
+              <p class="mensaje-error">El SKU es obligatorio.</p>
+            }
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="descripcion">Descripcion</label>
+          <textarea id="descripcion" formControlName="descripcion" rows="2"
+                    placeholder="Detalles del producto..."></textarea>
+        </div>
+
+        <div class="fila-triple">
+          <div class="campo">
+            <label for="categoria_id">Categoria</label>
+            <select id="categoria_id" formControlName="categoria_id">
+              <option value="">Sin categoria</option>
+              @for (cat of categorias(); track cat.id) {
+                <option [value]="cat.id">{{ cat.nombre }} ({{ cat.total_productos }})</option>
+              }
+            </select>
+          </div>
+          <div class="campo">
+            <label for="precio">Precio</label>
+            <input id="precio" type="number" min="0" step="0.01" formControlName="precio" />
+            @if (campoInvalido('precio')) {
+              <p class="mensaje-error">El precio no puede ser negativo.</p>
+            }
+          </div>
+          <div class="campo">
+            <label for="stock">Stock</label>
+            <input id="stock" type="number" min="0" formControlName="stock" />
+            @if (campoInvalido('stock')) {
+              <p class="mensaje-error">El stock no puede ser negativo.</p>
+            }
+          </div>
+        </div>
+
+        <div class="campo campo-corto">
+          <label for="stock_minimo">Stock minimo (alerta)</label>
+          <input id="stock_minimo" type="number" min="0" formControlName="stock_minimo" />
+          @if (campoInvalido('stock_minimo')) {
+            <p class="mensaje-error">No puede ser negativo.</p>
+          }
+        </div>
+
+        @if (error()) {
+          <div class="aviso aviso-error">{{ error() }}</div>
+        }
+
+        <div class="acciones-form">
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="submit" class="btn btn-primario">
+            {{ editando() ? 'Guardar cambios' : 'Crear producto' }}
+          </button>
+        </div>
+      </form>
+    }
+
+    <div class="barra-listado">
+      <input type="search" class="buscador" placeholder="Buscar por nombre o SKU..."
+             [value]="busqueda()" (input)="buscar($event)" />
+      <div class="filtros">
+        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'todos'"
+                (click)="filtrar('todos')">Todos</button>
+        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'activos'"
+                (click)="filtrar('activos')">Activos</button>
+        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'inactivos'"
+                (click)="filtrar('inactivos')">Inactivos</button>
+      </div>
+    </div>
+
+    <div class="tarjeta sin-relleno">
+      @if (cargando()) {
+        <p class="gris centrado">Cargando productos...</p>
+      } @else {
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Categoria</th>
+              <th>Precio</th>
+              <th>Stock</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of productos(); track p.id) {
+              <tr>
+                <td>
+                  <strong>{{ p.nombre }}</strong>
+                  <span class="linea-dato gris">{{ p.sku }}</span>
+                </td>
+                <td>{{ p.categoria_nombre || '—' }}</td>
+                <td>${{ p.precio }}</td>
+                <td>
+                  {{ p.stock }}
+                  @if (p.stock_bajo) {
+                    <span class="insignia alerta">stock bajo</span>
+                  }
+                </td>
+                <td>
+                  <span class="insignia" [class.ok]="p.activo" [class.inactiva]="!p.activo">
+                    {{ p.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                <td class="celda-acciones">
+                  <button type="button" class="enlace" (click)="abrirEdicion(p)">Editar</button>
+                  <button type="button" class="enlace" (click)="alternarActivo(p)">
+                    {{ p.activo ? 'Desactivar' : 'Reactivar' }}
+                  </button>
+                  @if (!p.tiene_ventas) {
+                    <button type="button" class="enlace peligro" (click)="eliminar(p)">Eliminar</button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="centrado gris">Todavia no hay productos.</td></tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </section>
+</app-panel-shell>

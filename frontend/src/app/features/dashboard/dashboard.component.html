@@ -1,0 +1,213 @@
+<app-panel-shell>
+  <section class="contenedor encabezado">
+    <div>
+      <h1>{{ auth.usuario()?.empresa_nombre || 'Panel de control' }}</h1>
+      <p class="saludo">Hola, {{ primerNombre() }}. Analitica de tu empresa.</p>
+    </div>
+    @if (esAdmin()) {
+      <a routerLink="/reportes" class="btn btn-secundario">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <polyline points="14,2 14,8 20,8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+        Reportes
+      </a>
+    }
+  </section>
+
+  <section class="contenedor bloque">
+    <div class="filtros">
+      <div class="filtro">
+        <label for="fi">Desde</label>
+        <input id="fi" type="date" [ngModel]="fechaInicio()"
+               (ngModelChange)="fechaInicio.set($event)" />
+      </div>
+      <div class="filtro">
+        <label for="ff">Hasta</label>
+        <input id="ff" type="date" [ngModel]="fechaFin()"
+               (ngModelChange)="fechaFin.set($event)" />
+      </div>
+      <div class="filtro">
+        <label for="cat">Categoria</label>
+        <select id="cat" [ngModel]="categoriaSel()" (ngModelChange)="categoriaSel.set($event)">
+          <option value="">Todas</option>
+          @for (c of categorias(); track c.categoria_id) {
+            <option [value]="c.categoria_id">{{ c.categoria }}</option>
+          }
+        </select>
+      </div>
+      <button type="button" class="btn btn-primario" (click)="cargarTodo()"
+              [disabled]="cargando()">
+        {{ cargando() ? 'Cargando...' : 'Aplicar' }}
+      </button>
+    </div>
+  </section>
+
+  @if (error(); as mensaje) {
+    <section class="contenedor bloque">
+      <div class="aviso aviso-error">{{ mensaje }}</div>
+    </section>
+  }
+
+  <section class="contenedor bloque">
+    <div class="grid-kpis">
+      <article class="kpi">
+        <div class="kpi-icono">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 17l6-6 4 4 8-8" />
+            <path d="M14 7h7v7" />
+          </svg>
+        </div>
+        <div class="kpi-texto">
+          <span class="kpi-etiqueta">Ingresos</span>
+          <span class="kpi-valor">{{ dinero(resumen()?.ingresos_totales) }}</span>
+          <span class="kpi-nota">{{ numero(resumen()?.num_ventas) }} ventas</span>
+        </div>
+      </article>
+
+      <article class="kpi">
+        <div class="kpi-icono">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v10M9.5 9.3c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.4-2.5 1.7-2.5.7-2.5 1.7 1 1.7 2.5 1.7 2.5-.7 2.5-1.7" />
+          </svg>
+        </div>
+        <div class="kpi-texto">
+          <span class="kpi-etiqueta">Ticket promedio</span>
+          <span class="kpi-valor">{{ dinero(resumen()?.ticket_promedio) }}</span>
+          <span class="kpi-nota">Por venta en el rango</span>
+        </div>
+      </article>
+
+      <article class="kpi">
+        <div class="kpi-icono" [class.kpi-icono--alerta]="(resumen()?.productos_bajo_minimo ?? 0) > 0">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3 2 20h20L12 3Z" />
+            <path d="M12 10v4M12 17h.01" />
+          </svg>
+        </div>
+        <div class="kpi-texto">
+          <span class="kpi-etiqueta">Stock bajo</span>
+          <span class="kpi-valor">{{ numero(resumen()?.productos_bajo_minimo) }}</span>
+          <span class="kpi-nota">Productos a reponer</span>
+        </div>
+      </article>
+
+      <article class="kpi">
+        <div class="kpi-icono">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 8 12 3l9 5-9 5-9-5Z" />
+            <path d="M3 8v9l9 5 9-5V8" />
+            <path d="M12 13v9" />
+          </svg>
+        </div>
+        <div class="kpi-texto">
+          <span class="kpi-etiqueta">Valor inventario</span>
+          <span class="kpi-valor">{{ dinero(resumen()?.valor_inventario) }}</span>
+          <span class="kpi-nota">{{ numero(resumen()?.unidades_inventario) }} unidades</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="contenedor bloque bloque-columnas">
+    <div class="tarjeta columna">
+      <div class="titulo-fila">
+        <h2 class="titulo-tarjeta">Ventas por dia</h2>
+      </div>
+      @if (barrasDia().length === 0) {
+        <p class="vacio-texto">No hay ventas en el rango seleccionado.</p>
+      } @else {
+        <div class="grafica">
+          <svg [attr.viewBox]="'0 0 ' + anchoSvg + ' ' + altoSvg" role="img"
+               aria-label="Ventas por dia" class="svg-barras">
+            @for (p of barrasDia(); track $index) {
+              <rect
+                [attr.x]="xCentro($index, barrasDia().length) - anchoBarra(barrasDia().length) / 2"
+                [attr.y]="yBarra(p, $index)"
+                [attr.width]="anchoBarra(barrasDia().length)"
+                [attr.height]="alturaBarra(p, $index)"
+                rx="4" class="barra" />
+            }
+          </svg>
+          <div class="leyenda-barras">
+            @for (p of barrasDia(); track $index) {
+              <span [style.width.%]="100 / barrasDia().length">{{ p.etiqueta }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="tarjeta columna">
+      <h2 class="titulo-tarjeta">Valor por categoria</h2>
+      @if (barrasInventario().length === 0) {
+        <p class="vacio-texto">Sin inventario registrado.</p>
+      } @else {
+        <ul class="barras-categorias">
+          @for (c of barrasInventario(); track c.categoria) {
+            <li>
+              <div class="bra"><span>{{ c.categoria }}</span><b>{{ dinero(c.valor) }}</b></div>
+              <div class="pista">
+                <div class="relleno" [style.width.%]="(c.valor / maximoInventario()) * 100"></div>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </section>
+
+  <section class="contenedor bloque bloque-columnas">
+    <div class="tarjeta columna">
+      <div class="titulo-fila">
+        <h2 class="titulo-tarjeta">Top productos</h2>
+        <a routerLink="/reportes" class="enlace">Ver reporte</a>
+      </div>
+      @if (topProductos().length === 0) {
+        <p class="vacio-texto">No hay ventas en el rango.</p>
+      } @else {
+        <table class="tabla">
+          <thead>
+            <tr><th>Producto</th><th class="num">Unid.</th><th class="num">Ingresos</th></tr>
+          </thead>
+          <tbody>
+            @for (p of topProductos(); track $index) {
+              <tr>
+                <td>
+                  <span class="nombre-con-sub">{{ p.producto }}</span>
+                  <span class="sub">{{ p.sku }}</span>
+                </td>
+                <td class="num">{{ numero(p.unidades) }}</td>
+                <td class="num">{{ dinero(p.ingresos) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    <div class="tarjeta columna">
+      <h2 class="titulo-tarjeta">Clientes frecuentes</h2>
+      @if (clientes().length === 0) {
+        <p class="vacio-texto">Aun no hay clientes con compras.</p>
+      } @else {
+        <ul class="lista-clientes">
+          @for (c of clientes(); track $index) {
+            <li>
+              <span class="nombre-con-sub">{{ c.cliente }}</span>
+              <b>{{ dinero(c.total_comprado) }}</b>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </section>
+</app-panel-shell>

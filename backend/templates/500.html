@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Servicio no disponible · InterSoft</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; display: grid; place-items: center;
+    font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+    background: #F5F7FA; color: #101828; padding: 24px;
+  }
+  .tarjeta {
+    max-width: 460px; width: 100%; background: #FFFFFF; border: 1px solid #DCE3EE;
+    border-radius: 14px; padding: 40px 36px; text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 16px 32px rgba(38,87,217,.08);
+  }
+  .icono {
+    width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 50%;
+    background: linear-gradient(135deg, #2657D9, #16326E);
+    display: grid; place-items: center;
+    box-shadow: 0 6px 20px rgba(38,87,217,.35);
+  }
+  .icono svg { width: 26px; height: 26px; }
+  h1 { font-size: 21px; margin: 0 0 10px; }
+  p { margin: 0 0 6px; color: #5B6472; font-size: 15px; line-height: 1.6; }
+  .marca { margin-top: 28px; font-size: 13px; color: #5B6472; letter-spacing: .04em; }
+  .marca span { color: #2657D9; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="tarjeta">
+    <div class="icono">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 9v4"></path><path d="M12 17h.01"></path>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
+      </svg>
+    </div>
+    <h1>Estamos presentando fallas temporales</h1>
+    <p>No pudimos completar tu solicitud en este momento.</p>
+    <p>Ya estamos trabajando en restablecer el servicio. Intenta de nuevo en unos minutos.</p>
+    <div class="marca">Inter<span>Soft</span></div>
+  </div>
+</body>
+</html>

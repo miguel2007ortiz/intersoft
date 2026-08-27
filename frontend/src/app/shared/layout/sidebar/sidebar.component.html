@@ -1,0 +1,213 @@
+@if (abierto() && !esEscritorio()) {
+  <div class="fondo-drawer" (click)="cerrar.emit()"></div>
+}
+
+<nav
+  class="sidebar"
+  [class.abierta]="abierto()"
+  [class.colapsada]="colapsado()"
+  [attr.inert]="!abierto() && !esEscritorio() ? '' : null"
+  aria-label="Navegacion principal"
+>
+  <ul>
+    @if (auth.usuario()?.rol !== 'CLIENTE') {
+      <li>
+        <a
+          routerLink="/dashboard"
+          routerLinkActive="activo"
+          [routerLinkActiveOptions]="{ exact: true }"
+          (click)="cerrar.emit()"
+          title="Panel"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 10.5 12 3l9 7.5" />
+            <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+          </svg>
+          <span>Panel</span>
+        </a>
+      </li>
+      <li>
+        <a           routerLink="/catalogo" routerLinkActive="activo" (click)="cerrar.emit()" title="Tienda Virtual">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 2 3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 01-8 0" />
+          </svg>
+          <span>Tienda</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/pos" routerLinkActive="activo" (click)="cerrar.emit()" title="Punto de Venta">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="M2 10h20" />
+            <path d="M7 15h4" />
+          </svg>
+          <span>POS</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/ventas" routerLinkActive="activo" (click)="cerrar.emit()" title="Ventas">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+            <rect x="9" y="3" width="6" height="4" rx="1" />
+            <path d="M9 14l2 2 4-4" />
+          </svg>
+          <span>Ventas</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/clientes" routerLinkActive="activo" (click)="cerrar.emit()" title="Clientes">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="8" r="3" />
+            <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+            <circle cx="17" cy="8" r="2.4" />
+            <path d="M15.5 14.2c2.4.5 4.5 2.6 4.5 5.8" />
+          </svg>
+          <span>Clientes</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/productos" routerLinkActive="activo" (click)="cerrar.emit()" title="Productos">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 8 12 3l9 5-9 5-9-5Z" />
+            <path d="M3 8v9l9 5 9-5V8" />
+            <path d="M12 13v9" />
+          </svg>
+          <span>Productos</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/inventario" routerLinkActive="activo" (click)="cerrar.emit()" title="Inventario">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4M4 7l8 4M4 7v10l8 4m0-10v10" />
+          </svg>
+          <span>Inventario</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/alertas" routerLinkActive="activo" (click)="cerrar.emit()" title="Alertas">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" />
+            <path d="M18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+          </svg>
+          <span>Alertas</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/facturacion" routerLinkActive="activo" (click)="cerrar.emit()" title="Facturacion DIAN">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10,9 9,9 8,9" />
+          </svg>
+          <span>Facturacion</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/ia" routerLinkActive="activo" (click)="cerrar.emit()" title="Asistente IA">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="14" rx="2" />
+            <path d="M8 4v16M16 9h1M16 13h1M10 9H8.5M10 13H8.5" />
+          </svg>
+          <span>Asistente IA</span>
+        </a>
+      </li>
+    }
+    @if (auth.esAdministrador()) {
+      <li>
+        <a routerLink="/admin/usuarios" routerLinkActive="activo" (click)="cerrar.emit()" title="Usuarios">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="9" cy="11" r="2.2" />
+            <path d="M6.2 16c.4-1.8 1.7-2.8 2.8-2.8s2.4 1 2.8 2.8" />
+            <path d="M15 10h4M15 14h4" />
+          </svg>
+          <span>Usuarios</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/admin/roles" routerLinkActive="activo" (click)="cerrar.emit()" title="Roles">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
+            <path d="M9.5 12l1.8 1.8L15 10.2" />
+          </svg>
+          <span>Roles</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/reportes" routerLinkActive="activo" (click)="cerrar.emit()" title="Reportes">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10,9 9,9 8,9" />
+          </svg>
+          <span>Reportes</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/monitoreo/camaras" routerLinkActive="activo" (click)="cerrar.emit()" title="Camaras">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M23 7l-7 5 7 5V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" />
+          </svg>
+          <span>Camaras</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/monitoreo/notificaciones" routerLinkActive="activo" (click)="cerrar.emit()" title="Notificaciones">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" />
+            <path d="M18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+          </svg>
+          <span>Notificaciones</span>
+        </a>
+      </li>
+    }
+    <li>
+      <a routerLink="/configuracion" routerLinkActive="activo" (click)="cerrar.emit()" title="Configuracion">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+        </svg>
+        <span>Configuracion</span>
+      </a>
+    </li>
+  </ul>
+
+  <button
+    type="button"
+    class="btn-colapsar"
+    (click)="alternarColapso()"
+    [attr.aria-expanded]="!colapsado()"
+    [attr.aria-label]="colapsado() ? 'Expandir menu' : 'Contraer menu'"
+    [title]="colapsado() ? 'Expandir menu' : 'Contraer menu'"
+  >
+    <svg class="icono-colapsar" viewBox="0 0 24 24" width="18" height="18" fill="none"
+         stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+    <span>Contraer</span>
+  </button>
+</nav>

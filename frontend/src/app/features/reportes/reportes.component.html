@@ -1,0 +1,117 @@
+<app-panel-shell>
+  <section class="contenedor encabezado">
+    <div>
+      <h1>Reportes</h1>
+      <p class="saludo">Genera y exporta reportes de tu empresa.</p>
+    </div>
+    @if (auth.esAdministrador()) {
+      <div class="acciones">
+        <button type="button" class="btn btn-secundario" (click)="exportar('excel')"
+                [disabled]="!tipoSel() || cargando()">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Excel
+        </button>
+        <button type="button" class="btn btn-primario" (click)="exportar('pdf')"
+                [disabled]="!tipoSel() || cargando()">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 2 3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 13a4 4 0 00-8 0" />
+          </svg>
+          PDF
+        </button>
+      </div>
+    }
+  </section>
+
+  <section class="contenedor bloque">
+    <div class="filtros">
+      <div class="filtro filtro-tipo">
+        <label for="tipo">Reporte</label>
+        <select id="tipo" [ngModel]="tipoSel()" (ngModelChange)="tipoSel.set($event)">
+          @for (t of tipos(); track t.tipo) {
+            <option [value]="t.tipo">{{ t.titulo }}</option>
+          }
+        </select>
+      </div>
+      <div class="filtro">
+        <label for="fi">Desde</label>
+        <input id="fi" type="date" [ngModel]="fechaInicio()" (ngModelChange)="fechaInicio.set($event)" />
+      </div>
+      <div class="filtro">
+        <label for="ff">Hasta</label>
+        <input id="ff" type="date" [ngModel]="fechaFin()" (ngModelChange)="fechaFin.set($event)" />
+      </div>
+      <div class="filtro">
+        <label for="cat">Categoria</label>
+        <select id="cat" [ngModel]="categoriaSel()" (ngModelChange)="categoriaSel.set($event)">
+          <option value="">Todas</option>
+          @for (c of categorias(); track c.categoria_id) {
+            <option [value]="c.categoria_id">{{ c.categoria }}</option>
+          }
+        </select>
+      </div>
+      <button type="button" class="btn btn-primario" (click)="verReporte()"
+              [disabled]="!tipoSel() || cargando()">
+        {{ cargando() ? 'Generando...' : 'Generar' }}
+      </button>
+    </div>
+  </section>
+
+  @if (error(); as mensaje) {
+    <section class="contenedor bloque">
+      <div class="aviso aviso-error">{{ mensaje }}</div>
+    </section>
+  }
+
+  <section class="contenedor bloque">
+    <div class="tarjeta reporte">
+      @if (cargando()) {
+        <p class="vacio-texto">Generando reporte...</p>
+      } @else if (!datos()) {
+        <p class="vacio-texto">Selecciona un reporte y pulsa Generar para ver los resultados.</p>
+      } @else {
+        <div class="cab-rep">
+          <h2 class="titulo-tarjeta">{{ datos()?.titulo }}</h2>
+          <span class="meta-rep">{{ (datos()?.filas?.length ?? 0) }} registro(s)</span>
+        </div>
+
+        @if ((datos()?.filas?.length ?? 0) === 0) {
+          <p class="vacio-texto">Sin registros para los filtros seleccionados.</p>
+        } @else {
+          <div class="tabla-scroll">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  @for (c of columnas(); track c.clave) {
+                    <th [class.num]="esNumero((datos()?.filas ?? [])[0]?.[c.clave])">
+                      {{ c.nombre }}
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (fila of datos()?.filas; track $index) {
+                  <tr>
+                    @for (c of columnas(); track c.clave) {
+                      <td [class.num]="esNumero(fila[c.clave])"
+                          [class.moneda]="esMoneda(c.clave) && esNumero(fila[c.clave])">
+                        {{ formatearCelda(fila, c.clave) }}
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    </div>
+  </section>
+</app-panel-shell>

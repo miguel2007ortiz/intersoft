@@ -1,0 +1,136 @@
+<app-panel-shell>
+  <section class="contenedor pagina">
+    <header class="cabecera">
+      <div>
+        <h1>Roles y permisos</h1>
+        <p class="gris">Define que puede hacer cada perfil de tu empresa. Toca un rol para ver mas.</p>
+      </div>
+      @if (!formularioAbierto()) {
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo rol</button>
+      }
+    </header>
+
+    @if (exito()) {
+      <div class="aviso aviso-ok">{{ exito() }}</div>
+    }
+    @if (error() && !formularioAbierto()) {
+      <div class="aviso aviso-error">{{ error() }}</div>
+    }
+
+    @if (formularioAbierto()) {
+      <form class="tarjeta formulario" [formGroup]="formulario" (ngSubmit)="enviar()">
+        <h2>{{ editando() ? 'Editar rol' : 'Nuevo rol' }}</h2>
+
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="nombre">Nombre del rol</label>
+            <input id="nombre" type="text" formControlName="nombre"
+                   [readonly]="editando()?.es_sistema === true"
+                   placeholder="SUPERVISOR" />
+            @if (campoInvalido('nombre')) {
+              <p class="mensaje-error">Escribe un nombre (minimo 3 caracteres).</p>
+            }
+            @if (editando()?.es_sistema) {
+              <p class="ayuda">Los roles base del sistema no se pueden renombrar.</p>
+            }
+          </div>
+          <div class="campo">
+            <label for="descripcion">Descripcion</label>
+            <input id="descripcion" type="text" formControlName="descripcion"
+                   placeholder="Que hace este rol..." />
+          </div>
+        </div>
+
+        <fieldset class="permisos">
+          <legend>Permisos ({{ seleccionados().size }} seleccionados)</legend>
+          <div class="grilla-permisos">
+            @for (p of permisosCatalogo(); track p.codigo) {
+              <label class="permiso" [class.marcado]="seleccionados().has(p.codigo)">
+                <input type="checkbox"
+                       [checked]="seleccionados().has(p.codigo)"
+                       (change)="alternarPermiso(p.codigo)" />
+                <span>
+                  <strong>{{ p.codigo }}</strong>
+                  <small>{{ p.descripcion }}</small>
+                </span>
+              </label>
+            }
+          </div>
+          @if (!haySeleccionados()) {
+            <p class="mensaje-error">Selecciona al menos un permiso.</p>
+          }
+        </fieldset>
+
+        @if (error()) {
+          <div class="aviso aviso-error">{{ error() }}</div>
+        }
+
+        <div class="acciones-form">
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="submit" class="btn btn-primario">
+            {{ editando() ? 'Guardar cambios' : 'Crear rol' }}
+          </button>
+        </div>
+      </form>
+    }
+
+    @if (cargando()) {
+      <p class="gris centrado">Cargando roles...</p>
+    } @else {
+      <div class="acordeon">
+        @for (rol of roles(); track rol.id) {
+          <article class="item" [class.abierto]="expandido() === rol.id">
+            <button type="button" class="cabecera"
+                    (click)="alternarAcordeon(rol.id)"
+                    [attr.aria-expanded]="expandido() === rol.id">
+              <span class="titulo">
+                {{ rol.nombre }}
+                @if (rol.es_sistema) {
+                  <span class="insignia">Sistema</span>
+                }
+              </span>
+              <span class="resumen">
+                {{ rol.permisos.length }} permiso(s) · {{ rol.total_usuarios_activos }} usuario(s)
+              </span>
+              <svg class="chevron" viewBox="0 0 24 24" width="18" height="18"
+                   fill="none" stroke="currentColor" stroke-width="2.4"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            @if (expandido() === rol.id) {
+              <div class="cuerpo">
+                <p class="descripcion">{{ rol.descripcion || 'Sin descripcion.' }}</p>
+
+                <h3>Permisos</h3>
+                <div class="chips">
+                  @for (codigo of rol.permisos; track codigo) {
+                    <span class="chip">{{ codigo }}</span>
+                  } @empty {
+                    <span class="chip vacio">Este rol no tiene permisos asignados</span>
+                  }
+                </div>
+
+                <div class="pie">
+                  <small class="gris">{{ rol.total_usuarios_activos }} usuario(s) activo(s) con este rol</small>
+                  <div class="botones">
+                    <button type="button" class="enlace" (click)="abrirEdicion(rol)">Editar</button>
+                    <button type="button" class="enlace" (click)="clonar(rol)">Clonar</button>
+                    @if (!rol.es_sistema) {
+                      <button type="button" class="enlace peligro" (click)="eliminar(rol)">Eliminar</button>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+          </article>
+        } @empty {
+          <div class="tarjeta vacio-total">
+            <p class="gris centrado">Todavia no hay roles. Crea el primero con "+ Nuevo rol".</p>
+          </div>
+        }
+      </div>
+    }
+  </section>
+</app-panel-shell>

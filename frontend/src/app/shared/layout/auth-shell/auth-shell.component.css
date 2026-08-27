@@ -1,0 +1,42 @@
+/* Resplandor radial que sigue el cursor (mismo efecto del hero de home) */
+.envoltorio {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  --brillo-x: 50%;
+  --brillo-y: 30%;
+}
+.envoltorio::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(420px circle at var(--brillo-x) var(--brillo-y), rgba(38, 87, 217, 0.16), transparent 70%);
+}
+.barra, .contenido, app-site-footer { position: relative; z-index: 1; }
+app-site-footer { display: block; }
+
+.barra {
+  background: var(--blanco);
+  border-bottom: 1px solid var(--linea);
+  padding: var(--e4) 0;
+}
+.barra-int { display: flex; align-items: center; justify-content: space-between; gap: var(--e4); }
+
+.logo { font-size: 22px; font-weight: 700; color: var(--tinta); text-decoration: none; }
+.logo span { color: var(--primario); }
+
+.lema { font-size: 14px; color: var(--gris); }
+
+.contenido {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--e7) var(--e4);
+}
+
+@media (max-width: 640px) {
+  .lema { display: none; }
+}

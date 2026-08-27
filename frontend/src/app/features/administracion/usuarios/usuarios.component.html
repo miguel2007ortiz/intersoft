@@ -1,0 +1,116 @@
+<app-panel-shell>
+  <section class="contenedor pagina">
+    <header class="cabecera">
+      <div>
+        <h1>Usuarios</h1>
+        <p class="gris">Crea cuentas, asigna roles y desactiva accesos de tu empresa.</p>
+      </div>
+      @if (!formularioAbierto()) {
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo usuario</button>
+      }
+    </header>
+
+    @if (exito()) {
+      <div class="aviso aviso-ok">{{ exito() }}</div>
+    }
+    @if (error() && !formularioAbierto()) {
+      <div class="aviso aviso-error">{{ error() }}</div>
+    }
+
+    @if (formularioAbierto()) {
+      <form class="tarjeta formulario" [formGroup]="formulario" (ngSubmit)="enviar()">
+        <h2>{{ editando() ? 'Editar usuario' : 'Nuevo usuario' }}</h2>
+
+        <div class="campo">
+          <label for="nombre">Nombre completo</label>
+          <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Torres" />
+          @if (campoInvalido('nombre')) {
+            <p class="mensaje-error">Escribe el nombre (minimo 3 caracteres).</p>
+          }
+        </div>
+
+        <div class="campo">
+          <label for="email">Correo electronico</label>
+          <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" />
+          @if (campoInvalido('email')) {
+            <p class="mensaje-error">Ingresa un correo valido.</p>
+          }
+        </div>
+
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="rol">Rol</label>
+            <select id="rol" formControlName="rol">
+              @for (r of roles; track r) {
+                <option [value]="r">{{ r }}</option>
+              }
+            </select>
+          </div>
+          <div class="campo">
+            <label for="password">
+              Contrasena @if (editando()) {<span class="gris">(dejar vacio para no cambiar)</span>}
+            </label>
+            <input id="password" type="password" formControlName="password" autocomplete="new-password" />
+            @if (campoInvalido('password')) {
+              <p class="mensaje-error">Minimo 8 caracteres.</p>
+            }
+          </div>
+        </div>
+
+        @if (error()) {
+          <div class="aviso aviso-error">{{ error() }}</div>
+        }
+
+        <div class="acciones-form">
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="submit" class="btn btn-primario">
+            {{ editando() ? 'Guardar cambios' : 'Crear usuario' }}
+          </button>
+        </div>
+      </form>
+    }
+
+    <div class="tarjeta sin-relleno">
+      @if (cargando()) {
+        <p class="gris centrado">Cargando usuarios...</p>
+      } @else {
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of usuarios(); track u.id) {
+              <tr>
+                <td>{{ u.nombre || '(sin nombre)' }}</td>
+                <td>{{ u.email }}</td>
+                <td><span class="insignia">{{ u.rol }}</span></td>
+                <td>
+                  <span class="insignia" [class.ok]="u.activo" [class.inactiva]="!u.activo">
+                    {{ u.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                <td class="celda-acciones">
+                  <button type="button" class="enlace" (click)="abrirEdicion(u)">Editar</button>
+                  @if (u.email !== auth.usuario()?.email) {
+                    <button type="button" class="enlace" [class.peligro]="u.activo"
+                            (click)="alternarActivo(u)">
+                      {{ u.activo ? 'Desactivar' : 'Reactivar' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="5" class="centrado gris">Todavia no hay usuarios.</td></tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </section>
+</app-panel-shell>
