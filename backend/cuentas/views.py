@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -119,16 +119,40 @@ class SolicitarRecuperacionView(APIView):
         if perfil and perfil.usuario.is_active:
             token = TokenRecuperacion.emitir(perfil, minutos=30)
             enlace = f"{settings.FRONTEND_URL}/restablecer?token={token}"
+            mensaje_texto = (
+                "Hola.\n\n"
+                "Recibimos una solicitud para restablecer tu contrasena de InterSoft.\n\n"
+                f"Abre este enlace (vence en 30 minutos):\n{enlace}\n\n"
+                "Si no fuiste tu, ignora este correo."
+            )
+            mensaje_html = (
+                "<div style='font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto'>"
+                "<h2 style='color:#1f2937'>InterSoft</h2>"
+                "<p>Hola,</p>"
+                "<p>Recibimos una solicitud para restablecer tu contrasena.</p>"
+                "<p>Haz clic en el boton para crear una nueva (vence en 30 minutos):</p>"
+                "<p><a href='" + enlace + "' "
+                "style='display:inline-block;background-color:#2563eb;color:#ffffff;"
+                "padding:12px 22px;border-radius:6px;text-decoration:none;font-weight:bold'>"
+                "Restablecer contrasena</a></p>"
+                "<p style='color:#6b7280;font-size:12px'>"
+                "Si el boton no funciona, copia este enlace: <a href='" + enlace + "'>" + enlace + "</a></p>"
+                "<hr style='margin-top:28px;border:none;border-top:1px solid #e5e7eb'>"
+                "<p style='color:#9ca3af;font-size:12px'>Si no solicitaste este cambio, "
+                "ignora este correo.</p>"
+                "</div>"
+            )
             try:
-                enviado = send_mail(
+                correo = EmailMultiAlternatives(
                     subject="Restablece tu contrasena de InterSoft",
-                    message=f"Abre este enlace (vence en 30 minutos): {enlace}",
+                    body=mensaje_texto,
                     from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[perfil.usuario.email],
-                    # En desarrollo (consola) no se lanza; en produccion
-                    # (SMTP) no se ocultan errores reales de envio.
-                    fail_silently=settings.DEBUG,
+                    to=[perfil.usuario.email],
                 )
+                correo.attach_alternative(mensaje_html, "text/html")
+                # En desarrollo (consola) no se lanza; en produccion (SMTP)
+                # no se ocultan errores reales de envio.
+                enviado = correo.send(fail_silently=settings.DEBUG)
             except Exception as exc:  # noqa: BLE001
                 # No revelamos al usuario el fallo (anti-enumeracion), pero
                 # queda registrado internamente para operacion.
