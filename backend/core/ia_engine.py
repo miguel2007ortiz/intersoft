@@ -4,7 +4,8 @@ Separa la construccion del "contexto de negocio" (datos agregados de la
 empresa que se pasan al modelo) de la llamada al proveedor, que es
 configurable por variables de entorno:
 
-    IA_PROVIDER  -> 'mock' (por defecto) o 'openai' (API compatible)
+    IA_PROVIDER  -> 'mock' (por defecto), 'openai' o 'groq' (API compatible
+                    con OpenAI: endpoint /v1/chat/completions + Bearer)
     IA_API_KEY   -> clave del proveedor; sin ella se usa el mock local
     IA_API_URL   -> endpoint tipo /v1/chat/completions
     IA_MODEL     -> nombre del modelo
@@ -142,9 +143,11 @@ def _mensajes(historial, pregunta):
                             "el contexto de negocio proporcionado. No inventes "
                             "datos que no esten en el contexto."}]
     for rol, contenido in historial[-max_turnos:]:
-        # El rol almacenado ('usuario'|'asistente') coincide con el payload.
-        mensajes.append({"role": rol, "content": contenido})
-    mensajes.append({"role": "usuario", "content": pregunta})
+        # El rol almacenado es 'usuario'|'asistente'; la API OpenAI/Groq
+        # exige 'user'|'assistant' (si no, devuelve 400).
+        rol_api = 'user' if rol == 'usuario' else 'assistant'
+        mensajes.append({"role": rol_api, "content": contenido})
+    mensajes.append({"role": "user", "content": pregunta})
     return mensajes
 
 
@@ -153,8 +156,9 @@ def llamar_proveedor(contexto, historial, pregunta) -> str:
 
     Levanta `IATimeoutError`/`IAError` si el proveedor falla o no hay clave.
     """
-    if getattr(settings, 'IA_PROVIDER', 'mock') == 'openai':
-        return _llamar_openai(contexto, historial, pregunta)
+    proveedor = getattr(settings, 'IA_PROVIDER', 'mock')
+    if proveedor in ('openai', 'groq'):
+        return _llamar_compatible(contexto, historial, pregunta)
     return _mock(contexto, pregunta)
 
 
@@ -170,18 +174,21 @@ def _mock(contexto, pregunta) -> str:
         f"{r.get('ticket_promedio', 0)}. El inventario vale "
         f"{r.get('valor_inventario', 0)} en {r.get('unidades_inventario', 0)} "
         f"unidades.\n\n"
-        "Para respuestas inteligentes reales, define IA_PROVIDER=openai e "
-        "IA_API_KEY. Tu pregunta fue: " + pregunta
+        "Para respuestas inteligentes reales, define IA_PROVIDER=groq u "
+        "openai con IA_API_KEY e IA_API_URL. Tu pregunta fue: " + pregunta
     )
 
 
-# ---------------------------- Proveedor OpenAI ------------------------------
+# ----------------- Eliminado: _llamar_openai -> _llamar_compatible ----------
+# Proveedor tipo OpenAI-compatible (OpenAI, Groq, OpenRouter, Together, etc.).
+# Groq usa el mismo formato /v1/chat/completions + Authorization: Bearer,
+# por lo que basta con cambiar IA_API_URL e IA_MODEL. No se toca el codigo.
 
-def _llamar_openai(contexto, historial, pregunta) -> str:
+def _llamar_compatible(contexto, historial, pregunta) -> str:
     api_key = getattr(settings, 'IA_API_KEY', '')
     if not api_key:
         raise IATimeoutError(
-            "El proveedor openai esta activo pero falta IA_API_KEY.")
+            "El proveedor IA esta activo pero falta IA_API_KEY.")
     url = getattr(settings, 'IA_API_URL', '') or \
         'https://api.openai.com/v1/chat/completions'
     payload = {
@@ -194,6 +201,11 @@ def _llamar_openai(contexto, historial, pregunta) -> str:
         url, data=cuerpo, method='POST',
         headers={
             "Content-Type": "application/json",
+            # Groq/Cloudflare bloquea el User-Agent por defecto de urllib
+            # (error 1010); se envia uno de navegador para que la API acepte.
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/120.0 Safari/537.36"),
             "Authorization": f"Bearer {api_key}",
         })
     timeout = getattr(settings, 'IA_TIMEOUT', 20)
