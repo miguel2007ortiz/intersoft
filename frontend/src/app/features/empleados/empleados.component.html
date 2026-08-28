@@ -1,0 +1,179 @@
+<app-panel-shell>
+  <section class="contenedor pagina">
+    <header class="cabecera">
+      <div>
+        <h1>Empleados</h1>
+        <p class="gris">Personal interno de tu empresa: acceso, rol y datos laborales.</p>
+      </div>
+      @if (!formularioAbierto() && auth.tienePermiso('empleado.crear')) {
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo empleado</button>
+      }
+    </header>
+
+    @if (exito()) {
+      <div class="aviso aviso-ok">{{ exito() }}</div>
+    }
+    @if (error() && !formularioAbierto()) {
+      <div class="aviso aviso-error">{{ error() }}</div>
+    }
+
+    @if (passwordTemporal()) {
+      <div class="tarjeta aviso-password">
+        <p><strong>Contrasena temporal:</strong> <code>{{ passwordTemporal() }}</code></p>
+        <p class="gris">Se muestra una sola vez. Compartela con el empleado por un canal seguro;
+          debera cambiarla en su primer ingreso.</p>
+        <button type="button" class="btn btn-secundario" (click)="passwordTemporal.set(null)">Entendido</button>
+      </div>
+    }
+
+    @if (formularioAbierto()) {
+      <form class="tarjeta formulario" [formGroup]="formulario" (ngSubmit)="enviar()">
+        <h2>{{ editando() ? 'Editar empleado' : 'Nuevo empleado' }}</h2>
+
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="nombre">Nombre</label>
+            <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Perez" />
+            @if (campoInvalido('nombre')) {
+              <p class="mensaje-error">Escribe el nombre del empleado.</p>
+            }
+          </div>
+          <div class="campo">
+            <label for="email">Correo</label>
+            <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" />
+            @if (campoInvalido('email')) {
+              <p class="mensaje-error">Escribe un correo valido.</p>
+            }
+          </div>
+        </div>
+
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="rol">Rol</label>
+            <select id="rol" formControlName="rol">
+              <option value="" disabled>Selecciona un rol</option>
+              @for (r of roles(); track r.id) {
+                <option [value]="r.nombre">{{ r.nombre }}</option>
+              }
+            </select>
+            @if (campoInvalido('rol')) {
+              <p class="mensaje-error">Selecciona el rol del empleado.</p>
+            }
+          </div>
+          <div class="campo">
+            <label for="password">Contrasena temporal</label>
+            <input id="password" type="text" formControlName="password"
+                   placeholder="Vacio = la genera el sistema" />
+          </div>
+        </div>
+
+        <div class="fila-triple">
+          <div class="campo">
+            <label for="tipo_documento">Tipo de documento</label>
+            <select id="tipo_documento" formControlName="tipo_documento">
+              <option value="">Sin documento</option>
+              @for (t of tiposDocumento; track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </div>
+          <div class="campo campo-doble-ancho">
+            <label for="numero_documento">Numero de documento</label>
+            <input id="numero_documento" type="text" formControlName="numero_documento"
+                   placeholder="1020304050" />
+          </div>
+        </div>
+
+        <div class="fila-triple">
+          <div class="campo">
+            <label for="telefono">Telefono</label>
+            <input id="telefono" type="text" formControlName="telefono" placeholder="3001234567" />
+          </div>
+          <div class="campo">
+            <label for="cargo">Cargo</label>
+            <input id="cargo" type="text" formControlName="cargo" placeholder="Vendedor" />
+          </div>
+          <div class="campo">
+            <label for="fecha_ingreso">Fecha de ingreso</label>
+            <input id="fecha_ingreso" type="date" formControlName="fecha_ingreso" />
+          </div>
+        </div>
+
+        @if (error()) {
+          <div class="aviso aviso-error">{{ error() }}</div>
+        }
+
+        <div class="acciones-form">
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="submit" class="btn btn-primario">
+            {{ editando() ? 'Guardar cambios' : 'Crear empleado' }}
+          </button>
+        </div>
+      </form>
+    }
+
+    <div class="barra-listado">
+      <input type="search" class="buscador" placeholder="Buscar por nombre, correo o documento..."
+             [value]="busqueda()" (input)="buscar($event)" />
+      <div class="filtros">
+        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'todos'"
+                (click)="filtrar('todos')">Todos</button>
+        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'activos'"
+                (click)="filtrar('activos')">Activos</button>
+        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'inactivos'"
+                (click)="filtrar('inactivos')">Inactivos</button>
+      </div>
+    </div>
+
+    <div class="tarjeta sin-relleno">
+      @if (cargando()) {
+        <p class="gris centrado">Cargando empleados...</p>
+      } @else {
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Empleado</th>
+              <th>Rol</th>
+              <th>Cargo</th>
+              <th>Documento</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of lista(); track e.id) {
+              <tr>
+                <td>
+                  <strong>{{ e.nombre }}</strong>
+                  <span class="linea-dato gris">{{ e.email }}</span>
+                </td>
+                <td>{{ e.rol }}</td>
+                <td>{{ e.cargo || '—' }}</td>
+                <td>{{ e.tipo_documento ? (e.tipo_documento + ' ' + e.numero_documento) : '—' }}</td>
+                <td>
+                  <span class="insignia" [class.ok]="e.activo" [class.inactiva]="!e.activo">
+                    {{ e.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                <td class="celda-acciones">
+                  @if (auth.tienePermiso('empleado.actualizar')) {
+                    <button type="button" class="enlace" (click)="abrirEdicion(e)">Editar</button>
+                    <button type="button" class="enlace" (click)="regenerarPassword(e)">Regenerar clave</button>
+                  }
+                  @if (auth.tienePermiso('empleado.desactivar')) {
+                    <button type="button" class="enlace" [class.peligro]="e.activo"
+                            (click)="alternarActivo(e)">
+                      {{ e.activo ? 'Desactivar' : 'Reactivar' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="centrado gris">Todavia no hay empleados.</td></tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </section>
+</app-panel-shell>

@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { personalGuard } from './core/guards/personal.guard';
+import { permisoGuard } from './core/guards/permiso.guard';
 
 export const routes: Routes = [
   {
@@ -70,6 +71,22 @@ export const routes: Routes = [
     canActivate: [authGuard, personalGuard],
     loadComponent: () =>
       import('./features/catalogo/productos/productos.component').then((m) => m.ProductosComponent),
+  },
+  {
+    path: 'empleados',
+    title: 'Empleados — InterSoft',
+    canActivate: [authGuard, permisoGuard('empleado.leer')],
+    loadComponent: () =>
+      import('./features/empleados/empleados.component').then((m) => m.EmpleadosComponent),
+  },
+  {
+    path: 'cambiar-password',
+    title: 'Cambiar contraseña — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/cambiar-password/cambiar-password.component').then(
+        (m) => m.CambiarPasswordComponent,
+      ),
   },
   {
     path: 'admin/usuarios',
