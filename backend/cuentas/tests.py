@@ -350,12 +350,14 @@ class CrudRolesTest(BaseSeguridadTest):
         respuesta = self.api.get("/api/seguridad/roles/")
         self.assertEqual(respuesta.status_code, 200)
         admin = next(r for r in respuesta.json()["resultados"] if r["nombre"] == "ADMINISTRADOR")
-        self.assertEqual(len(admin["permisos"]), 8)
+        # ADMINISTRADOR tiene TODOS los permisos: 8 gruesos (fase 1) + 11
+        # finos (fase Empleados), ambos catalogos son aditivos.
+        self.assertEqual(len(admin["permisos"]), 19)
         self.assertTrue(admin["es_sistema"])
 
     def test_catalogo_de_permisos(self):
         respuesta = self.api.get("/api/seguridad/permisos/")
-        self.assertEqual(respuesta.json()["total"], 8)
+        self.assertEqual(respuesta.json()["total"], 19)
 
     def test_crear_rol_con_permisos(self):
         respuesta = self.api.post("/api/seguridad/roles/", {

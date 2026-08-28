@@ -81,6 +81,8 @@ class RolPermiso(models.Model):
 class Perfil(models.Model):
     ROLES = [("ADMINISTRADOR", "Administrador"), ("EMPLEADO", "Empleado"),
              ("CLIENTE", "Cliente")]
+    TIPO_DOC_CHOICES = [("CC", "Cedula de Ciudadania"), ("NIT", "NIT"),
+                        ("CE", "Cedula de Extranjeria"), ("PAS", "Pasaporte")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -94,10 +96,31 @@ class Perfil(models.Model):
     intentos_fallidos = models.PositiveSmallIntegerField(default=0)
     fecha_desbloqueo = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    # Datos laborales (fase Empleados). Nulos/blank para no romper filas
+    # existentes (clientes del marketplace y personal ya creado en fase 2).
+    tipo_documento = models.CharField(max_length=10, choices=TIPO_DOC_CHOICES,
+                                      null=True, blank=True)
+    numero_documento = models.CharField(max_length=20, null=True, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    cargo = models.CharField(max_length=80, blank=True)
+    fecha_ingreso = models.DateField(null=True, blank=True)
+    debe_cambiar_password = models.BooleanField(default=False)
 
     class Meta:
         db_table = "perfil"
         verbose_name_plural = "Perfiles"
+        constraints = [
+            # NULL se considera distinto en MySQL (igual que Cliente): los
+            # perfiles sin documento (clientes del marketplace, personal sin
+            # dato aun) no colisionan entre si.
+            models.UniqueConstraint(
+                fields=["empresa", "tipo_documento", "numero_documento"],
+                name="perfil_empresa_documento_unico",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "rol"], name="perfil_empresa_rol_idx"),
+        ]
 
     def __str__(self):
         return f"{self.usuario.email} ({self.rol.nombre})"
