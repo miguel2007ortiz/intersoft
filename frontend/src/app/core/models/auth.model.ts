@@ -17,7 +17,20 @@ export interface LoginRequest {
 export interface LoginResponse {
   access: string;
   refresh: string;
-  usuario: Usuario;
+  usuario: Usuario & { debe_cambiar_password: boolean };
+}
+
+/** Respuesta de GET /api/auth/me/: fuente unica de permisos del frontend.
+ * El menu y los guards de la fase Empleados se arman desde `permisos`,
+ * no del nombre del rol (a diferencia de auth/admin/personal.guard). */
+export interface MeResponse extends Usuario {
+  permisos: string[];
+  debe_cambiar_password: boolean;
+}
+
+export interface CambiarPasswordRequest {
+  password_actual: string;
+  password_nueva: string;
 }
 
 export interface RegistroRequest {
@@ -40,6 +53,7 @@ export type CodigoErrorAuth =
   | 'CREDENCIALES_INVALIDAS'
   | 'CUENTA_BLOQUEADA'
   | 'USUARIO_INACTIVO'
+  | 'EMPRESA_INACTIVA'
   | 'DATOS_INVALIDOS'
   | 'SIN_CONEXION'
   | 'ERROR_SERVIDOR';
