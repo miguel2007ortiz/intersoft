@@ -31,6 +31,11 @@ class LoginSerializer(serializers.Serializer):
         return valor.strip().lower()
 
 
+class CambiarPasswordSerializer(serializers.Serializer):
+    password_actual = serializers.CharField(write_only=True)
+    password_nueva = serializers.CharField(write_only=True, validators=[validar_fuerza_password])
+
+
 class DatosEmpresaSerializer(serializers.Serializer):
     nombre = serializers.CharField(min_length=3, max_length=150)
     nit = serializers.RegexField(r"^\d{9}$", error_messages={"invalid": "El NIT son 9 digitos."})

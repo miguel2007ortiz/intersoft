@@ -9,9 +9,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import ActividadUsuario, Perfil, TokenRecuperacion
+from .models import ActividadUsuario, Perfil, RolPermiso, TokenRecuperacion
 from .serializers import (
-    ConfirmarRecuperacionSerializer, LoginSerializer,
+    CambiarPasswordSerializer, ConfirmarRecuperacionSerializer, LoginSerializer,
     RegistroCompradorSerializer, RegistroSerializer,
     SolicitarRecuperacionSerializer,
 )
@@ -67,6 +67,10 @@ class LoginView(APIView):
         if not usuario.is_active or perfil is None or perfil.deleted_at:
             return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
 
+        if perfil.empresa_id and not perfil.empresa.activa:
+            ActividadUsuario.registrar(usuario, "LOGIN_EMPRESA_INACTIVA", email)
+            return Response({"codigo": "EMPRESA_INACTIVA"}, status=status.HTTP_403_FORBIDDEN)
+
         perfil.reiniciar_intentos()
         refresh = RefreshToken.for_user(usuario)
         nombre = (usuario.get_full_name() or usuario.username).strip()
@@ -77,8 +81,59 @@ class LoginView(APIView):
             "usuario": {"id": str(perfil.id), "email": usuario.email, "nombre": nombre,
                         "rol": perfil.nombre_rol,
                         "empresa": str(perfil.empresa_id) if perfil.empresa_id else None,
-                        "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None},
+                        "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None,
+                        "debe_cambiar_password": perfil.debe_cambiar_password},
         })
+
+
+class MeView(APIView):
+    """Fuente unica de permisos del frontend (fase Empleados): el menu y los
+    guards se arman a partir de `permisos`, no del nombre del rol."""
+
+    def get(self, request):
+        perfil = getattr(request.user, "perfil", None)
+        if perfil is None:
+            return Response({"codigo": "SIN_PERFIL"}, status=status.HTTP_403_FORBIDDEN)
+
+        usuario = perfil.usuario
+        nombre = (usuario.get_full_name() or usuario.username).strip()
+        permisos = list(
+            RolPermiso.objects.filter(rol=perfil.rol)
+            .values_list("permiso__codigo", flat=True)
+        )
+        return Response({
+            "id": str(perfil.id), "email": usuario.email, "nombre": nombre,
+            "rol": perfil.nombre_rol,
+            "empresa": str(perfil.empresa_id) if perfil.empresa_id else None,
+            "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None,
+            "permisos": permisos,
+            "debe_cambiar_password": perfil.debe_cambiar_password,
+        })
+
+
+class CambiarPasswordView(APIView):
+    """Cambio de contrasena propio. Ruta exenta de CambioPasswordMiddleware:
+    es la unica escritura permitida mientras debe_cambiar_password=True."""
+
+    def post(self, request):
+        entrada = CambiarPasswordSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        usuario = request.user
+        if not usuario.check_password(entrada.validated_data["password_actual"]):
+            return Response({"codigo": "PASSWORD_ACTUAL_INCORRECTA"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        usuario.set_password(entrada.validated_data["password_nueva"])
+        usuario.save(update_fields=["password"])
+
+        perfil = getattr(usuario, "perfil", None)
+        if perfil and perfil.debe_cambiar_password:
+            perfil.debe_cambiar_password = False
+            perfil.save(update_fields=["debe_cambiar_password"])
+
+        ActividadUsuario.registrar(usuario, "PASSWORD_CAMBIADA", usuario.email)
+        return Response(status=status.HTTP_200_OK)
 
 
 class RegistroEmpresaView(APIView):

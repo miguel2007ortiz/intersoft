@@ -1,11 +1,13 @@
 from django.urls import path
 from .views import (
-    ConfirmarRecuperacionView, EmailDisponibleView, LoginView,
-    RegistroCompradorView, RegistroEmpresaView, SolicitarRecuperacionView,
+    CambiarPasswordView, ConfirmarRecuperacionView, EmailDisponibleView, LoginView,
+    MeView, RegistroCompradorView, RegistroEmpresaView, SolicitarRecuperacionView,
 )
 
 urlpatterns = [
     path("login/", LoginView.as_view(), name="auth-login"),
+    path("me/", MeView.as_view(), name="auth-me"),
+    path("cambiar-password/", CambiarPasswordView.as_view(), name="auth-cambiar-password"),
     path("registro/", RegistroEmpresaView.as_view(), name="auth-registro"),
     path("registro/comprador/", RegistroCompradorView.as_view(), name="auth-registro-comprador"),
     path("email-disponible/", EmailDisponibleView.as_view(), name="auth-email-disponible"),

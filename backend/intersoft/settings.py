@@ -43,6 +43,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'cuentas.middleware.CambioPasswordMiddleware',  # bloqueo por password pendiente (fase Empleados)
     'cuentas.middleware.AuditoriaMiddleware',  # auditoria de escrituras (fase 1)
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
