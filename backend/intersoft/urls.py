@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/', include('core.urls_reportes')),  # fase 7: reportes y exportacion (ADMIN)
     path('api/', include('core.urls_ia')),  # fase 8: asistente IA (ADMIN y EMPLEADO)
     path('api/', include('core.urls_monitoreo')),  # fase 9: camaras y notificaciones (ADMIN)
+    path('api/', include('core.urls_empleados')),  # modulo Empleados (personal interno)
 ]
 
 if settings.DEBUG:

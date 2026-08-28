@@ -25,3 +25,22 @@ class EsPersonal(BasePermission):
         perfil = getattr(request.user, "perfil", None)
         return bool(perfil and not perfil.deleted_at
                     and perfil.rol.nombre in self.ROLES_PERSONAL)
+
+
+def TienePermiso(codigo: str):
+    """Factory de permission class por permiso fino (fase Empleados).
+
+    Consulta RolPermiso vía Perfil.tiene_permiso(), a diferencia de
+    EsAdministrador/EsPersonal que solo miran el nombre del rol. Uso:
+    `permission_classes = [TienePermiso("empleado.crear")]`.
+    """
+
+    class _TienePermiso(BasePermission):
+        message = f"No tiene el permiso '{codigo}' para esta accion."
+
+        def has_permission(self, request, view) -> bool:
+            perfil = getattr(request.user, "perfil", None)
+            return bool(perfil and not perfil.deleted_at and perfil.tiene_permiso(codigo))
+
+    _TienePermiso.__name__ = f"TienePermiso_{codigo.replace('.', '_')}"
+    return _TienePermiso

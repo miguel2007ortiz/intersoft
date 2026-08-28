@@ -245,6 +245,9 @@ class ProductoDetalleView(APIView):
         return self.editar(request, id, parcial=True)
 
     def editar(self, request, id, parcial: bool):
+        if not request.user.perfil.tiene_permiso("producto.actualizar"):
+            # RN Empleados: ver el catalogo no implica poder editarlo (precio incl.).
+            return Response(status=status.HTTP_403_FORBIDDEN)
         producto = self.obtener_producto(request, id)
         if producto is None:
             return Response(status=status.HTTP_404_NOT_FOUND)

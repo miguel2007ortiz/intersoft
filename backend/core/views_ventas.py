@@ -191,6 +191,9 @@ class VentasView(APIView):
         empresa = _obtener_empresa(request)
         ventas = Venta.objects.select_related('cliente', 'vendedor').filter(
             empresa=empresa, deleted_at__isnull=True)
+        if not request.user.perfil.tiene_permiso("venta.leer_todas"):
+            # RN Empleados: sin permiso global, cada quien ve solo lo suyo.
+            ventas = ventas.filter(vendedor=request.user)
 
         # Filtros
         estado = request.query_params.get('estado')
