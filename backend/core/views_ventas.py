@@ -25,8 +25,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (Cliente, DetalleVenta, Empresa, MovimientoInventario,
-                     Notificacion, Producto, Venta)
+from .models import (Cliente, DetalleVenta, MovimientoInventario, Notificacion,
+                     Producto, Venta)
 from .serializers_monitoreo import NotificacionLecturaSerializer
 from .serializers_ventas import (AjusteInventarioSerializer, AnulacionSerializer,
                                  MovimientoInventarioLecturaSerializer,
@@ -98,14 +98,10 @@ class VentaPOSView(APIView):
                  "detalle": "El cliente no existe en tu empresa."},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Transaccion unica: lock de empresa + validacion de stock + creacion.
-        # El SELECT FOR UPDATE sobre la empresa serializa el consecutivo y el
-        # descuento de stock para esa empresa (evita carreras y negativos).
+        # Validar stock de cada linea (con lock para evitar carreras)
+        lineas_stock_ok = []
+        lineas_stock_fallido = []
         with transaction.atomic():
-            Empresa.objects.select_for_update().filter(pk=empresa.pk).get()
-
-            lineas_stock_ok = []
-            lineas_stock_fallido = []
             for linea in datos['detalles']:
                 producto = Producto.objects.select_for_update().filter(
                     empresa=empresa, deleted_at__isnull=True, id=linea['producto']
@@ -132,13 +128,15 @@ class VentaPOSView(APIView):
                     'precio_unitario': producto.precio,
                 })
 
-            if lineas_stock_fallido:
-                return Response(
-                    {"codigo": "STOCK_INSUFICIENTE",
-                     "detalle": "Algunos productos no tienen stock suficiente.",
-                     "productos": lineas_stock_fallido},
-                    status=status.HTTP_400_BAD_REQUEST)
+        if lineas_stock_fallido:
+            return Response(
+                {"codigo": "STOCK_INSUFICIENTE",
+                 "detalle": "Algunos productos no tienen stock suficiente.",
+                 "productos": lineas_stock_fallido},
+                status=status.HTTP_400_BAD_REQUEST)
 
+        # Crear venta con toda la logica
+        with transaction.atomic():
             subtotal = sum(
                 Decimal(str(l['precio_unitario'])) * l['cantidad']
                 for l in lineas_stock_ok
@@ -166,27 +164,9 @@ class VentaPOSView(APIView):
                     cantidad=linea['cantidad'],
                     precio_unitario=linea['precio_unitario'],
                 )
-                # Descuento atomico de stock (no puede quedar negativo).
-                #
-                # Bajado con F() contra el numero activo con cantidad
-                # garantizando stock >= cantidad.
-                actualizado = Producto.objects.filter(
-                    pk=producto.pk, empresa=empresa,
-                    deleted_at__isnull=True, stock__gte=linea['cantidad'],
-                ).update(stock=models.F('stock') - linea['cantidad'])
-                if not actualizado:
-                    transaction.set_rollback(True)
-                    return Response(
-                        {"codigo": "STOCK_INSUFICIENTE",
-                         "detalle": "El stock del producto cambio durante la venta.",
-                         "productos": [{
-                             'producto': str(producto.id),
-                             'producto_nombre': producto.nombre,
-                             'solicitado': linea['cantidad'],
-                             'disponible': producto.stock,
-                         }]},
-                        status=status.HTTP_400_BAD_REQUEST)
-                producto.stock = max(producto.stock - linea['cantidad'], 0)
+                # Descontar stock
+                producto.stock -= linea['cantidad']
+                producto.save(update_fields=['stock'])
                 # Registrar movimiento
                 _registrar_movimiento(
                     producto, request.user, 'salida', linea['cantidad'],
@@ -197,11 +177,7 @@ class VentaPOSView(APIView):
                 f"Factura {venta.numero_factura} - "
                 f"{cliente.nombre} (${total})")
 
-        # Fase 6: recargar con las relaciones para serializar sin N+1.
-        venta_serializada = (Venta.objects.select_related('cliente', 'vendedor')
-                             .prefetch_related('detalles__producto')
-                             .get(pk=venta.pk))
-        return Response(VentaLecturaSerializer(venta_serializada).data,
+        return Response(VentaLecturaSerializer(venta).data,
                         status=status.HTTP_201_CREATED)
 
 
@@ -213,7 +189,11 @@ class VentasView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        ventas = Venta.objects.filter(empresa=empresa, deleted_at__isnull=True)
+        ventas = Venta.objects.select_related('cliente', 'vendedor').filter(
+            empresa=empresa, deleted_at__isnull=True)
+        if not request.user.perfil.tiene_permiso("venta.leer_todas"):
+            # RN Empleados: sin permiso global, cada quien ve solo lo suyo.
+            ventas = ventas.filter(vendedor=request.user)
 
         # Filtros
         estado = request.query_params.get('estado')
@@ -240,12 +220,9 @@ class VentasView(APIView):
             total_count=Count('id'),
         )
 
-        # Fase 6: evita N+1 (cliente/vendedor y detalles con su producto).
-        lista = ventas.select_related(
-            'cliente', 'vendedor'
-        ).prefetch_related('detalles__producto')
         datos = VentaLecturaSerializer(
-            lista.order_by('-fecha')[:50], many=True).data
+            ventas.order_by('-fecha')[:50].prefetch_related('detalles__producto'),
+            many=True).data
 
         return Response({
             "resultados": datos,
@@ -310,14 +287,12 @@ class VentaDetalleView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            # Revertir stock (incremento atomico para evitar perdidas)
+            # Revertir stock
             detalles = venta.detalles.select_related('producto').all()
             for detalle in detalles:
                 producto = detalle.producto
-                Producto.objects.filter(
-                    pk=producto.pk, empresa=empresa,
-                ).update(stock=models.F('stock') + detalle.cantidad)
                 producto.stock += detalle.cantidad
+                producto.save(update_fields=['stock'])
                 _registrar_movimiento(
                     producto, request.user, 'entrada', detalle.cantidad,
                     f"Anulacion venta {venta.numero_factura}")
@@ -423,14 +398,14 @@ class AlertasView(APIView):
 
     def get(self, request):
         alertas = Notificacion.objects.filter(
-            empresa=request.user.perfil.empresa, leida=False)
+            empresa=_obtener_empresa(request), leida=False)
         datos = NotificacionLecturaSerializer(
             alertas.order_by('-created_at')[:50], many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request, id):
         alerta = Notificacion.objects.filter(
-            empresa=request.user.perfil.empresa, id=id).first()
+            empresa=_obtener_empresa(request), id=id).first()
         if not alerta:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -449,8 +424,8 @@ class AlertaActualizarStockView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def post(self, request, id):
-        alerta = Notificacion.objects.filter(
-            empresa=request.user.perfil.empresa, id=id).first()
+        empresa = _obtener_empresa(request)
+        alerta = Notificacion.objects.filter(empresa=empresa, id=id).first()
         if not alerta:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -474,8 +449,7 @@ class AlertaActualizarStockView(APIView):
 
         sku = match.group(1)
         producto = Producto.objects.filter(
-            empresa=request.user.perfil.empresa,
-            sku=sku, deleted_at__isnull=True).first()
+            empresa=empresa, sku=sku, deleted_at__isnull=True).first()
         if not producto:
             return Response(
                 {"codigo": "PRODUCTO_NO_ENCONTRADO",
@@ -499,7 +473,7 @@ class InventarioProductosView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        productos = Producto.objects.select_related('categoria').filter(
+        productos = Producto.objects.filter(
             empresa=empresa, deleted_at__isnull=True, activo=True
         ).order_by('nombre')
 

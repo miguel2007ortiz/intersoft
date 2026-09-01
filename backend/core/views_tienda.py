@@ -27,33 +27,11 @@ from .models import (Carrito, CarritoItem, Categoria, Cliente, Cupon,
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
                                   CuponSerializer, CuponValidarSerializer,
-                                  ProductoTiendaSerializer)
+                                  PedidoCompradorSerializer, ProductoTiendaSerializer)
 
 
 def _obtener_empresa(request):
     return request.user.perfil.empresa
-
-
-def _carrito_serializado(carrito):
-    """Fase 6: recarga el carrito con cupon + items/produto para no hacer N+1
-    al serializar (subtotal, total, descuento e items con su producto)."""
-    carrito = (Carrito.objects.select_related("cupon")
-               .prefetch_related("items__producto").get(pk=carrito.pk))
-    return CarritoSerializer(carrito).data
-
-
-def _empresa_para_catalogo(request, slug=None):
-    """Resuelve la empresa del catalogo publico.
-
-    - Si se recibe un slug: se usa esa empresa (para la tienda publica por slug).
-    - Si no, y hay sesion: se usa la empresa del usuario autenticado.
-    - Si no hay ni slug ni sesion: None (no se filtra por tenant).
-    """
-    if slug:
-        return Empresa.objects.filter(slug=slug).first()
-    if getattr(request.user, "is_authenticated", False):
-        return request.user.perfil.empresa
-    return None
 
 
 def _registrar_alerta_stock(producto, empresa):
@@ -84,18 +62,9 @@ class CatalogoPublicoView(APIView):
     """GET lista productos activos (sin auth). Filtros: categoria, busqueda, precio."""
     permission_classes = [AllowAny]
 
-    def get(self, request, slug=None):
-        empresa = _empresa_para_catalogo(request, slug)
-        if slug and empresa is None:
-            return Response(
-                {"codigo": "TIENDA_NO_ENCONTRADA",
-                 "detalle": "La tienda no existe."},
-                status=status.HTTP_404_NOT_FOUND)
-        if empresa is None:
-            return Response({"resultados": [], "total": 0, "categorias": []})
-
+    def get(self, request):
         productos = Producto.objects.filter(
-            empresa=empresa, activo=True, deleted_at__isnull=True
+            activo=True, deleted_at__isnull=True
         ).select_related('categoria')
 
         busqueda = request.query_params.get('busqueda', '').strip()
@@ -131,18 +100,29 @@ class CatalogoPublicoView(APIView):
         else:
             productos = productos.order_by('nombre')
 
-        contexto = {"anonimo": not request.user.is_authenticated}
-        serializer = ProductoTiendaSerializer(productos[:50], many=True,
-                                              context=contexto)
+        # Paginacion real: 'total' es el conteo completo del filtro, no el
+        # tamano de la pagina (antes se cortaba a 50 y se reportaba mal).
+        total = productos.count()
+        try:
+            pagina = max(int(request.query_params.get('pagina', 1)), 1)
+        except (TypeError, ValueError):
+            pagina = 1
+        por_pagina = 24
+        inicio = (pagina - 1) * por_pagina
+        serializer = ProductoTiendaSerializer(
+            productos[inicio:inicio + por_pagina], many=True)
 
-        categorias = Categoria.objects.filter(empresa=empresa).annotate(
+        categorias = Categoria.objects.annotate(
             num_productos=Count('productos', filter=Q(
                 productos__activo=True, productos__deleted_at__isnull=True))
         ).filter(num_productos__gt=0).order_by('nombre')
 
         return Response({
             "resultados": serializer.data,
-            "total": len(serializer.data),
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": por_pagina,
+            "total_paginas": max((total + por_pagina - 1) // por_pagina, 1),
             "categorias": CategoriaTiendaSerializer(categorias, many=True).data,
         })
 
@@ -151,26 +131,16 @@ class CatalogoProductoDetailView(APIView):
     """GET detalle de un producto público."""
     permission_classes = [AllowAny]
 
-    def get(self, request, id, slug=None):
-        empresa = _empresa_para_catalogo(request, slug)
-        if slug and empresa is None:
-            return Response(
-                {"codigo": "TIENDA_NO_ENCONTRADA",
-                 "detalle": "La tienda no existe."},
-                status=status.HTTP_404_NOT_FOUND)
-        qs = Producto.objects.filter(
+    def get(self, request, id):
+        producto = Producto.objects.filter(
             activo=True, deleted_at__isnull=True, id=id
-        ).select_related('categoria')
-        if empresa is not None:
-            qs = qs.filter(empresa=empresa)
-        producto = qs.first()
+        ).select_related('categoria').first()
         if not producto:
             return Response(
                 {"codigo": "NO_ENCONTRADO",
                  "detalle": "Producto no encontrado."},
                 status=status.HTTP_404_NOT_FOUND)
-        contexto = {"anonimo": not request.user.is_authenticated}
-        return Response(ProductoTiendaSerializer(producto, context=contexto).data)
+        return Response(ProductoTiendaSerializer(producto).data)
 
 
 # ------------------------------ Cupones ----------------------------------
@@ -247,20 +217,41 @@ class CuponValidarView(APIView):
 
 # ------------------------------ Carrito ----------------------------------
 
+def _carrito_de(request):
+    """Carrito del comprador (marketplace): se identifica por usuario."""
+    carrito = Carrito.objects.filter(usuario=request.user).first()
+    if carrito is None:
+        carrito = Carrito.objects.create(usuario=request.user, empresa=None)
+    elif carrito.empresa_id is not None:
+        # Se migra un carrito con empresa antigua al modelo de marketplace.
+        carrito.empresa = None
+        carrito.save(update_fields=['empresa'])
+    return carrito
+
+
+def _carrito_serializado(carrito):
+    """Fase 6: evita N+1 (items -> producto) al serializar el carrito."""
+    carrito = (Carrito.objects.select_related("cupon")
+               .prefetch_related("items__producto").get(pk=carrito.pk))
+    return CarritoSerializer(carrito).data
+
+
 class CarritoView(APIView):
     """GET retorna el carrito del usuario autenticado."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        carrito, _ = Carrito.objects.get_or_create(
-            usuario=request.user,
-            empresa=request.user.perfil.empresa
-        )
+        carrito = _carrito_de(request)
         return Response(_carrito_serializado(carrito))
 
 
 class CarritoItemView(APIView):
-    """POST agrega un item / PUT actualiza cantidad / DELETE elimina item."""
+    """POST agrega un item / PUT actualiza cantidad / DELETE elimina item.
+
+    Marketplace: el comprador puede agregar productos activos de CUALQUIER
+    empresa (todas comparten catalogo). El carrito no esta atado a una
+    empresa vendedora.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -272,9 +263,8 @@ class CarritoItemView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        empresa = request.user.perfil.empresa
         producto = Producto.objects.filter(
-            empresa=empresa, activo=True, deleted_at__isnull=True,
+            activo=True, deleted_at__isnull=True,
             id=entrada.validated_data['producto']
         ).first()
         if not producto:
@@ -284,9 +274,7 @@ class CarritoItemView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         cantidad = entrada.validated_data['cantidad']
-
-        carrito, _ = Carrito.objects.get_or_create(
-            usuario=request.user, empresa=empresa)
+        carrito = _carrito_de(request)
 
         item, created = CarritoItem.objects.get_or_create(
             carrito=carrito, producto=producto,
@@ -316,15 +304,7 @@ class CarritoItemView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        empresa = request.user.perfil.empresa
-        carrito = Carrito.objects.filter(
-            usuario=request.user, empresa=empresa).first()
-        if not carrito:
-            return Response(
-                {"codigo": "CARRITO_VACIO",
-                 "detalle": "No tienes un carrito activo."},
-                status=status.HTTP_400_BAD_REQUEST)
-
+        carrito = _carrito_de(request)
         item = CarritoItem.objects.filter(
             id=item_id, carrito=carrito).first()
         if not item:
@@ -346,12 +326,7 @@ class CarritoItemView(APIView):
         return Response(_carrito_serializado(carrito))
 
     def delete(self, request, item_id):
-        empresa = request.user.perfil.empresa
-        carrito = Carrito.objects.filter(
-            usuario=request.user, empresa=empresa).first()
-        if not carrito:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-
+        carrito = _carrito_de(request)
         item = CarritoItem.objects.filter(
             id=item_id, carrito=carrito).first()
         if not item:
@@ -365,7 +340,11 @@ class CarritoItemView(APIView):
 
 
 class CarritoCuponView(APIView):
-    """POST aplica un cupón al carrito / DELETE lo quita."""
+    """POST aplica un cupón al carrito / DELETE lo quita.
+
+    Un cupón pertenece a la empresa vendedora que lo emite. Solo puede
+    aplicarse si TODOS los items del carrito son de esa empresa.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -377,9 +356,7 @@ class CarritoCuponView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        empresa = request.user.perfil.empresa
-        carrito, _ = Carrito.objects.get_or_create(
-            usuario=request.user, empresa=empresa)
+        carrito = _carrito_de(request)
 
         cupon_id = entrada.validated_data.get('cupon_id')
         if not cupon_id:
@@ -387,18 +364,19 @@ class CarritoCuponView(APIView):
             carrito.save(update_fields=['cupon'])
             return Response(_carrito_serializado(carrito))
 
-        cupon = Cupon.objects.filter(
-            id=cupon_id, empresa=empresa).first()
-        if not cupon:
+        cupon = Cupon.objects.filter(id=cupon_id).first()
+        if not cupon or not cupon.esta_vigente:
             return Response(
                 {"codigo": "CUPON_NO_ENCONTRADO",
-                 "detalle": "El cupon no existe."},
+                 "detalle": "El cupon no existe o no esta vigente."},
                 status=status.HTTP_404_NOT_FOUND)
 
-        if not cupon.esta_vigente:
+        items = carrito.items.select_related('producto').all()
+        if not items or any(i.producto.empresa_id != cupon.empresa_id for i in items):
             return Response(
-                {"codigo": "CUPON_VENCIDO",
-                 "detalle": "Este cupon no esta vigente."},
+                {"codigo": "CUPON_NO_APLICA",
+                 "detalle": "El cupon solo aplica si todos los productos "
+                            "del carrito son de la empresa que lo emite."},
                 status=status.HTTP_400_BAD_REQUEST)
 
         carrito.cupon = cupon
@@ -407,68 +385,82 @@ class CarritoCuponView(APIView):
         return Response(_carrito_serializado(carrito))
 
     def delete(self, request):
-        empresa = request.user.perfil.empresa
-        carrito = Carrito.objects.filter(
-            usuario=request.user, empresa=empresa).first()
-        if carrito:
+        carrito = _carrito_de(request)
+        if carrito.cupon:
             carrito.cupon = None
             carrito.save(update_fields=['cupon'])
-        return Response(_carrito_serializado(carrito) if carrito else {})
+        return Response(_carrito_serializado(carrito))
 
 
 # ------------------------------ Checkout ---------------------------------
 
 class CheckoutView(APIView):
-    """POST convierte el carrito en una venta (checkout completo).
+    """POST convierte el carrito en ventas (checkout tipo marketplace).
+
+    El carrito puede llevar productos de varias empresas. Se genera UNA
+    venta por cada empresa vendedora, todas dentro de una misma transaccion.
 
     Flujo:
     1. Valida stock de cada item con select_for_update.
     2. Si stock_insuficiente, rechaza con la lista de productos afectados.
-    3. Crea venta + detalle + descuenta stock + registra movimientos
-       todo dentro de transaction.atomic().
-    4. Aplica descuento del cupon si existe.
+    3. Agrupa los items por empresa vendedora y crea una venta por cada una,
+       descontando stock y registrando movimientos (transaction.atomic).
+    4. Aplica descuento del cupon solo si pertenece a la empresa vendedora.
     5. Simula pasarela de pago (mock configurable por env).
     6. Limpia el carrito.
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        empresa = request.user.perfil.empresa
+        carrito = _carrito_de(request)
 
-        carrito = Carrito.objects.filter(
-            usuario=request.user, empresa=empresa).first()
-        if not carrito or not carrito.items.exists():
+        if not carrito.items.exists():
             return Response(
                 {"codigo": "CARRITO_VACIO",
                  "detalle": "Tu carrito esta vacio."},
                 status=status.HTTP_400_BAD_REQUEST)
 
         cliente = Cliente.objects.filter(
-            empresa=empresa, deleted_at__isnull=True
+            usuario=request.user, deleted_at__isnull=True
         ).first()
         if not cliente:
             return Response(
                 {"codigo": "SIN_CLIENTE",
-                 "detalle": "No hay clientes registrados. "
-                            "Crea un cliente primero."},
+                 "detalle": "Completa tus datos de comprador "
+                            "(Registrate como cliente) para poder comprar."},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        items = carrito.items.select_related('producto').all()
+        items = list(carrito.items.select_related('producto').all())
 
-        # Transaccion unica: el lock sobre la empresa serializa el consecutivo
-        # de la factura y el descuento de stock para este tenant.
+        metodo_pago = request.data.get('metodo_pago', 'tarjeta')
+        mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
+        if mock_habilitado:
+            pasarelarespuesta = {
+                'aprobada': True,
+                'transaccion_id': f"MOCK-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+                'mensaje': 'Pago aprobado (mock)',
+            }
+        else:
+            pasarelarespuesta = {
+                'aprobada': False,
+                'transaccion_id': None,
+                'mensaje': 'Pasarela no configurada',
+            }
+
+        if not pasarelarespuesta['aprobada']:
+            return Response(
+                {"codigo": "PAGO_RECHAZADO",
+                 "detalle": pasarelarespuesta['mensaje']},
+                status=status.HTTP_402_PAYMENT_REQUIRED)
+
         with transaction.atomic():
-            Empresa.objects.select_for_update().filter(pk=empresa.pk).get()
-
-            lineas_stock_ok = []
-            lineas_stock_fallido = []
+            fallidos = []
             for item in items:
                 producto = Producto.objects.select_for_update().filter(
-                    empresa=empresa, deleted_at__isnull=True,
-                    id=item.producto.id
+                    id=item.producto.id, deleted_at__isnull=True
                 ).first()
                 if not producto:
-                    lineas_stock_fallido.append({
+                    fallidos.append({
                         'producto': str(item.producto.id),
                         'producto_nombre': 'No encontrado',
                         'solicitado': item.cantidad,
@@ -476,114 +468,110 @@ class CheckoutView(APIView):
                     })
                     continue
                 if producto.stock < item.cantidad:
-                    lineas_stock_fallido.append({
+                    fallidos.append({
                         'producto': str(producto.id),
                         'producto_nombre': producto.nombre,
                         'solicitado': item.cantidad,
                         'disponible': producto.stock,
                     })
                     continue
-                lineas_stock_ok.append({
-                    'producto': producto,
-                    'cantidad': item.cantidad,
-                    'precio_unitario': producto.precio,
-                })
+                item.producto = producto
 
-            if lineas_stock_fallido:
+            if fallidos:
                 return Response(
                     {"codigo": "STOCK_INSUFICIENTE",
                      "detalle": "Algunos productos no tienen stock suficiente.",
-                     "productos": lineas_stock_fallido},
+                     "productos": fallidos},
                     status=status.HTTP_400_BAD_REQUEST)
 
-            subtotal = sum(
-                Decimal(str(l['precio_unitario'])) * l['cantidad']
-                for l in lineas_stock_ok
-            )
+            # Agrupar por empresa vendedora
+            por_vendedor = {}
+            for item in items:
+                por_vendedor.setdefault(item.producto.empresa_id, []).append(item)
 
-            descuento = Decimal('0')
-            cupon = carrito.cupon
-            if cupon and cupon.esta_vigente:
-                descuento = subtotal * cupon.porcentaje / Decimal('100')
+            cupon = carrito.cupon if (carrito.cupon and carrito.cupon.esta_vigente) else None
 
-            total = max(subtotal - descuento, Decimal('0'))
-
-            metodo_pago = request.data.get('metodo_pago', 'tarjeta')
-
-            mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
-            if mock_habilitado:
-                pasarelarespuesta = {
-                    'aprobada': True,
-                    'transaccion_id': f"MOCK-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-                    'mensaje': 'Pago aprobado (mock)',
-                }
-            else:
-                pasarelarespuesta = {
-                    'aprobada': False,
-                    'transaccion_id': None,
-                    'mensaje': 'Pasarela no configurada',
-                }
-
-            if not pasarelarespuesta['aprobada']:
-                return Response(
-                    {"codigo": "PAGO_RECHAZADO",
-                     "detalle": pasarelarespuesta['mensaje']},
-                    status=status.HTTP_402_PAYMENT_REQUIRED)
-
-            venta = Venta.objects.create(
-                empresa=empresa,
-                cliente=cliente,
-                vendedor=request.user,
-                subtotal=subtotal,
-                descuento=descuento,
-                total=total,
-                estado='completada',
-                metodo_pago=metodo_pago,
-                notas=f"Checkout tienda - Transaccion: {pasarelarespuesta['transaccion_id']}"
-                      + (f" - Cupon: {cupon.codigo}" if cupon else ''),
-            )
-
-            for linea in lineas_stock_ok:
-                producto = linea['producto']
-                DetalleVenta.objects.create(
-                    venta=venta,
-                    producto=producto,
-                    cantidad=linea['cantidad'],
-                    precio_unitario=linea['precio_unitario'],
+            ventas = []
+            for empresa_id, lineas in por_vendedor.items():
+                empresa = Empresa.objects.get(pk=empresa_id)
+                subtotal = sum(
+                    Decimal(str(item.producto.precio)) * item.cantidad
+                    for item in lineas
                 )
-                actualizado = Producto.objects.filter(
-                    pk=producto.pk, empresa=empresa,
-                    deleted_at__isnull=True, stock__gte=linea['cantidad'],
-                ).update(stock=models.F('stock') - linea['cantidad'])
-                if not actualizado:
-                    transaction.set_rollback(True)
-                    return Response(
-                        {"codigo": "STOCK_INSUFICIENTE",
-                         "detalle": "El stock del producto cambio durante el checkout.",
-                         "productos": [{
-                             'producto': str(producto.id),
-                             'producto_nombre': producto.nombre,
-                             'solicitado': linea['cantidad'],
-                             'disponible': producto.stock,
-                         }]},
-                        status=status.HTTP_400_BAD_REQUEST)
-                producto.stock = max(producto.stock - linea['cantidad'], 0)
-                _registrar_movimiento(
-                    producto, request.user, 'salida', linea['cantidad'],
-                    f"Checkout tienda {venta.numero_factura}")
+                descuento = Decimal('0')
+                if cupon and cupon.empresa_id == empresa_id:
+                    descuento = subtotal * cupon.porcentaje / Decimal('100')
+                total = max(subtotal - descuento, Decimal('0'))
+
+                venta = Venta.objects.create(
+                    empresa=empresa,
+                    cliente=cliente,
+                    vendedor=request.user,
+                    subtotal=subtotal,
+                    descuento=descuento,
+                    total=total,
+                    estado='completada',
+                    metodo_pago=metodo_pago,
+                    notas=(f"Checkout tienda - Transaccion: "
+                           f"{pasarelarespuesta['transaccion_id']}"
+                           + (f" - Cupon: {cupon.codigo}" if cupon and cupon.empresa_id == empresa_id else '')),
+                )
+
+                for item in lineas:
+                    DetalleVenta.objects.create(
+                        venta=venta,
+                        producto=item.producto,
+                        cantidad=item.cantidad,
+                        precio_unitario=item.producto.precio,
+                    )
+                    item.producto.stock -= item.cantidad
+                    item.producto.save(update_fields=['stock'])
+                    _registrar_movimiento(
+                        item.producto, request.user, 'salida', item.cantidad,
+                        f"Checkout tienda {venta.numero_factura}")
+
+                ventas.append(venta)
+
+            carrito.items.all().delete()
+            carrito.cupon = None
+            carrito.save(update_fields=['cupon'])
 
             ActividadUsuario.registrar(
-                request.user, "CHECKOUT_COMPLETADO",
-                f"Factura {venta.numero_factura} - Total ${total} "
-                + (f"- Cupon {cupon.codigo}" if cupon else ''))
-
-            items.delete()
+                request.user, "CHECKOUT_MARKETPLACE",
+                f"{len(ventas)} venta(s) - Total ${sum(v.total for v in ventas)}")
 
         return Response({
             "codigo": "EXITO",
             "detalle": "Compra realizada exitosamente.",
-            "venta_id": str(venta.id),
-            "numero_factura": venta.numero_factura,
-            "total": str(venta.total),
+            "ventas": [{
+                "venta_id": str(v.id),
+                "numero_factura": v.numero_factura,
+                "empresa_id": str(v.empresa_id),
+                "empresa_nombre": v.empresa.nombre,
+                "total": str(v.total),
+            } for v in ventas],
+            "total": str(sum(v.total for v in ventas)),
             "transaccion_id": pasarelarespuesta['transaccion_id'],
         }, status=status.HTTP_201_CREATED)
+
+
+# ------------------------------ Pedidos del comprador ---------------------
+
+class MisPedidosView(APIView):
+    """GET historial de compras del comprador autenticado (todas las
+    empresas vendedoras que le hayan facturado)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        cliente = Cliente.objects.filter(
+            usuario=request.user, deleted_at__isnull=True
+        ).first()
+        if not cliente:
+            return Response({"resultados": [], "total": 0})
+
+        pedidos = (Venta.objects.filter(cliente=cliente)
+                   .select_related('empresa')
+                   .prefetch_related('detalles__producto')
+                   .order_by('-created_at'))
+        datos = PedidoCompradorSerializer(pedidos, many=True).data
+        return Response({"resultados": datos, "total": len(datos)})

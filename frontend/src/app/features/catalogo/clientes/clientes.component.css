@@ -27,7 +27,7 @@ p.gris { margin: var(--e1) 0 0; }
   margin-top: var(--e2);
 }
 
-.buscador { margin-bottom: var(--e4); }
+.buscador { display: flex; gap: var(--e3); margin-bottom: var(--e4); flex-wrap: wrap; }
 .buscador input {
   width: 100%;
   max-width: 420px;
@@ -40,6 +40,28 @@ p.gris { margin: var(--e1) 0 0; }
   outline: none;
   border-color: var(--primario);
   box-shadow: 0 0 0 3px var(--primario-suave);
+}
+.buscador select {
+  padding: 10px 14px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--tarjeta);
+  font: inherit;
+}
+
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+}
+.badge.activo { background: #ecfdf3; color: #067647; }
+.badge.inactivo { background: var(--papel); color: var(--gris); }
+
+.vacio-onboarding { padding: var(--e6) 0; }
+.vacio-onboarding p { margin-bottom: var(--e3); }
+
+.paginador {
+  display: flex; align-items: center; justify-content: center; gap: var(--e4);
+  padding: var(--e4);
 }
 
 .sin-relleno { padding: 0; overflow-x: auto; }

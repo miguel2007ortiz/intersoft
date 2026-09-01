@@ -30,6 +30,10 @@ export class ClientesComponent {
   readonly editando = signal<Cliente | null>(null);
   readonly formularioAbierto = signal(false);
   readonly busqueda = signal('');
+  readonly estado = signal<'activos' | 'inactivos' | 'todos'>('activos');
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
+  readonly total = signal(0);
 
   /** Solo el ADMINISTRADOR ve la lista de cuentas para vincular
    * (la API de seguridad es exclusiva de ese rol). */
@@ -57,9 +61,13 @@ export class ClientesComponent {
 
   cargar(): void {
     this.cargando.set(true);
-    this.catalogo.listarClientes(this.busqueda()).subscribe({
-      next: ({ resultados }) => {
-        this.clientes.set(resultados);
+    this.catalogo.listarClientes({
+      busqueda: this.busqueda(), estado: this.estado(), pagina: this.pagina(),
+    }).subscribe({
+      next: (r) => {
+        this.clientes.set(r.resultados);
+        this.total.set(r.total);
+        this.totalPaginas.set(r.total_paginas ?? 1);
         this.cargando.set(false);
       },
       error: (e) => {
@@ -71,6 +79,25 @@ export class ClientesComponent {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  limpiarBusqueda(): void {
+    this.busqueda.set('');
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  filtrarPorEstado(evento: Event): void {
+    this.estado.set((evento.target as HTMLSelectElement).value as 'activos' | 'inactivos' | 'todos');
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  irPagina(nueva: number): void {
+    if (nueva < 1 || nueva > this.totalPaginas()) return;
+    this.pagina.set(nueva);
     this.cargar();
   }
 
@@ -132,17 +159,29 @@ export class ClientesComponent {
     });
   }
 
-  eliminar(cliente: Cliente): void {
-    if (!confirm(`¿Eliminar el cliente "${cliente.nombre}"? Su historial se conserva.`)) {
+  desactivar(cliente: Cliente): void {
+    if (!confirm(`¿Desactivar a "${cliente.nombre}"? Dejara de aparecer en nuevas ventas, `
+      + 'pero su historial se conserva y puedes reactivarlo cuando quieras.')) {
       return;
     }
-    this.catalogo.eliminarCliente(cliente.id).subscribe({
+    this.catalogo.cambiarEstadoCliente(cliente.id, 'desactivar').subscribe({
       next: () => {
-        this.exito.set('Cliente eliminado.');
+        this.exito.set('Cliente desactivado.');
         this.cargar();
         setTimeout(() => this.exito.set(null), 4000);
       },
-      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo eliminar.'),
+      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo desactivar.'),
+    });
+  }
+
+  reactivar(cliente: Cliente): void {
+    this.catalogo.cambiarEstadoCliente(cliente.id, 'reactivar').subscribe({
+      next: () => {
+        this.exito.set('Cliente reactivado.');
+        this.cargar();
+        setTimeout(() => this.exito.set(null), 4000);
+      },
+      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo reactivar.'),
     });
   }
 

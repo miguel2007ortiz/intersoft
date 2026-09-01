@@ -30,7 +30,7 @@ describe('SidebarComponent', () => {
       imports: [SidebarComponent],
       providers: [
         provideRouter([]),
-        { provide: AuthService, useValue: { usuario: () => null, esAdministrador: () => false } },
+        { provide: AuthService, useValue: { usuario: () => null, esAdministrador: () => false, tienePermiso: () => false } },
       ],
     });
   });

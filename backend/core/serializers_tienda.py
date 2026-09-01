@@ -4,7 +4,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import Carrito, CarritoItem, Cupon, Producto, Categoria
+from .models import Carrito, CarritoItem, Cupon, Producto, Categoria, Venta
+from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
 # ------------------------------ Catálogo ---------------------------------
@@ -110,3 +111,19 @@ class CarritoItemInputSerializer(serializers.Serializer):
 
 class CarritoCuponSerializer(serializers.Serializer):
     cupon_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+# ------------------------------ Pedidos del comprador ---------------------
+
+class PedidoCompradorSerializer(serializers.ModelSerializer):
+    """Una venta vista desde el comprador del marketplace: agrega el nombre
+    de la empresa vendedora (el comprador no ve el resto de datos internos
+    de la venta, solo lo que le corresponde como pedido)."""
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
+    detalles = DetalleVentaLecturaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = ["id", "numero_factura", "fecha", "empresa_nombre",
+                  "subtotal", "descuento", "total", "estado",
+                  "metodo_pago", "detalles", "created_at"]

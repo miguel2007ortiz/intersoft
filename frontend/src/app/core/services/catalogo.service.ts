@@ -3,12 +3,19 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
-  Categoria, Cliente, DatosCliente, DatosProducto, ErrorCatalogo, Producto,
-  Venta, VentaPOSInput, StockInsuficiente, MovimientoInventario,
+  Categoria, Cliente, ClienteDetalle, DatosCliente, DatosProducto, ErrorCatalogo,
+  Producto, Venta, VentaPOSInput, StockInsuficiente, MovimientoInventario,
   Notificacion, InventarioProducto, FacturaElectronica, NotaCredito,
 } from '../models/catalogo.model';
 
-interface Lista<T> { resultados: T[]; total: number; estadisticas?: Record<string, unknown>; }
+interface Lista<T> {
+  resultados: T[];
+  total: number;
+  estadisticas?: Record<string, unknown>;
+  pagina?: number;
+  por_pagina?: number;
+  total_paginas?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class CatalogoService {
@@ -16,10 +23,19 @@ export class CatalogoService {
   private readonly api = `${environment.apiUrl}`;
 
   // ---- Clientes ----
-  listarClientes(busqueda = ''): Observable<Lista<Cliente>> {
-    return this.http
-      .get<Lista<Cliente>>(`${this.api}/clientes/`, { params: busqueda ? { busqueda } : {} })
+  listarClientes(filtros: { busqueda?: string; estado?: string; pagina?: number } = {}):
+    Observable<Lista<Cliente>> {
+    const params: Record<string, string> = {};
+    if (filtros.busqueda) params['busqueda'] = filtros.busqueda;
+    if (filtros.estado) params['estado'] = filtros.estado;
+    if (filtros.pagina) params['pagina'] = String(filtros.pagina);
+    return this.http.get<Lista<Cliente>>(`${this.api}/clientes/`, { params })
       .pipe(capturarError<Lista<Cliente>>());
+  }
+
+  obtenerCliente(id: string): Observable<ClienteDetalle> {
+    return this.http.get<ClienteDetalle>(`${this.api}/clientes/${id}/`)
+      .pipe(capturarError<ClienteDetalle>());
   }
 
   crearCliente(datos: DatosCliente): Observable<Cliente> {
@@ -32,9 +48,9 @@ export class CatalogoService {
       .pipe(capturarError<Cliente>());
   }
 
-  eliminarCliente(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.api}/clientes/${id}/`)
-      .pipe(capturarError<void>());
+  cambiarEstadoCliente(id: string, accion: 'desactivar' | 'reactivar'): Observable<ClienteDetalle> {
+    return this.http.post<ClienteDetalle>(`${this.api}/clientes/${id}/${accion}/`, {})
+      .pipe(capturarError<ClienteDetalle>());
   }
 
   // ---- Productos ----

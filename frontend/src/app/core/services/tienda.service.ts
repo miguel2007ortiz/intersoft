@@ -4,10 +4,17 @@ import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Carrito, CarritoItem, CategoriaTienda, CheckoutResponse,
-  Cupon, ErrorTienda, ProductoTienda,
+  Cupon, ErrorTienda, Pedido, ProductoTienda,
 } from '../models/tienda.model';
 
-interface Lista<T> { resultados: T[]; total: number; categorias?: CategoriaTienda[]; }
+interface Lista<T> {
+  resultados: T[];
+  total: number;
+  categorias?: CategoriaTienda[];
+  pagina?: number;
+  por_pagina?: number;
+  total_paginas?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TiendaService {
@@ -15,7 +22,7 @@ export class TiendaService {
   private readonly api = `${environment.apiUrl}/tienda`;
 
   // ---- Catálogo público ----
-  listarCatalogo(filtros: { busqueda?: string; categoria?: string; precio_min?: string; precio_max?: string; con_stock?: string; orden?: string } = {}):
+  listarCatalogo(filtros: { busqueda?: string; categoria?: string; precio_min?: string; precio_max?: string; con_stock?: string; orden?: string; pagina?: string } = {}):
     Observable<Lista<ProductoTienda>> {
     const params: Record<string, string> = {};
     Object.entries(filtros).forEach(([k, v]) => { if (v) params[k] = v; });
@@ -64,6 +71,12 @@ export class TiendaService {
   checkout(metodoPago: string): Observable<CheckoutResponse> {
     return this.http.post<CheckoutResponse>(`${this.api}/checkout/`, { metodo_pago: metodoPago })
       .pipe(capturarError<CheckoutResponse>());
+  }
+
+  // ---- Pedidos del comprador ----
+  misPedidos(): Observable<{ resultados: Pedido[]; total: number }> {
+    return this.http.get<{ resultados: Pedido[]; total: number }>(`${this.api}/pedidos/`)
+      .pipe(capturarError<{ resultados: Pedido[]; total: number }>());
   }
 }
 

@@ -9,15 +9,29 @@ export interface Cliente {
   telefono: string;
   direccion: string;
   ciudad: string;
+  activo: boolean;
   usuario_id: string | null;
   usuario_email: string | null;
   total_compras: string;
   created_at: string;
 }
 
+export interface VentaResumen {
+  id: string;
+  numero_factura: string;
+  fecha: string;
+  total: string;
+  estado: 'pendiente' | 'completada' | 'anulada';
+}
+
+/** Detalle de cliente: lo mismo del listado mas sus ultimas 5 ventas. */
+export interface ClienteDetalle extends Cliente {
+  ultimas_ventas: VentaResumen[];
+}
+
 /** Datos que se envian al crear/editar: los esenciales obligatorios,
  * el resto opcional (el backend los acepta vacios). */
-export type DatosCliente = Partial<Omit<Cliente, 'id' | 'usuario_email'
+export type DatosCliente = Partial<Omit<Cliente, 'id' | 'usuario_email' | 'activo'
   | 'total_compras' | 'created_at'>> & Pick<Cliente, 'nombre' | 'tipo_documento'
   | 'numero_documento'>;
 
