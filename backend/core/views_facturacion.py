@@ -17,7 +17,7 @@ Flujo:
 import os
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -446,8 +446,11 @@ class NotasCreditoView(APIView):
                 detalles = venta.detalles.select_related('producto').all()
                 for detalle in detalles:
                     producto = detalle.producto
+                    # Incremento atomico para evitar perdida de actualizaciones
+                    Producto.objects.filter(
+                        pk=producto.pk, empresa=empresa,
+                    ).update(stock=models.F('stock') + detalle.cantidad)
                     producto.stock += detalle.cantidad
-                    producto.save(update_fields=['stock'])
                     _registrar_movimiento(
                         producto, request.user, 'entrada', detalle.cantidad,
                         f"Nota credito {numero_nc}")

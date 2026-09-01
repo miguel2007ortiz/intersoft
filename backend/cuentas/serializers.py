@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 from core.models import Empresa
-from .models import Perfil, Rol
+from .models import Perfil, Rol, crear_roles_base
 
 Usuario = get_user_model()
 
@@ -63,6 +63,7 @@ class RegistroSerializer(serializers.Serializer):
         datos_admin = validated_data["administrador"]
 
         empresa = Empresa.objects.create(nombre=datos_empresa["nombre"], nit=datos_empresa["nit"])
+        crear_roles_base(empresa)
 
         partes = datos_admin["nombre"].split(" ", 1)
         usuario = Usuario.objects.create_user(
@@ -71,7 +72,7 @@ class RegistroSerializer(serializers.Serializer):
             last_name=partes[1] if len(partes) > 1 else "",
         )
         Perfil.objects.create(usuario=usuario, empresa=empresa,
-                              rol=Rol.de_nombre("ADMINISTRADOR"), es_propietario=True)
+                              rol=Rol.de_nombre(empresa, "ADMINISTRADOR"), es_propietario=True)
         return usuario
 
 

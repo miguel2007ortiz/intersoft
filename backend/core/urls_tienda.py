@@ -6,7 +6,12 @@ from django.urls import path
 from . import views_tienda
 
 urlpatterns = [
-    # Catálogo público (sin auth)
+    # Catálogo público (sin auth) - scope por slug de empresa
+    path("tienda/<slug:slug>/catalogo/", views_tienda.CatalogoPublicoView.as_view()),
+    path("tienda/<slug:slug>/catalogo/<uuid:id>/",
+         views_tienda.CatalogoProductoDetailView.as_view()),
+
+    # Catálogo público (sin auth) - compatibilidad (scoped a la empresa del usuario)
     path("tienda/catalogo/", views_tienda.CatalogoPublicoView.as_view()),
     path("tienda/catalogo/<uuid:id>/", views_tienda.CatalogoProductoDetailView.as_view()),
 

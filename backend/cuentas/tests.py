@@ -9,13 +9,14 @@ from django.urls import reverse
 
 from core.models import Empresa
 
-from .models import ActividadUsuario, Perfil, Rol, RolPermiso
+from .models import ActividadUsuario, Perfil, Rol, RolPermiso, crear_roles_base
 
 
 class BaseCuentasTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.empresa = Empresa.objects.create(nombre="Tienda Test", nit="900999999")
+        crear_roles_base(cls.empresa)
 
     @classmethod
     def crear_cuenta(cls, email="maria@test.co", password="Clave12345",
@@ -23,7 +24,7 @@ class BaseCuentasTest(TestCase):
         user = User.objects.create_user(username=email, email=email,
                                         password=password, first_name="Maria")
         perfil = Perfil.objects.create(usuario=user, empresa=cls.empresa,
-                                       rol=Rol.de_nombre(rol))
+                                       rol=Rol.de_nombre(cls.empresa, rol))
         if not activo:
             user.is_active = False
             user.save()
@@ -76,6 +77,20 @@ class LoginTest(BaseCuentasTest):
         self.assertIn("refresh", datos)
         self.assertEqual(datos["usuario"]["rol"], "EMPLEADO")
         self.assertEqual(datos["usuario"]["email"], "maria@test.co")
+
+    def test_refresh_devuelve_nuevo_access(self):
+        login = self.login("maria@test.co", "Clave12345").json()
+        respuesta = self.client.post(reverse("auth-refresh"),
+                                     {"refresh": login["refresh"]},
+                                     content_type="application/json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("access", respuesta.json())
+
+    def test_refresh_invalido_rechazado(self):
+        respuesta = self.client.post(reverse("auth-refresh"),
+                                     {"refresh": "no-es-un-token"},
+                                     content_type="application/json")
+        self.assertEqual(respuesta.status_code, 401)
 
     def test_login_normaliza_email(self):
         respuesta = self.login("MARIA@TEST.CO", "Clave12345")
@@ -244,11 +259,11 @@ class BaseSeguridadTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.empresa = Empresa.objects.create(nombre="Tienda Admin", nit="900888888")
-        call_command("seed_roles")
+        crear_roles_base(cls.empresa)
         cls.admin = User.objects.create_user(username="admin@test.co", email="admin@test.co",
                                              password="Clave12345", first_name="Admin")
         Perfil.objects.create(usuario=cls.admin, empresa=cls.empresa,
-                              rol=Rol.de_nombre("ADMINISTRADOR"), es_propietario=True)
+                              rol=Rol.de_nombre(cls.empresa, "ADMINISTRADOR"), es_propietario=True)
         cls.api = APIClient()
         cls.api.force_authenticate(cls.admin)
 
@@ -257,7 +272,7 @@ class BaseSeguridadTest(TestCase):
         user = User.objects.create_user(username=email, email=email,
                                         password="Clave12345", first_name="Empleado")
         perfil = Perfil.objects.create(usuario=user, empresa=cls.empresa,
-                                       rol=Rol.de_nombre(rol))
+                                       rol=Rol.de_nombre(cls.empresa, rol))
         if not activo:
             user.is_active = False
             user.save()
@@ -401,7 +416,7 @@ class CrudRolesTest(BaseSeguridadTest):
         user = User.objects.create_user(username="conrol@test.co", email="conrol@test.co",
                                         password="Clave12345", first_name="Con Rol")
         Perfil.objects.create(usuario=user, empresa=self.empresa,
-                              rol=Rol.de_nombre("AUXILIAR_VENTAS"))
+                              rol=Rol.de_nombre(self.empresa, "AUXILIAR_VENTAS"))
         rol = Rol.objects.get(nombre="AUXILIAR_VENTAS")
         respuesta = self.api.delete(f"/api/seguridad/roles/{rol.id}/")
         self.assertEqual(respuesta.status_code, 400)
@@ -438,3 +453,49 @@ class CrudRolesTest(BaseSeguridadTest):
         esperadas = {"USUARIO_CREADO", "ROL_CREADO", "ROL_ELIMINADO", "ROL_CLONADO"}
         faltantes = esperadas - acciones
         self.assertEqual(faltantes, set(), f"Faltan auditorias: {faltantes}")
+
+
+class AislamientoRolesTest(TestCase):
+    """Fase 1: los roles son por empresa; dos tenants no comparten roles."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.e1 = Empresa.objects.create(nombre="Empresa Uno", nit="900111111")
+        cls.e2 = Empresa.objects.create(nombre="Empresa Dos", nit="900222222")
+        crear_roles_base(cls.e1)
+        crear_roles_base(cls.e2)
+        Rol.objects.create(empresa=cls.e1, nombre="SOLO_UNO")
+
+    def test_cada_empresa_tiene_sus_roles_base(self):
+        nombres_uno = set(Rol.objects.filter(empresa=self.e1).values_list("nombre", flat=True))
+        nombres_dos = set(Rol.objects.filter(empresa=self.e2).values_list("nombre", flat=True))
+        self.assertEqual(nombres_uno, {"ADMINISTRADOR", "EMPLEADO", "CLIENTE", "SOLO_UNO"})
+        self.assertEqual(nombres_dos, {"ADMINISTRADOR", "EMPLEADO", "CLIENTE"})
+
+    def test_crear_rol_solo_afecta_a_su_empresa(self):
+        Rol.objects.create(empresa=self.e2, nombre="SOLO_DOS")
+        self.assertFalse(Rol.objects.filter(empresa=self.e1, nombre="SOLO_DOS").exists())
+        self.assertFalse(Rol.objects.filter(empresa=self.e2, nombre="SOLO_UNO").exists())
+
+    def test_admin_empresa_a_no_ve_roles_de_empresa_b(self):
+        admin1 = User.objects.create_user(username="dueno1@test.co",
+                                          email="dueno1@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=admin1, empresa=self.e1,
+                              rol=Rol.de_nombre(self.e1, "ADMINISTRADOR"), es_propietario=True)
+        admin2 = User.objects.create_user(username="dueno2@test.co",
+                                          email="dueno2@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=admin2, empresa=self.e2,
+                              rol=Rol.de_nombre(self.e2, "ADMINISTRADOR"), es_propietario=True)
+
+        api1 = APIClient()
+        api1.force_authenticate(admin1)
+        r1 = api1.get("/api/seguridad/roles/").json()["resultados"]
+        self.assertEqual(len(r1), 4)
+        self.assertIn("SOLO_UNO", [r["nombre"] for r in r1])
+        self.assertNotIn("SOLO_DOS", [r["nombre"] for r in r1])
+
+        api2 = APIClient()
+        api2.force_authenticate(admin2)
+        r2 = api2.get("/api/seguridad/roles/").json()["resultados"]
+        self.assertEqual(len(r2), 3)
+        self.assertNotIn("SOLO_UNO", [r["nombre"] for r in r2])

@@ -1,29 +1,26 @@
 from django.contrib.auth.models import User
-from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from core.models import Empresa, Categoria, Producto, Cliente, Venta
-from cuentas.models import Perfil
+from cuentas.models import Perfil, Rol, crear_roles_base
 
 
 class Command(BaseCommand):
     help = 'Carga datos de demostracion en la base de datos.'
 
     def handle(self, *args, **options):
-        call_command('seed_roles')
-
         empresa, _ = Empresa.objects.get_or_create(
             nit='900123456',
             defaults={'nombre': 'Tienda El Progreso', 'email': 'contacto@elprogreso.co',
                       'telefono': '3001234567', 'plan': 'pro'})
+        crear_roles_base(empresa)
 
         if not User.objects.filter(email='ana@elprogreso.co').exists():
             user = User.objects.create_user(
                 username='ana@elprogreso.co', password='demo12345',
                 first_name='Ana Torres', email='ana@elprogreso.co')
-            from cuentas.models import Rol
             Perfil.objects.create(usuario=user, empresa=empresa,
-                                  rol=Rol.de_nombre('ADMINISTRADOR'), es_propietario=True)
+                                  rol=Rol.de_nombre(empresa, 'ADMINISTRADOR'), es_propietario=True)
 
         cuentas_data = [('Ana Torres', 'ana@elprogreso.co'),
                         ('Luis Perez', 'luis@elprogreso.co')]
@@ -34,10 +31,9 @@ class Command(BaseCommand):
                 defaults={'first_name': nombre.split(' ', 1)[0],
                           'last_name': nombre.split(' ', 1)[1] if ' ' in nombre else '',
                           'email': email})
-            from cuentas.models import Rol
             perfil, _ = Perfil.objects.get_or_create(
                 usuario=user,
-                defaults={'empresa': empresa, 'rol': Rol.de_nombre('EMPLEADO')})
+                defaults={'empresa': empresa, 'rol': Rol.de_nombre(empresa, 'EMPLEADO')})
             usuarios.append(user)
 
         cat_calzado, _ = Categoria.objects.get_or_create(empresa=empresa, nombre='Calzado')

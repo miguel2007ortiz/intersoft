@@ -43,7 +43,8 @@ class UsuariosSeguridadView(APIView):
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):
-        entrada = UsuarioCreacionSerializer(data=request.data)
+        entrada = UsuarioCreacionSerializer(data=request.data,
+                                            context={"empresa": request.user.perfil.empresa})
         if not entrada.is_valid():
             return respuesta_datos_invalidas(entrada.errors)
 
@@ -54,9 +55,10 @@ class UsuariosSeguridadView(APIView):
                 username=datos["email"], email=datos["email"],
                 password=datos["password"], first_name=partes[0],
                 last_name=partes[1] if len(partes) > 1 else "")
-            perfil = Perfil.objects.create(usuario=usuario,
-                                           empresa=request.user.perfil.empresa,
-                                           rol=Rol.objects.get(nombre=datos["rol"]))
+            perfil = Perfil.objects.create(
+                usuario=usuario, empresa=request.user.perfil.empresa,
+                rol=Rol.objects.get(empresa=request.user.perfil.empresa,
+                                    nombre=datos["rol"]))
         ActividadUsuario.registrar(request.user, "USUARIO_CREADO",
                                    f"{usuario.email} ({perfil.rol.nombre})")
         return Response(UsuarioLecturaSerializer(perfil).data,
@@ -88,7 +90,8 @@ class UsuarioSeguridadDetalleView(APIView):
         if perfil is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        entrada = UsuarioEdicionSerializer(perfil, data=request.data, partial=parcial)
+        entrada = UsuarioEdicionSerializer(perfil, data=request.data, partial=parcial,
+                                           context={"empresa": request.user.perfil.empresa})
         if not entrada.is_valid():
             return respuesta_datos_invalidas(entrada.errors)
 
@@ -106,7 +109,8 @@ class UsuarioSeguridadDetalleView(APIView):
                 usuario.set_password(datos["password"])
             usuario.save()
             if "rol" in datos:
-                perfil.rol = Rol.objects.get(nombre=datos["rol"])
+                perfil.rol = Rol.objects.get(empresa=request.user.perfil.empresa,
+                                             nombre=datos["rol"])
                 perfil.save(update_fields=["rol"])
 
         ActividadUsuario.registrar(request.user, "USUARIO_EDITADO",
@@ -173,18 +177,21 @@ class RolesSeguridadView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        roles = Rol.objects.prefetch_related("rol_permisos__permiso").order_by("nombre")
+        roles = (Rol.objects.filter(empresa=request.user.perfil.empresa)
+                 .prefetch_related("rol_permisos__permiso").order_by("nombre"))
         datos = RolLecturaSerializer(roles, many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):
-        entrada = RolEscrituraSerializer(data=request.data)
+        entrada = RolEscrituraSerializer(data=request.data,
+                                         context={"empresa": request.user.perfil.empresa})
         if not entrada.is_valid():
             return respuesta_datos_invalidas(entrada.errors)
 
         datos = entrada.validated_data
         with transaction.atomic():
-            rol = Rol.objects.create(nombre=datos["nombre"],
+            rol = Rol.objects.create(empresa=request.user.perfil.empresa,
+                                     nombre=datos["nombre"],
                                      descripcion=datos.get("descripcion", ""))
             asignar_permisos(rol, datos.get("permisos", []))
 
@@ -198,11 +205,15 @@ class RolDetalleView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     @staticmethod
-    def obtener_rol(id):
-        return Rol.objects.filter(id=id).prefetch_related("rol_permisos__permiso").first()
+    def obtener_rol(empresa, id):
+        return (Rol.objects.filter(empresa=empresa, id=id)
+                .prefetch_related("rol_permisos__permiso").first())
+
+    def _rol(self, request, id):
+        return self.obtener_rol(request.user.perfil.empresa, id)
 
     def get(self, request, id):
-        rol = self.obtener_rol(id)
+        rol = self._rol(request, id)
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(RolLecturaSerializer(rol).data)
@@ -214,11 +225,12 @@ class RolDetalleView(APIView):
         return self.editar(request, id, parcial=True)
 
     def editar(self, request, id, parcial: bool):
-        rol = self.obtener_rol(id)
+        rol = self._rol(request, id)
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        entrada = RolEscrituraSerializer(rol, data=request.data, partial=parcial)
+        entrada = RolEscrituraSerializer(rol, data=request.data, partial=parcial,
+                                         context={"empresa": request.user.perfil.empresa})
         if not entrada.is_valid():
             return respuesta_datos_invalidas(entrada.errors)
 
@@ -244,7 +256,7 @@ class RolDetalleView(APIView):
         return Response(RolLecturaSerializer(rol).data)
 
     def delete(self, request, id):
-        rol = self.obtener_rol(id)
+        rol = self._rol(request, id)
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -275,19 +287,20 @@ class RolClonarView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def post(self, request, id):
-        origen = RolDetalleView.obtener_rol(id)
+        empresa = request.user.perfil.empresa
+        origen = RolDetalleView.obtener_rol(empresa, id)
         if origen is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         base = f"{origen.nombre} (COPIA)"
         nombre = base
         contador = 2
-        while Rol.objects.filter(nombre__iexact=nombre).exists():
+        while Rol.objects.filter(empresa=empresa, nombre__iexact=nombre).exists():
             nombre = f"{base} {contador}"
             contador += 1
 
         with transaction.atomic():
-            clon = Rol.objects.create(nombre=nombre,
+            clon = Rol.objects.create(empresa=empresa, nombre=nombre,
                                       descripcion=f"Copia de {origen.nombre}. "
                                                   "Renombrala y ajusta sus permisos.")
             codigos = list(origen.rol_permisos.values_list("permiso__codigo", flat=True))

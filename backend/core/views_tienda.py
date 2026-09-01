@@ -22,7 +22,7 @@ from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, Cupon,
-                     DetalleVenta, MovimientoInventario, Notificacion,
+                     DetalleVenta, Empresa, MovimientoInventario, Notificacion,
                      Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
@@ -32,6 +32,20 @@ from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
 
 def _obtener_empresa(request):
     return request.user.perfil.empresa
+
+
+def _empresa_para_catalogo(request, slug=None):
+    """Resuelve la empresa del catalogo publico.
+
+    - Si se recibe un slug: se usa esa empresa (para la tienda publica por slug).
+    - Si no, y hay sesion: se usa la empresa del usuario autenticado.
+    - Si no hay ni slug ni sesion: None (no se filtra por tenant).
+    """
+    if slug:
+        return Empresa.objects.filter(slug=slug).first()
+    if getattr(request.user, "is_authenticated", False):
+        return request.user.perfil.empresa
+    return None
 
 
 def _registrar_alerta_stock(producto, empresa):
@@ -62,9 +76,18 @@ class CatalogoPublicoView(APIView):
     """GET lista productos activos (sin auth). Filtros: categoria, busqueda, precio."""
     permission_classes = [AllowAny]
 
-    def get(self, request):
+    def get(self, request, slug=None):
+        empresa = _empresa_para_catalogo(request, slug)
+        if slug and empresa is None:
+            return Response(
+                {"codigo": "TIENDA_NO_ENCONTRADA",
+                 "detalle": "La tienda no existe."},
+                status=status.HTTP_404_NOT_FOUND)
+        if empresa is None:
+            return Response({"resultados": [], "total": 0, "categorias": []})
+
         productos = Producto.objects.filter(
-            activo=True, deleted_at__isnull=True
+            empresa=empresa, activo=True, deleted_at__isnull=True
         ).select_related('categoria')
 
         busqueda = request.query_params.get('busqueda', '').strip()
@@ -100,9 +123,11 @@ class CatalogoPublicoView(APIView):
         else:
             productos = productos.order_by('nombre')
 
-        serializer = ProductoTiendaSerializer(productos[:50], many=True)
+        contexto = {"anonimo": not request.user.is_authenticated}
+        serializer = ProductoTiendaSerializer(productos[:50], many=True,
+                                              context=contexto)
 
-        categorias = Categoria.objects.annotate(
+        categorias = Categoria.objects.filter(empresa=empresa).annotate(
             num_productos=Count('productos', filter=Q(
                 productos__activo=True, productos__deleted_at__isnull=True))
         ).filter(num_productos__gt=0).order_by('nombre')
@@ -118,16 +143,26 @@ class CatalogoProductoDetailView(APIView):
     """GET detalle de un producto público."""
     permission_classes = [AllowAny]
 
-    def get(self, request, id):
-        producto = Producto.objects.filter(
+    def get(self, request, id, slug=None):
+        empresa = _empresa_para_catalogo(request, slug)
+        if slug and empresa is None:
+            return Response(
+                {"codigo": "TIENDA_NO_ENCONTRADA",
+                 "detalle": "La tienda no existe."},
+                status=status.HTTP_404_NOT_FOUND)
+        qs = Producto.objects.filter(
             activo=True, deleted_at__isnull=True, id=id
-        ).select_related('categoria').first()
+        ).select_related('categoria')
+        if empresa is not None:
+            qs = qs.filter(empresa=empresa)
+        producto = qs.first()
         if not producto:
             return Response(
                 {"codigo": "NO_ENCONTRADO",
                  "detalle": "Producto no encontrado."},
                 status=status.HTTP_404_NOT_FOUND)
-        return Response(ProductoTiendaSerializer(producto).data)
+        contexto = {"anonimo": not request.user.is_authenticated}
+        return Response(ProductoTiendaSerializer(producto, context=contexto).data)
 
 
 # ------------------------------ Cupones ----------------------------------
@@ -412,7 +447,11 @@ class CheckoutView(APIView):
 
         items = carrito.items.select_related('producto').all()
 
+        # Transaccion unica: el lock sobre la empresa serializa el consecutivo
+        # de la factura y el descuento de stock para este tenant.
         with transaction.atomic():
+            Empresa.objects.select_for_update().filter(pk=empresa.pk).get()
+
             lineas_stock_ok = []
             lineas_stock_fallido = []
             for item in items:
@@ -449,7 +488,6 @@ class CheckoutView(APIView):
                      "productos": lineas_stock_fallido},
                     status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
             subtotal = sum(
                 Decimal(str(l['precio_unitario'])) * l['cantidad']
                 for l in lineas_stock_ok
@@ -505,8 +543,23 @@ class CheckoutView(APIView):
                     cantidad=linea['cantidad'],
                     precio_unitario=linea['precio_unitario'],
                 )
-                producto.stock -= linea['cantidad']
-                producto.save(update_fields=['stock'])
+                actualizado = Producto.objects.filter(
+                    pk=producto.pk, empresa=empresa,
+                    deleted_at__isnull=True, stock__gte=linea['cantidad'],
+                ).update(stock=models.F('stock') - linea['cantidad'])
+                if not actualizado:
+                    transaction.set_rollback(True)
+                    return Response(
+                        {"codigo": "STOCK_INSUFICIENTE",
+                         "detalle": "El stock del producto cambio durante el checkout.",
+                         "productos": [{
+                             'producto': str(producto.id),
+                             'producto_nombre': producto.nombre,
+                             'solicitado': linea['cantidad'],
+                             'disponible': producto.stock,
+                         }]},
+                        status=status.HTTP_400_BAD_REQUEST)
+                producto.stock = max(producto.stock - linea['cantidad'], 0)
                 _registrar_movimiento(
                     producto, request.user, 'salida', linea['cantidad'],
                     f"Checkout tienda {venta.numero_factura}")

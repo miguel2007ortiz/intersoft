@@ -5,11 +5,14 @@ from django.test import TestCase
 from .models import (Camara, Categoria, Cliente, DetalleVenta, Empresa,
                      MovimientoInventario, Notificacion, Producto, Venta)
 
+from cuentas.models import crear_roles_base  # noqa: E402
+
 
 class BaseCoreTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.empresa = Empresa.objects.create(nombre="Tienda Test", nit="900999998")
+        crear_roles_base(cls.empresa)
         cls.cuenta = User.objects.create_user(username="vendedor@test.co",
                                               email="vendedor@test.co",
                                               password="Clave12345")
@@ -169,18 +172,18 @@ class BaseCatalogoTest(BaseCoreTest):
         cls.admin = User.objects.create_user(username="admin@test.co",
                                              email="admin@test.co", password="Clave12345")
         Perfil.objects.create(usuario=cls.admin, empresa=cls.empresa,
-                              rol=Rol.de_nombre("ADMINISTRADOR"))
+                              rol=Rol.de_nombre(cls.empresa, "ADMINISTRADOR"))
         cls.empleado = User.objects.create_user(username="empleado@test.co",
                                                 email="empleado@test.co",
                                                 password="Clave12345")
         Perfil.objects.create(usuario=cls.empleado, empresa=cls.empresa,
-                              rol=Rol.de_nombre("EMPLEADO"))
+                              rol=Rol.de_nombre(cls.empresa, "EMPLEADO"))
         cls.cliente_rol = User.objects.create_user(username="solo@test.co",
                                                    email="solo@test.co",
                                                    password="Clave12345")
         cls.perfil_cliente_rol = Perfil.objects.create(
             usuario=cls.cliente_rol, empresa=cls.empresa,
-            rol=Rol.de_nombre("CLIENTE"))
+            rol=Rol.de_nombre(cls.empresa, "CLIENTE"))
 
     @classmethod
     def api_como(cls, usuario):
@@ -488,13 +491,14 @@ class DashboardReportesTest(BaseCatalogoTest):
 
     def test_aislamiento_entre_empresas(self):
         otra = Empresa.objects.create(nombre="Otra", nit="900999991")
+        crear_roles_base(otra)
         otro_prod = Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
                                             precio=100, stock=5, stock_minimo=3)
         # Un administrador de la empresa 'otra'
         otro_admin = User.objects.create_user(username="otro@test.co",
                                               email="otro@test.co", password="Clave12345")
         Perfil.objects.create(usuario=otro_admin, empresa=otra,
-                              rol=Rol.de_nombre("ADMINISTRADOR"))
+                              rol=Rol.de_nombre(otra, "ADMINISTRADOR"))
         api = APIClient()
         api.force_authenticate(otro_admin)
         # El resumen de 'otra' no debe incluir productos ni ventas de la 1a
@@ -600,7 +604,7 @@ class IAChatTest(BaseCatalogoTest):
                                         email="empleado2@test.co",
                                         password="Clave12345")
         Perfil.objects.create(usuario=otro, empresa=self.empresa,
-                              rol=Rol.de_nombre("EMPLEADO"))
+                              rol=Rol.de_nombre(self.empresa, "EMPLEADO"))
         conv = self.api_como(otro).post("/api/ia/chat/", {"mensaje": "resumen"},
                                         format="json").json()["conversacion"]["id"]
         res = self.api_como(self.admin).get(f"/api/ia/conversaciones/{conv}/")
@@ -800,4 +804,141 @@ class NotificacionesApiTest(BaseCatalogoTest):
         self.assertEqual(
             len(mail.outbox), 1,
             "El backend de email de consola debe haber recibido el mensaje")
+
+
+class AlertasAislamientoTest(BaseCatalogoTest):
+    """Fase 2: las alertas de stock son por empresa (sin fugas cross-tenant)."""
+
+    def test_alertas_solo_de_mi_empresa(self):
+        otra = Empresa.objects.create(nombre="Otra", nit="900999995")
+        crear_notificacion(empresa=otra, tipo="stock", mensaje="Stock bajo: ajeno")
+        crear_notificacion(empresa=self.empresa, tipo="stock",
+                           mensaje="Stock bajo: Zapatos")
+
+        api = self.api_como(self.empleado)
+        cuerpo = api.get("/api/alertas/").json()
+        mensajes = [n["mensaje"] for n in cuerpo["resultados"]]
+        self.assertIn("Stock bajo: Zapatos", mensajes)
+        self.assertNotIn("Stock bajo: ajeno", mensajes)
+
+    def test_no_puedo_revisar_alerta_ajena(self):
+        otra = Empresa.objects.create(nombre="Otra", nit="900999994")
+        ajena = crear_notificacion(empresa=otra, tipo="stock",
+                                   mensaje="Stock bajo: ajeno")
+
+        api = self.api_como(self.empleado)
+        res = api.post(f"/api/alertas/{ajena.id}/revisar/")
+        self.assertEqual(res.status_code, 404)
+        ajena.refresh_from_db()
+        self.assertFalse(ajena.leida)
+
+    def test_actualizar_stock_no_encuentra_producto_ajeno(self):
+        otra = Empresa.objects.create(nombre="Otra", nit="900999993")
+        otro_prod = Producto.objects.create(empresa=otra, nombre="Otro",
+                                            sku="SKU-AJENO", precio=10,
+                                            stock=1, stock_minimo=5)
+        alerta = crear_notificacion(empresa=otra, tipo="stock",
+                                    mensaje=f"Stock bajo: {otro_prod.nombre} "
+                                            f"({otro_prod.sku}) tiene 1 unidades "
+                                            f"(minimo 5).")
+
+        api = self.api_como(self.empleado)
+        res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
+        self.assertEqual(res.status_code, 404)
+
+
+class TiendaVirtualPublicaTest(BaseCoreTest):
+    """Fase 2: la tienda publica se scopea por slug de empresa y oculta el
+    stock a los visitantes anonimos."""
+
+    def setUp(self):
+        Empresa.objects.filter(pk=self.empresa.pk).update(
+            slug="tienda-test")  # fuerza un slug estable para el test
+
+    def test_catalogo_por_slug_solo_muestra_esa_empresa(self):
+        otra = Empresa.objects.create(nombre="Otra", nit="900999990")
+        Empresa.objects.filter(pk=otra.pk).update(slug="otra-tienda")
+        Producto.objects.create(empresa=otra, nombre="Producto Ajeno",
+                                sku="SKU-AJENO2", precio=50, stock=3,
+                                stock_minimo=1)
+
+        lista = self.client.get("/api/tienda/tienda-test/catalogo/").json()
+        skus = [p["sku"] for p in lista["resultados"]]
+        self.assertIn(self.producto.sku, skus)
+        self.assertNotIn("SKU-AJENO2", skus)
+
+    def test_slug_inexistente_devuelve_404(self):
+        respuesta = self.client.get("/api/tienda/no-existe/catalogo/")
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_anonimo_oculta_stock(self):
+        lista = self.client.get("/api/tienda/tienda-test/catalogo/").json()
+        self.assertIsNone(lista["resultados"][0]["stock"])
+
+    def test_detalle_por_slug_oculta_stock_a_anonimo(self):
+        detalle = self.client.get(
+            f"/api/tienda/tienda-test/catalogo/{self.producto.id}/").json()
+        self.assertIsNone(detalle["stock"])
+
+    def test_detalle_producto_de_otra_tienda_es_404(self):
+        otra = Empresa.objects.create(nombre="Otra", nit="900999989")
+        Empresa.objects.filter(pk=otra.pk).update(slug="otra-tienda")
+        ajeno = Producto.objects.create(empresa=otra, nombre="Ajeno",
+                                        sku="SKU-AJENO3", precio=9, stock=1,
+                                        stock_minimo=1)
+        respuesta = self.client.get(
+            f"/api/tienda/tienda-test/catalogo/{ajeno.id}/")
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_catalogo_legacy_sin_slug_no_filtra_todo_lo_global(self):
+        # Ruta sin slug y sin sesion: no debe exponer todos los tenants.
+        lista = self.client.get("/api/tienda/catalogo/").json()
+        self.assertEqual(lista["resultados"], [])
+
+
+class VentaIntegridadTest(BaseCatalogoTest):
+    """Fase 3: integridad de stock y correlativo de factura por empresa."""
+
+    def _pos(self, api, producto, cantidad, descuento='0'):
+        return api.post("/api/ventas/pos/", {
+            "cliente": str(self.cliente.id),
+            "metodo_pago": "efectivo",
+            "descuento": descuento,
+            "detalles": [{"producto": str(producto.id), "cantidad": cantidad}],
+        }, format="json")
+
+    def test_venta_descuenta_stock(self):
+        api = self.api_como(self.empleado)
+        res = self._pos(api, self.producto, 3)
+        self.assertEqual(res.status_code, 201)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 40 - 3)
+
+    def test_venta_con_mas_stock_del_disponible_rechazada(self):
+        api = self.api_como(self.empleado)
+        res = self._pos(api, self.producto, 999)
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["codigo"], "STOCK_INSUFICIENTE")
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 40)  # no cambia (no negativo)
+
+    def test_facturas_distintas_empresas_pueden_repetir_consecutivo(self):
+        otra = Empresa.objects.create(nombre="Otra", nit="900999988")
+        crear_roles_base(otra)
+        v1 = self._pos(self.api_como(self.empleado), self.producto, 1).json()
+        # El consecutivo es por empresa; el constraint compuesto evita duplicados
+        # dentro de una misma empresa.
+        existe_mismo = Venta.objects.filter(
+            empresa=self.empresa, numero_factura=v1["numero_factura"]).count()
+        self.assertEqual(existe_mismo, 1)
+
+    def test_no_puede_duplicarse_numero_factura_en_la_misma_empresa(self):
+        from django.db import IntegrityError
+        v = self._pos(self.api_como(self.empleado), self.producto, 1).json()
+        duplicada = Venta(empresa=self.empresa, cliente=self.cliente,
+                          vendedor=self.empleado, total=1,
+                          numero_factura=v["numero_factura"])
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                duplicada.save()
 

@@ -11,11 +11,18 @@ from .models import Carrito, CarritoItem, Cupon, Producto, Categoria
 
 class ProductoTiendaSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
         fields = ["id", "nombre", "sku", "precio", "stock",
                   "categoria", "categoria_nombre", "imagen", "descripcion"]
+
+    def get_stock(self, obj):
+        # Ocultar el stock real a visitantes anonimos de la tienda publica.
+        if self.context.get("anonimo"):
+            return None
+        return obj.stock
 
 
 class CategoriaTiendaSerializer(serializers.ModelSerializer):

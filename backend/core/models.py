@@ -29,6 +29,7 @@ class Empresa(TimeStampedModel):
                     ('enterprise', 'Plan Empresarial')]
     nombre = models.CharField(max_length=150)
     nit = models.CharField(max_length=20, unique=True)
+    slug = models.SlugField(max_length=150, unique=True, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
     telefono = models.CharField(max_length=20, blank=True)
     direccion = models.CharField(max_length=200, blank=True)
@@ -40,6 +41,21 @@ class Empresa(TimeStampedModel):
 
     def __str__(self):
         return f"{self.nombre} ({self.get_plan_display()})"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._generar_slug()
+        super().save(*args, **kwargs)
+
+    def _generar_slug(self):
+        from django.utils.text import slugify
+        base = slugify(self.nombre) or slugify(self.nit)
+        slug = base
+        contador = 2
+        while Empresa.objects.exclude(pk=self.pk).filter(slug=slug).exists():
+            slug = f"{base}-{contador}"
+            contador += 1
+        return slug
 
 
 class Categoria(TimeStampedModel):
@@ -132,7 +148,7 @@ class Venta(TimeStampedModel):
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name='ventas')
     vendedor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                  blank=True, related_name='ventas_realizadas')
-    numero_factura = models.CharField(max_length=50, unique=True, blank=True)
+    numero_factura = models.CharField(max_length=50, blank=True)
     fecha = models.DateTimeField(auto_now_add=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     descuento = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -151,15 +167,20 @@ class Venta(TimeStampedModel):
                                    name='venta_total_no_negativo'),
             models.CheckConstraint(condition=models.Q(descuento__gte=0),
                                    name='venta_descuento_no_negativo'),
+            models.UniqueConstraint(fields=['empresa', 'numero_factura'],
+                                    name='venta_numero_factura_empresa_unico'),
         ]
 
     def __str__(self):
         return f"Factura {self.numero_factura} - {self.cliente.nombre} (${self.total})"
 
-    def _generar_numero_factura(self):
+    def _generar_numero_factura(self, bloqueada=False):
         fecha = timezone.localtime().strftime('%Y%m%d')
+        # Correlativo por empresa. Si 'bloqueada' es True es porque la fila de
+        # la empresa ya esta siendo lockeada (SELECT FOR UPDATE) por el caller,
+        # lo que serializa la generacion del consecutivo sin colisiones.
         consecutivo = Venta.objects.filter(empresa=self.empresa).count() + 1
-        prefijo = self.empresa.id.hex[:8].upper()
+        prefijo = self.empresa_id.hex[:8].upper()
         return f"{prefijo}-{fecha}-{consecutivo:05d}"
 
     def save(self, *args, **kwargs):
