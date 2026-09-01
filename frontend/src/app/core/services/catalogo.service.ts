@@ -38,6 +38,13 @@ export class CatalogoService {
       .pipe(capturarError<ClienteDetalle>());
   }
 
+  /** Cliente "Consumidor final" de la empresa (lo crea si no existe). Para
+   * venta rapida de mostrador en el POS, sin capturar datos del comprador. */
+  obtenerClienteGenerico(): Observable<Cliente> {
+    return this.http.get<Cliente>(`${this.api}/clientes/generico/`)
+      .pipe(capturarError<Cliente>());
+  }
+
   crearCliente(datos: DatosCliente): Observable<Cliente> {
     return this.http.post<Cliente>(`${this.api}/clientes/`, datos)
       .pipe(capturarError<Cliente>());

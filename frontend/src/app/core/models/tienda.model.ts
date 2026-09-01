@@ -88,6 +88,16 @@ export interface DetallePedido {
   subtotal_linea: string;
 }
 
+/** Datos minimos para vincular al usuario autenticado con un Cliente del
+ * marketplace cuando el checkout responde SIN_CLIENTE (RN comprador). */
+export interface DatosComprador {
+  tipo_documento: string;
+  numero_documento: string;
+  telefono?: string;
+  direccion?: string;
+  ciudad?: string;
+}
+
 export interface Pedido {
   id: string;
   numero_factura: string;

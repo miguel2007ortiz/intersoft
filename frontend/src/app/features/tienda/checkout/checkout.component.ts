@@ -3,7 +3,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
-import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/models/tienda.model';
+import { Carrito, CheckoutResponse, DatosComprador, StockInsuficiente } from '../../../core/models/tienda.model';
 
 @Component({
   selector: 'app-checkout',
@@ -37,6 +37,46 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
             <a routerLink="/ventas" class="btn-ventas">Ver historial de ventas</a>
           </div>
         </div>
+      } @else if (mostrarFormComprador()) {
+        <section class="form-comprador">
+          <h2>Completa tus datos de comprador</h2>
+          <p class="ayuda">Solo te lo pedimos una vez, sin importar tu rol: lo usamos para tu factura y envio.</p>
+          @if (errorComprador()) {
+            <div class="error-box">{{ errorComprador() }}</div>
+          }
+          <div class="campo">
+            <label>Tipo de documento</label>
+            <select [(ngModel)]="datosComprador.tipo_documento" class="input">
+              <option value="CC">Cedula de ciudadania</option>
+              <option value="CE">Cedula de extranjeria</option>
+              <option value="NIT">NIT</option>
+              <option value="PAS">Pasaporte</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Numero de documento</label>
+            <input type="text" [(ngModel)]="datosComprador.numero_documento" class="input" />
+          </div>
+          <div class="campo">
+            <label>Telefono</label>
+            <input type="text" [(ngModel)]="datosComprador.telefono" class="input" />
+          </div>
+          <div class="campo">
+            <label>Direccion de envio</label>
+            <input type="text" [(ngModel)]="datosComprador.direccion" class="input" />
+          </div>
+          <div class="campo">
+            <label>Ciudad</label>
+            <input type="text" [(ngModel)]="datosComprador.ciudad" class="input" />
+          </div>
+          <div class="acciones">
+            <button type="button" class="btn-pagar"
+                    [disabled]="!datosComprador.numero_documento || guardandoComprador()"
+                    (click)="guardarDatosComprador()">
+              @if (guardandoComprador()) { Guardando... } @else { Continuar }
+            </button>
+          </div>
+        </section>
       } @else {
         @if (error()) {
           <div class="error-box">{{ error() }}</div>
@@ -109,6 +149,13 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
       padding: 12px 16px; margin-bottom: var(--e4); color: #b42318; font-size: 14px;
     }
     .error-box strong { display: block; margin-bottom: 4px; }
+
+    .form-comprador { margin-bottom: var(--e5); }
+    .form-comprador h2 { font-size: 18px; margin: 0 0 var(--e2); }
+    .form-comprador .ayuda { color: var(--gris); font-size: 14px; margin: 0 0 var(--e4); }
+    .campo { margin-bottom: var(--e3); }
+    .campo label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+    .campo .input { width: 100%; }
 
     .resumen { margin-bottom: var(--e5); }
     .resumen h2 { font-size: 18px; margin: 0 0 var(--e3); }
@@ -187,6 +234,12 @@ export class CheckoutComponent implements OnInit {
   readonly exito = signal<CheckoutResponse | null>(null);
   readonly erroresStock = signal<StockInsuficiente[]>([]);
   readonly metodoPago = signal('tarjeta');
+  readonly mostrarFormComprador = signal(false);
+  readonly guardandoComprador = signal(false);
+  readonly errorComprador = signal('');
+  datosComprador: DatosComprador = {
+    tipo_documento: 'CC', numero_documento: '', telefono: '', direccion: '', ciudad: '',
+  };
 
   readonly metodosPago = [
     { valor: 'efectivo', etiqueta: 'Efectivo' },
@@ -223,12 +276,32 @@ export class CheckoutComponent implements OnInit {
     this.tienda.checkout(this.metodoPago()).subscribe({
       next: (r) => { this.exito.set(r); this.cargando.set(false); },
       error: (e) => {
-        if (e.codigo === 'STOCK_INSUFICIENTE') {
+        if (e.codigo === 'SIN_CLIENTE') {
+          this.mostrarFormComprador.set(true);
+        } else if (e.codigo === 'STOCK_INSUFICIENTE') {
           this.erroresStock.set(e.productos || []);
         } else {
           this.error.set(e.detalle || 'Error al procesar el pago.');
         }
         this.cargando.set(false);
+      },
+    });
+  }
+
+  /** Vincula al usuario (sin importar su rol) con un Cliente del
+   * marketplace y reintenta el pago automaticamente. */
+  guardarDatosComprador(): void {
+    this.guardandoComprador.set(true);
+    this.errorComprador.set('');
+    this.tienda.completarComprador(this.datosComprador).subscribe({
+      next: () => {
+        this.guardandoComprador.set(false);
+        this.mostrarFormComprador.set(false);
+        this.procesarPago();
+      },
+      error: (e) => {
+        this.errorComprador.set(e.detalle || 'No se pudo guardar tus datos.');
+        this.guardandoComprador.set(false);
       },
     });
   }

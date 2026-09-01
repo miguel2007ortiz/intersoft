@@ -135,6 +135,31 @@ class Cliente(TimeStampedModel):
     def __str__(self):
         return f"{self.nombre} ({self.tipo_documento} {self.numero_documento})"
 
+    # Documento fijo del cliente generico (RN: venta rapida en tienda fisica
+    # sin registrar datos de cada comprador, ej. mostrador de supermercado).
+    DOCUMENTO_GENERICO = '0000000000'
+
+    @classmethod
+    def generico(cls, empresa):
+        """Devuelve (creandolo si hace falta) el Cliente "Consumidor final"
+        de una empresa, para ventas de mostrador donde pedir documento y
+        datos completos no es practico (fila, ticket de bajo valor, etc.).
+        Idempotente: usa get_or_create sobre el documento fijo reservado."""
+        cliente, creado = cls.objects.get_or_create(
+            empresa=empresa, tipo_documento='NIT', numero_documento=cls.DOCUMENTO_GENERICO,
+            defaults={'nombre': 'Consumidor final'},
+        )
+        # Si alguien lo desactivo por error, se reactiva: es un cliente
+        # de sistema, siempre debe estar disponible para venta rapida.
+        if not creado and cliente.deleted_at is not None:
+            cliente.deleted_at = None
+            cliente.save(update_fields=['deleted_at'])
+        return cliente
+
+    @property
+    def es_generico(self):
+        return self.numero_documento == self.DOCUMENTO_GENERICO
+
     @property
     def total_compras(self):
         from django.db.models import Sum

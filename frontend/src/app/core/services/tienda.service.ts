@@ -4,7 +4,7 @@ import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Carrito, CarritoItem, CategoriaTienda, CheckoutResponse,
-  Cupon, ErrorTienda, Pedido, ProductoTienda,
+  Cupon, DatosComprador, ErrorTienda, Pedido, ProductoTienda,
 } from '../models/tienda.model';
 
 interface Lista<T> {
@@ -71,6 +71,14 @@ export class TiendaService {
   checkout(metodoPago: string): Observable<CheckoutResponse> {
     return this.http.post<CheckoutResponse>(`${this.api}/checkout/`, { metodo_pago: metodoPago })
       .pipe(capturarError<CheckoutResponse>());
+  }
+
+  // ---- Comprador ----
+  /** Vincula al usuario autenticado (admin, empleado o cliente) con un
+   * Cliente del marketplace, sin exigirle una cuenta aparte. */
+  completarComprador(datos: DatosComprador): Observable<void> {
+    return this.http.post<void>(`${this.api}/completar-comprador/`, datos)
+      .pipe(capturarError<void>());
   }
 
   // ---- Pedidos del comprador ----

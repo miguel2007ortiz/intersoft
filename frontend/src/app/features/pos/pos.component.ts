@@ -24,12 +24,14 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
             <select [(ngModel)]="clienteSeleccionado" class="input">
               <option value="">Seleccionar cliente...</option>
               @for (c of clientes(); track c.id) {
-                <option [value]="c.id">{{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})</option>
+                @if (c.id === clienteGenericoId()) {
+                  <option [value]="c.id">⚡ {{ c.nombre }} (venta rapida)</option>
+                } @else {
+                  <option [value]="c.id">{{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})</option>
+                }
               }
             </select>
-            @if (!clientes().length && !cargandoClientes()) {
-              <span class="hint">No hay clientes. <a routerLink="/clientes">Crear uno</a></span>
-            }
+            <span class="hint">¿Compra a nombre de alguien? <a routerLink="/clientes">Registrar cliente</a></span>
           </div>
         </section>
 
@@ -255,6 +257,9 @@ export class PosComponent {
 
   readonly clientes = signal<Cliente[]>([]);
   readonly cargandoClientes = signal(true);
+  /** Id del cliente "Consumidor final": se preselecciona para venta rapida
+   * de mostrador (RN: fila, tienda fisica), sin bloquear elegir uno real. */
+  readonly clienteGenericoId = signal<string | null>(null);
   busquedaProducto = '';
   readonly resultadosBusqueda = signal<Producto[]>([]);
   readonly lineas = signal<LineaPOS[]>([]);
@@ -285,12 +290,28 @@ export class PosComponent {
 
   constructor() {
     this.cargarClientes();
+    this.cargarClienteGenerico();
   }
 
   cargarClientes(): void {
     this.catalogo.listarClientes().subscribe({
       next: (r) => { this.clientes.set(r.resultados); this.cargandoClientes.set(false); },
       error: () => this.cargandoClientes.set(false),
+    });
+  }
+
+  /** Trae (o crea) el cliente generico y lo deja preseleccionado, sin
+   * esperar a que cargarClientes() termine ni pisar una eleccion previa. */
+  cargarClienteGenerico(): void {
+    this.catalogo.obtenerClienteGenerico().subscribe({
+      next: (c) => {
+        this.clienteGenericoId.set(c.id);
+        if (!this.clientes().some((x) => x.id === c.id)) {
+          this.clientes.update((lista) => [c, ...lista]);
+        }
+        if (!this.clienteSeleccionado) this.clienteSeleccionado = c.id;
+      },
+      error: () => {},
     });
   }
 

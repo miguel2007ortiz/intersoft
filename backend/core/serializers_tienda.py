@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import Carrito, CarritoItem, Cupon, Producto, Categoria, Venta
+from .models import Carrito, CarritoItem, Cliente, Cupon, Producto, Categoria, Venta
 from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
@@ -111,6 +111,39 @@ class CarritoItemInputSerializer(serializers.Serializer):
 
 class CarritoCuponSerializer(serializers.Serializer):
     cupon_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+# ------------------------------ Comprador ---------------------------------
+
+class CompletarCompradorSerializer(serializers.Serializer):
+    """Datos minimos para vincular al usuario autenticado (admin, empleado o
+    cliente) con un Cliente del marketplace (empresa=None), sin pasar por un
+    registro aparte. Nombre y email se toman de la cuenta ya existente; solo
+    se piden el documento y la direccion de envio."""
+    tipo_documento = serializers.ChoiceField(choices=Cliente.TIPO_DOC_CHOICES, default='CC')
+    numero_documento = serializers.CharField(min_length=3, max_length=20)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
+    direccion = serializers.CharField(required=False, allow_blank=True, default='')
+    ciudad = serializers.CharField(max_length=80, required=False, allow_blank=True, default='')
+
+    def validate(self, datos):
+        tipo = datos.get("tipo_documento", "CC")
+        numero = datos.get("numero_documento")
+        # Documento unico entre los compradores del marketplace (empresa=None).
+        if Cliente.objects.filter(empresa__isnull=True, deleted_at__isnull=True,
+                                  tipo_documento=tipo, numero_documento=numero).exists():
+            raise serializers.ValidationError({
+                "numero_documento": "El documento ya esta registrado para un comprador.",
+            })
+        return datos
+
+    def create(self, validated_data):
+        usuario = self.context["usuario"]
+        nombre = usuario.get_full_name().strip() or usuario.email
+        return Cliente.objects.create(
+            usuario=usuario, empresa=None, nombre=nombre, email=usuario.email,
+            **validated_data,
+        )
 
 
 # ------------------------------ Pedidos del comprador ---------------------

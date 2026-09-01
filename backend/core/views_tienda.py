@@ -26,8 +26,9 @@ from .models import (Carrito, CarritoItem, Categoria, Cliente, Cupon,
                      Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
-                                  CuponSerializer, CuponValidarSerializer,
-                                  PedidoCompradorSerializer, ProductoTiendaSerializer)
+                                  CompletarCompradorSerializer, CuponSerializer,
+                                  CuponValidarSerializer, PedidoCompradorSerializer,
+                                  ProductoTiendaSerializer)
 
 
 def _obtener_empresa(request):
@@ -575,3 +576,24 @@ class MisPedidosView(APIView):
                    .order_by('-created_at'))
         datos = PedidoCompradorSerializer(pedidos, many=True).data
         return Response({"resultados": datos, "total": len(datos)})
+
+
+class CompletarCompradorView(APIView):
+    """Vincula al usuario autenticado (admin, empleado o cliente) con un
+    Cliente del marketplace, sin exigirle crear otra cuenta. Se llama cuando
+    el checkout responde SIN_CLIENTE: solo pide documento y direccion de
+    envio, el resto de datos ya existen en su cuenta."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if Cliente.objects.filter(usuario=request.user, deleted_at__isnull=True).exists():
+            return Response(
+                {"codigo": "CLIENTE_EXISTENTE", "detalle": "Ya tienes datos de comprador registrados."},
+                status=status.HTTP_409_CONFLICT)
+
+        entrada = CompletarCompradorSerializer(data=request.data, context={"usuario": request.user})
+        if not entrada.is_valid():
+            return Response({"codigo": "DATOS_INVALIDOS", "detalle": "Revisa los datos del formulario.",
+                             "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
+        entrada.save()
+        return Response(status=status.HTTP_201_CREATED)
