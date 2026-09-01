@@ -230,7 +230,11 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
           <section class="grid">
             @for (p of productos(); track p.id; let i = $index) {
               <div class="card tarjeta-flot tarjeta-hover aparecer" [style.--retraso.ms]="(i % 12) * 60"
-                   (dblclick)="abrirDetalle(p)" title="Doble click para ver el detalle">
+                   [class.tarjeta-doble-click]="tarjetaEfecto() === p.id"
+                   (dblclick)="abrirDetalle(p, $event)" title="Doble click para ver el detalle">
+                @if (tarjetaEfecto() === p.id) {
+                  <span class="onda-click" [style.left.%]="ondaPos().x" [style.top.%]="ondaPos().y"></span>
+                }
                 <div class="card-img">
                   @if (p.imagen && !imagenesFallidas().has(p.id)) {
                     <img [src]="p.imagen" [alt]="p.nombre" loading="lazy" (error)="marcarImagenFallida(p.id)" />
@@ -604,10 +608,25 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       .grid { grid-template-columns: repeat(4, 1fr); }
     }
     .card {
-      background: #fff; border: 1px solid var(--linea); border-radius: 12px;
+      position: relative; background: #fff; border: 1px solid var(--linea); border-radius: 12px;
       overflow: hidden;
     }
     .tarjeta-hover { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+    /* Onda expansiva al hacer doble click, desde el punto exacto del clic */
+    .onda-click {
+      position: absolute; z-index: 5; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+      border-radius: 50%; background: rgba(38,87,217,.35); pointer-events: none;
+      animation: onda-expandir .55s ease-out forwards;
+    }
+    @keyframes onda-expandir {
+      0%   { transform: scale(0); opacity: .8; }
+      100% { transform: scale(28); opacity: 0; }
+    }
+    .tarjeta-doble-click { animation: pulso-tarjeta .35s ease; }
+    @keyframes pulso-tarjeta {
+      0%   { box-shadow: 0 0 0 0 rgba(38,87,217,.45); }
+      100% { box-shadow: 0 0 0 14px rgba(38,87,217,0); }
+    }
     .tarjeta-hover:hover {
       transform: translateY(-6px); border-color: transparent;
       box-shadow: 0 16px 32px rgba(15,23,42,.12), 0 4px 10px rgba(15,23,42,.06);
@@ -712,11 +731,18 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, .55);
       display: flex; align-items: flex-start; justify-content: center;
       padding: var(--e5) var(--e4); overflow-y: auto;
+      animation: fondo-entrar .25s ease;
     }
     .modal-caja {
       position: relative; background: #fff; border-radius: 14px; max-width: 760px;
       width: 100%; padding: var(--e5); margin-top: var(--e5);
       box-shadow: 0 24px 60px rgba(0,0,0,.25);
+      animation: modal-entrar .3s cubic-bezier(.22,1,.36,1);
+    }
+    @keyframes fondo-entrar { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes modal-entrar {
+      from { opacity: 0; transform: translateY(16px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
     }
     .modal-cerrar {
       position: absolute; top: 14px; right: 14px; width: 32px; height: 32px;
@@ -769,6 +795,7 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       .exito-toast { animation: none; }
       .btn-agregar-ok, .btn-carrito-contador.rebote { animation: none; }
       .hero-slide { transition: none; }
+      .onda-click, .tarjeta-doble-click, .modal-fondo, .modal-caja { animation: none; }
     }
 
     @media (max-width: 700px) {
@@ -798,6 +825,9 @@ export class CatalogoComponent implements OnInit, OnDestroy {
   readonly carritoAnimado = signal(false);
   /** IDs de producto cuya imagen fallo al cargar; se muestra el placeholder. */
   readonly imagenesFallidas = signal<Set<string>>(new Set());
+  /** Onda expansiva al hacer doble click en una tarjeta (id de producto activo + punto de origen en %). */
+  readonly tarjetaEfecto = signal<string | null>(null);
+  readonly ondaPos = signal<{ x: number; y: number }>({ x: 50, y: 50 });
 
   busqueda = '';
   categoriaSeleccionada = '';
@@ -1006,7 +1036,24 @@ export class CatalogoComponent implements OnInit, OnDestroy {
   }
 
   // ---- Detalle de producto ----
-  abrirDetalle(producto: ProductoTienda): void {
+  /** Si viene de un doble click en la tarjeta, dispara la onda expansiva
+   * desde el punto exacto del clic y abre el modal justo despues. */
+  abrirDetalle(producto: ProductoTienda, evento?: MouseEvent): void {
+    if (evento) {
+      const tarjeta = (evento.currentTarget as HTMLElement).getBoundingClientRect();
+      this.ondaPos.set({
+        x: ((evento.clientX - tarjeta.left) / tarjeta.width) * 100,
+        y: ((evento.clientY - tarjeta.top) / tarjeta.height) * 100,
+      });
+      this.tarjetaEfecto.set(producto.id);
+      setTimeout(() => this.tarjetaEfecto.set(null), 550);
+      setTimeout(() => this.mostrarDetalle(producto), 180);
+      return;
+    }
+    this.mostrarDetalle(producto);
+  }
+
+  private mostrarDetalle(producto: ProductoTienda): void {
     this.productoDetalle.set(producto);
     this.miCalificacion.set(5);
     this.miComentario = '';

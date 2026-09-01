@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { Carrito, CheckoutResponse, DatosComprador, StockInsuficiente } from '../../../core/models/tienda.model';
+import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicaciones';
 
 @Component({
   selector: 'app-checkout',
@@ -39,35 +40,56 @@ import { Carrito, CheckoutResponse, DatosComprador, StockInsuficiente } from '..
         </div>
       } @else if (mostrarFormComprador()) {
         <section class="form-comprador">
-          <h2>Completa tus datos de comprador</h2>
+          <h2>¡Ya casi esta! Cuentanos donde te enviamos tu pedido</h2>
           <p class="ayuda">Solo te lo pedimos una vez, sin importar tu rol: lo usamos para tu factura y envio.</p>
           @if (errorComprador()) {
             <div class="error-box">{{ errorComprador() }}</div>
           }
-          <div class="campo">
-            <label>Tipo de documento</label>
-            <select [(ngModel)]="datosComprador.tipo_documento" class="input">
-              <option value="CC">Cedula de ciudadania</option>
-              <option value="CE">Cedula de extranjeria</option>
-              <option value="NIT">NIT</option>
-              <option value="PAS">Pasaporte</option>
-            </select>
-          </div>
-          <div class="campo">
-            <label>Numero de documento</label>
-            <input type="text" [(ngModel)]="datosComprador.numero_documento" class="input" />
+          <div class="fila-2">
+            <div class="campo">
+              <label>Tipo de documento</label>
+              <select [(ngModel)]="datosComprador.tipo_documento" class="input">
+                <option value="CC">Cedula de ciudadania</option>
+                <option value="CE">Cedula de extranjeria</option>
+                <option value="NIT">NIT</option>
+                <option value="PAS">Pasaporte</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Numero de documento</label>
+              <input type="text" [(ngModel)]="datosComprador.numero_documento" class="input" />
+            </div>
           </div>
           <div class="campo">
             <label>Telefono</label>
-            <input type="text" [(ngModel)]="datosComprador.telefono" class="input" />
+            <input type="text" [(ngModel)]="datosComprador.telefono" class="input" placeholder="300 123 4567" />
           </div>
           <div class="campo">
             <label>Direccion de envio</label>
-            <input type="text" [(ngModel)]="datosComprador.direccion" class="input" />
+            <input type="text" [(ngModel)]="datosComprador.direccion" class="input"
+                   placeholder="Calle 10 # 20-30, Apto 502" />
           </div>
-          <div class="campo">
-            <label>Ciudad</label>
-            <input type="text" [(ngModel)]="datosComprador.ciudad" class="input" />
+          <div class="fila-2">
+            <div class="campo">
+              <label>Departamento</label>
+              <select [(ngModel)]="departamentoSeleccionado" (ngModelChange)="datosComprador.ciudad = ''" class="input">
+                <option value="">Selecciona...</option>
+                @for (d of departamentos; track d.nombre) {
+                  <option [value]="d.nombre">{{ d.nombre }}</option>
+                }
+              </select>
+            </div>
+            <div class="campo">
+              <label>Ciudad</label>
+              <select [(ngModel)]="datosComprador.ciudad" class="input" [disabled]="!departamentoSeleccionado">
+                <option value="">
+                  {{ departamentoSeleccionado ? 'Selecciona...' : 'Elige un departamento primero' }}
+                </option>
+                @for (ciu of ciudadesDisponibles(); track ciu) {
+                  <option [value]="ciu">{{ ciu }}</option>
+                }
+              </select>
+            </div>
           </div>
           <div class="acciones">
             <button type="button" class="btn-pagar"
@@ -156,6 +178,8 @@ import { Carrito, CheckoutResponse, DatosComprador, StockInsuficiente } from '..
     .campo { margin-bottom: var(--e3); }
     .campo label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
     .campo .input { width: 100%; }
+    .fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e3); }
+    @media (max-width: 480px) { .fila-2 { grid-template-columns: 1fr; } }
 
     .resumen { margin-bottom: var(--e5); }
     .resumen h2 { font-size: 18px; margin: 0 0 var(--e3); }
@@ -240,6 +264,13 @@ export class CheckoutComponent implements OnInit {
   datosComprador: DatosComprador = {
     tipo_documento: 'CC', numero_documento: '', telefono: '', direccion: '', ciudad: '',
   };
+  readonly departamentos = DEPARTAMENTOS_COLOMBIA;
+  departamentoSeleccionado = '';
+
+  /** Ciudades del departamento elegido, para el select en cascada. */
+  ciudadesDisponibles(): string[] {
+    return this.departamentos.find((d) => d.nombre === this.departamentoSeleccionado)?.ciudades ?? [];
+  }
 
   readonly metodosPago = [
     { valor: 'efectivo', etiqueta: 'Efectivo' },
