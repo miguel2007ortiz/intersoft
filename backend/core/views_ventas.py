@@ -15,7 +15,7 @@ Reglas clave:
 from decimal import Decimal
 
 from django.db import models, transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -197,7 +197,11 @@ class VentaPOSView(APIView):
                 f"Factura {venta.numero_factura} - "
                 f"{cliente.nombre} (${total})")
 
-        return Response(VentaLecturaSerializer(venta).data,
+        # Fase 6: recargar con las relaciones para serializar sin N+1.
+        venta_serializada = (Venta.objects.select_related('cliente', 'vendedor')
+                             .prefetch_related('detalles__producto')
+                             .get(pk=venta.pk))
+        return Response(VentaLecturaSerializer(venta_serializada).data,
                         status=status.HTTP_201_CREATED)
 
 
@@ -209,8 +213,7 @@ class VentasView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        ventas = Venta.objects.select_related('cliente', 'vendedor').filter(
-            empresa=empresa, deleted_at__isnull=True)
+        ventas = Venta.objects.filter(empresa=empresa, deleted_at__isnull=True)
 
         # Filtros
         estado = request.query_params.get('estado')
@@ -234,11 +237,15 @@ class VentasView(APIView):
         # Estadisticas
         stats = ventas.aggregate(
             total_ventas=Sum('total'),
-            total_count=Sum('id'),
+            total_count=Count('id'),
         )
 
+        # Fase 6: evita N+1 (cliente/vendedor y detalles con su producto).
+        lista = ventas.select_related(
+            'cliente', 'vendedor'
+        ).prefetch_related('detalles__producto')
         datos = VentaLecturaSerializer(
-            ventas.order_by('-fecha')[:50], many=True).data
+            lista.order_by('-fecha')[:50], many=True).data
 
         return Response({
             "resultados": datos,
@@ -492,7 +499,7 @@ class InventarioProductosView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        productos = Producto.objects.filter(
+        productos = Producto.objects.select_related('categoria').filter(
             empresa=empresa, deleted_at__isnull=True, activo=True
         ).order_by('nombre')
 

@@ -33,6 +33,9 @@ class CategoriaTiendaSerializer(serializers.ModelSerializer):
         fields = ["id", "nombre", "productos_count"]
 
     def get_productos_count(self, obj):
+        # Usa la anotacion num_productos del queryset (Fase 6) si existe.
+        if hasattr(obj, "num_productos"):
+            return obj.num_productos
         return obj.productos.filter(activo=True, deleted_at__isnull=True).count()
 
 

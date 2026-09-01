@@ -7,7 +7,9 @@
 Toda accion queda auditada en actividad_usuario."""
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import (Count, DecimalField, Exists, OuterRef, Q, Sum,
+                              Value)
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -16,7 +18,7 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import Categoria, Cliente, Producto
+from .models import Categoria, Cliente, DetalleVenta, Producto
 from .serializers_catalogo import (
     CategoriaSerializer, ClienteEscrituraSerializer, ClienteLecturaSerializer,
     ProductoEscrituraSerializer, ProductoLecturaSerializer,
@@ -36,14 +38,22 @@ class ClientesView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def get(self, request):
-        clientes = Cliente.objects.filter(empresa=request.user.perfil.empresa,
-                                          deleted_at__isnull=True)
+        clientes = Cliente.objects.select_related("usuario").filter(
+            empresa=request.user.perfil.empresa, deleted_at__isnull=True)
         busqueda = request.query_params.get("busqueda", "").strip()
         if busqueda:
             clientes = clientes.filter(
                 Q(nombre__icontains=busqueda)
                 | Q(numero_documento__icontains=busqueda)
                 | Q(email__icontains=busqueda))
+        # Fase 6: evita N+1 (usuario_email + total_compras por cliente).
+        clientes = clientes.annotate(
+            _total_compras=Coalesce(
+                Sum("ventas__total",
+                    filter=Q(ventas__deleted_at__isnull=True,
+                             ventas__estado="completada")),
+                Value(0), output_field=DecimalField(max_digits=12,
+                                                    decimal_places=2)))
         datos = ClienteLecturaSerializer(clientes.order_by("nombre"), many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
@@ -67,8 +77,9 @@ class ClienteDetalleView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def obtener_cliente(self, request, id):
-        return (Cliente.objects.filter(empresa=request.user.perfil.empresa,
-                                       deleted_at__isnull=True, id=id).first())
+        return (Cliente.objects.select_related("usuario")
+                .filter(empresa=request.user.perfil.empresa,
+                        deleted_at__isnull=True, id=id).first())
 
     def get(self, request, id):
         cliente = self.obtener_cliente(request, id)
@@ -126,6 +137,10 @@ class ProductosView(APIView):
         filtro_activo = request.query_params.get("activo")
         if filtro_activo is not None:
             productos = productos.filter(activo=filtro_activo.lower() == "true")
+        # Fase 6: anota 'tiene_ventas' para evitar un EXISTS por fila.
+        productos = productos.annotate(
+            tiene_ventas_flag=Exists(
+                DetalleVenta.objects.filter(producto=OuterRef("pk"))))
         datos = ProductoLecturaSerializer(productos.order_by("nombre"), many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
@@ -243,6 +258,10 @@ class CategoriasView(APIView):
     def get(self, request):
         categorias = Categoria.objects.filter(empresa=request.user.perfil.empresa,
                                               deleted_at__isnull=True)
+        # Fase 6: anota el conteo para evitar un COUNT por fila.
+        categorias = categorias.annotate(
+            total_productos=Count("productos",
+                                  filter=Q(productos__deleted_at__isnull=True)))
         datos = CategoriaSerializer(categorias.order_by("nombre"), many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 

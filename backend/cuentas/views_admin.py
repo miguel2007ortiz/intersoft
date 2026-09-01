@@ -5,6 +5,7 @@ en actividad_usuario."""
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -177,7 +178,12 @@ class RolesSeguridadView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
+        # Fase 6: anota el conteo de usuarios activos para evitar N+1.
         roles = (Rol.objects.filter(empresa=request.user.perfil.empresa)
+                 .annotate(total_usuarios_activos=Count(
+                     "perfiles",
+                     filter=Q(perfiles__deleted_at__isnull=True,
+                              perfiles__usuario__is_active=True)))
                  .prefetch_related("rol_permisos__permiso").order_by("nombre"))
         datos = RolLecturaSerializer(roles, many=True).data
         return Response({"resultados": datos, "total": len(datos)})

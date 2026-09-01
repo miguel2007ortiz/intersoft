@@ -34,6 +34,14 @@ def _obtener_empresa(request):
     return request.user.perfil.empresa
 
 
+def _carrito_serializado(carrito):
+    """Fase 6: recarga el carrito con cupon + items/produto para no hacer N+1
+    al serializar (subtotal, total, descuento e items con su producto)."""
+    carrito = (Carrito.objects.select_related("cupon")
+               .prefetch_related("items__producto").get(pk=carrito.pk))
+    return CarritoSerializer(carrito).data
+
+
 def _empresa_para_catalogo(request, slug=None):
     """Resuelve la empresa del catalogo publico.
 
@@ -248,7 +256,7 @@ class CarritoView(APIView):
             usuario=request.user,
             empresa=request.user.perfil.empresa
         )
-        return Response(CarritoSerializer(carrito).data)
+        return Response(_carrito_serializado(carrito))
 
 
 class CarritoItemView(APIView):
@@ -296,7 +304,7 @@ class CarritoItemView(APIView):
             item.cantidad = nueva_cantidad
             item.save(update_fields=['cantidad'])
 
-        return Response(CarritoSerializer(carrito).data,
+        return Response(_carrito_serializado(carrito),
                         status=status.HTTP_201_CREATED)
 
     def put(self, request, item_id):
@@ -335,7 +343,7 @@ class CarritoItemView(APIView):
         item.cantidad = nueva_cantidad
         item.save(update_fields=['cantidad'])
 
-        return Response(CarritoSerializer(carrito).data)
+        return Response(_carrito_serializado(carrito))
 
     def delete(self, request, item_id):
         empresa = request.user.perfil.empresa
@@ -353,7 +361,7 @@ class CarritoItemView(APIView):
                 status=status.HTTP_404_NOT_FOUND)
 
         item.delete()
-        return Response(CarritoSerializer(carrito).data)
+        return Response(_carrito_serializado(carrito))
 
 
 class CarritoCuponView(APIView):
@@ -377,7 +385,7 @@ class CarritoCuponView(APIView):
         if not cupon_id:
             carrito.cupon = None
             carrito.save(update_fields=['cupon'])
-            return Response(CarritoSerializer(carrito).data)
+            return Response(_carrito_serializado(carrito))
 
         cupon = Cupon.objects.filter(
             id=cupon_id, empresa=empresa).first()
@@ -396,7 +404,7 @@ class CarritoCuponView(APIView):
         carrito.cupon = cupon
         carrito.save(update_fields=['cupon'])
 
-        return Response(CarritoSerializer(carrito).data)
+        return Response(_carrito_serializado(carrito))
 
     def delete(self, request):
         empresa = request.user.perfil.empresa
@@ -405,7 +413,7 @@ class CarritoCuponView(APIView):
         if carrito:
             carrito.cupon = None
             carrito.save(update_fields=['cupon'])
-        return Response(CarritoSerializer(carrito).data if carrito else {})
+        return Response(_carrito_serializado(carrito) if carrito else {})
 
 
 # ------------------------------ Checkout ---------------------------------

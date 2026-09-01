@@ -11,6 +11,8 @@ Endpoints montados en /api/ia/:
 
 import logging
 
+from django.db.models import OuterRef, Subquery
+from django.db.models import TextField
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -31,6 +33,13 @@ def _obtener_empresa(request):
     return request.user.perfil.empresa
 
 
+def _ultimo_mensaje_anotacion():
+    """Fase 6: ultimo mensaje via Subquery para no hacer un SELECT por sesion."""
+    ultimo = (IAMensaje.objects.filter(conversacion=OuterRef("pk"))
+              .order_by("-created_at").values("contenido")[:1])
+    return Subquery(ultimo, output_field=TextField())
+
+
 def _serializar_conversacion(conversacion):
     return IAConversacionLecturaSerializer(conversacion).data
 
@@ -40,8 +49,8 @@ class IAConversacionesView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def get(self, request):
-        conversaciones = IAConversacion.objects.filter(
-            usuario=request.user)
+        conversaciones = (IAConversacion.objects.filter(usuario=request.user)
+                          .annotate(_ultimo_mensaje=_ultimo_mensaje_anotacion()))
         datos = IAConversacionListaSerializer(
             conversaciones, many=True).data
         return Response({"resultados": datos})
@@ -59,8 +68,9 @@ class IAConversacionDetalleView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def get_object(self, request, id):
-        return IAConversacion.objects.filter(
-            usuario=request.user, id=id).first()
+        return (IAConversacion.objects.filter(usuario=request.user, id=id)
+                .annotate(_ultimo_mensaje=_ultimo_mensaje_anotacion())
+                .prefetch_related("mensajes").first())
 
     def get(self, request, id):
         conversacion = self.get_object(request, id)

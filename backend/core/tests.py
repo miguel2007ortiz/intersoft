@@ -942,3 +942,79 @@ class VentaIntegridadTest(BaseCatalogoTest):
             with transaction.atomic():
                 duplicada.save()
 
+
+class RendimientoQueriesTest(BaseCatalogoTest):
+    """Fase 6: los listados no deben disparar consultas N+1.
+
+    Se mide con CaptureQueriesContext y se exige un tope de consultas muy por
+    debajo del numero de filas (sin prefetch cada fila sumaria +1 consulta).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.producto2 = Producto.objects.create(
+            empresa=cls.empresa, nombre="Camisa", sku="SKU-C02",
+            precio=30000, stock=20, stock_minimo=5)
+        cls.categoria_extra = cls.crear_categoria("Ropa")
+        cls.categoria_vacia = cls.crear_categoria("Accesorios")
+        Producto.objects.create(empresa=cls.empresa, nombre="Jean", sku="SKU-J03",
+                                precio=90000, stock=15, stock_minimo=3,
+                                categoria=cls.categoria_extra)
+        cls.clientes_lista = [
+            Cliente.objects.create(empresa=cls.empresa, nombre=f"Cliente {i}",
+                                   tipo_documento="CC",
+                                   numero_documento=f"700000{i}")
+            for i in range(4)
+        ]
+        for i in range(5):
+            venta = cls.crear_venta(total=75000)
+            DetalleVenta.objects.create(venta=venta, producto=cls.producto,
+                                        cantidad=1, precio_unitario=75000)
+            DetalleVenta.objects.create(venta=venta, producto=cls.producto2,
+                                        cantidad=2, precio_unitario=30000)
+
+    def _medir(self, ruta):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        api = self.api_como(self.empleado)
+        with CaptureQueriesContext(connection) as contexto:
+            respuesta = api.get(ruta)
+        return respuesta, len(contexto.captured_queries)
+
+    def test_ventas_cabe_en_pocas_consultas(self):
+        respuesta, consultas = self._medir("/api/ventas/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()["resultados"]), 5)
+        self.assertLessEqual(consultas, 15)
+
+    def test_clientes_cabe_en_pocas_consultas(self):
+        respuesta, consultas = self._medir("/api/clientes/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()["resultados"]), 5)
+        self.assertLessEqual(consultas, 10)
+
+    def test_productos_cabe_en_pocas_consultas(self):
+        respuesta, consultas = self._medir("/api/productos/?activo=true")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertLessEqual(len(respuesta.json()["resultados"]), 6)
+        self.assertLessEqual(consultas, 12)
+
+    def test_categorias_cabe_en_pocas_consultas(self):
+        respuesta, consultas = self._medir("/api/categorias/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.json()["resultados"]), 2)
+        totales = {r["nombre"]: r["total_productos"] for r in respuesta.json()["resultados"]}
+        self.assertEqual(totales["Ropa"], 1)
+        self.assertEqual(totales["Accesorios"], 0)
+        self.assertLessEqual(consultas, 10)
+
+    def test_carrito_cabe_en_pocas_consultas(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        api = self.api_como(self.cliente_rol)
+        with CaptureQueriesContext(connection) as contexto:
+            respuesta = api.get("/api/tienda/carrito/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertLessEqual(len(contexto.captured_queries), 10)
+

@@ -32,7 +32,12 @@ class ClienteLecturaSerializer(serializers.ModelSerializer):
         return cliente.usuario.email if cliente.usuario else None
 
     def get_total_compras(self, cliente):
-        return str(cliente.total_compras)
+        # Usa la anotacion del queryset (Fase 6) si existe; si no, la
+        # propiedad del modelo (un solo registro).
+        total = getattr(cliente, "_total_compras", None)
+        if total is None:
+            total = cliente.total_compras
+        return str(total or "0")
 
 
 class ClienteEscrituraSerializer(serializers.ModelSerializer):
@@ -120,6 +125,9 @@ class ProductoLecturaSerializer(serializers.ModelSerializer):
         return str(producto.categoria_id) if producto.categoria_id else None
 
     def get_tiene_ventas(self, producto) -> bool:
+        # Usa la anotacion del queryset (Fase 6) si existe.
+        if hasattr(producto, "tiene_ventas_flag"):
+            return producto.tiene_ventas_flag
         return producto.detalles_venta.exists()
 
 
@@ -183,6 +191,9 @@ class CategoriaSerializer(serializers.ModelSerializer):
         fields = ["id", "nombre", "descripcion", "total_productos"]
 
     def get_total_productos(self, categoria) -> int:
+        # Usa la anotacion del queryset (Fase 6) si existe.
+        if hasattr(categoria, "total_productos"):
+            return categoria.total_productos
         return categoria.productos.filter(deleted_at__isnull=True).count()
 
     def validate_nombre(self, valor):

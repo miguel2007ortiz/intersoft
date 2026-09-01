@@ -292,6 +292,19 @@ class AccesoSeguridadTest(BaseSeguridadTest):
             self.assertEqual(api.get(ruta).status_code, 403, ruta)
 
 
+class RendimientoQueriesRolesTest(BaseSeguridadTest):
+    def test_listado_roles_cabe_en_pocas_consultas(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self.crear_cuenta_empresa("emp1@test.co")
+        self.crear_cuenta_empresa("emp2@test.co", rol="CLIENTE")
+        with CaptureQueriesContext(connection) as contexto:
+            respuesta = self.api.get("/api/seguridad/roles/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertGreaterEqual(len(respuesta.json()["resultados"]), 3)
+        self.assertLessEqual(len(contexto.captured_queries), 10)
+
+
 class CrudUsuariosTest(BaseSeguridadTest):
     def test_crear_usuario(self):
         respuesta = self.api.post("/api/seguridad/usuarios/", {

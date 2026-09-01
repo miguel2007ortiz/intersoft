@@ -55,12 +55,11 @@ class VentaLecturaSerializer(serializers.ModelSerializer):
         return f"{c.tipo_documento} {c.numero_documento}"
 
     def get_vendedor_nombre(self, obj):
-        if obj.vendedor:
-            perfil = getattr(obj.vendedor, 'perfil', None)
-            if perfil:
-                return perfil.usuario.get_full_name() or perfil.usuario.email
-            return obj.vendedor.get_full_name() or obj.vendedor.email
-        return None
+        # vendedor.perfil.usuario es el mismo User que obj.vendedor, asi que
+        # el nombre sale directo del registro ya cargado (Fase 6: sin N+1).
+        if not obj.vendedor:
+            return None
+        return obj.vendedor.get_full_name() or obj.vendedor.email
 
     def get_total_items(self, obj):
         return sum(d.cantidad for d in obj.detalles.all())
@@ -104,9 +103,6 @@ class MovimientoInventarioLecturaSerializer(serializers.ModelSerializer):
                   "motivo", "created_at"]
 
     def get_usuario_nombre(self, obj):
-        if obj.usuario:
-            perfil = getattr(obj.usuario, 'perfil', None)
-            if perfil:
-                return perfil.usuario.get_full_name() or perfil.usuario.email
-            return obj.usuario.get_full_name() or obj.usuario.email
-        return None
+        if not obj.usuario:
+            return None
+        return obj.usuario.get_full_name() or obj.usuario.email

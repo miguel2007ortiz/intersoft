@@ -89,6 +89,9 @@ class RolLecturaSerializer(serializers.Serializer):
                     .values_list("permiso__codigo", flat=True))
 
     def get_total_usuarios_activos(self, rol) -> int:
+        # Usa la anotacion del queryset (Fase 6) si existe.
+        if hasattr(rol, "total_usuarios_activos"):
+            return rol.total_usuarios_activos
         return Perfil.objects.filter(rol=rol, deleted_at__isnull=True,
                                      usuario__is_active=True).count()
 
