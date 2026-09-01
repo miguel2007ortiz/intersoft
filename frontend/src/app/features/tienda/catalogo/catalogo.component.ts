@@ -1,5 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, ElementRef, inject, signal, computed, OnInit, viewChild } from '@angular/core';
+import { Component, ElementRef, inject, signal, computed, OnInit, OnDestroy, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
@@ -17,15 +17,43 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
         <div class="contenedor barra-int">
           <a routerLink="/" class="logo">Inter<span>Soft</span> <em class="logo-market">Marketplace</em></a>
 
-          <div class="buscador">
+          <div class="buscador" (focusout)="onBuscadorBlur($event)">
             <svg class="buscador-icono" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
               <path d="M21 21l-4.3-4.3" />
             </svg>
             <input #campoBusqueda type="text" placeholder="Buscar productos..." [(ngModel)]="busqueda"
-                   (keyup.enter)="buscar()" (input)="onBusquedaInput()" class="input" />
+                   (keyup.enter)="buscar()" (input)="onBusquedaInput()" (focus)="onBuscadorFocus()"
+                   role="combobox" aria-autocomplete="list" [attr.aria-expanded]="mostrarSugerencias()"
+                   aria-controls="lista-sugerencias" autocomplete="off" class="input" />
             <button type="button" class="btn-buscar" (click)="buscar()">Buscar</button>
+
+            @if (mostrarSugerencias()) {
+              <ul class="sugerencias" id="lista-sugerencias" role="listbox">
+                @if (cargandoSugerencias()) {
+                  <li class="sugerencia-info">Buscando...</li>
+                } @else if (!sugerencias().length) {
+                  <li class="sugerencia-info">Sin resultados para "{{ busqueda }}"</li>
+                } @else {
+                  @for (s of sugerencias(); track s.id) {
+                    <li role="option">
+                      <button type="button" class="sugerencia" (click)="seleccionarSugerencia(s)">
+                        @if (s.imagen) {
+                          <img [src]="s.imagen" [alt]="s.nombre" class="sugerencia-img" loading="lazy" />
+                        } @else {
+                          <span class="sugerencia-img sugerencia-img-vacia">{{ s.nombre.charAt(0) }}</span>
+                        }
+                        <span class="sugerencia-info-txt">
+                          <span class="sugerencia-nombre">{{ s.nombre }}</span>
+                          <span class="sugerencia-precio">\${{ s.precio | number }}</span>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                }
+              </ul>
+            }
           </div>
 
           <nav class="acciones">
@@ -53,9 +81,25 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
         </div>
       </header>
 
-      <section class="hero" appBrilloCursor>
-        <span class="orbe-fondo orbe-a"></span>
-        <span class="orbe-fondo orbe-b"></span>
+      <section class="hero" [class.hero-con-imagen]="heroSlides().length" appBrilloCursor
+               (mouseenter)="heroPausado.set(true)" (mouseleave)="heroPausado.set(false)">
+        @if (heroSlides().length) {
+          <div class="hero-carrusel" role="group" aria-roledescription="carousel" aria-label="Productos destacados">
+            @for (s of heroSlides(); track s.id; let i = $index) {
+              <div class="hero-slide" [class.hero-slide-activo]="i === heroIndex()"
+                   [style.background-image]="'linear-gradient(180deg, rgba(10,18,32,.25), rgba(10,18,32,.78)), url(' + s.imagen + ')'"
+                   [attr.aria-hidden]="i !== heroIndex()"></div>
+            }
+          </div>
+          <button type="button" class="hero-flecha hero-flecha-izq" (click)="heroAnterior()"
+                  aria-label="Banner anterior">&#10094;</button>
+          <button type="button" class="hero-flecha hero-flecha-der" (click)="heroSiguiente()"
+                  aria-label="Banner siguiente">&#10095;</button>
+        } @else {
+          <span class="orbe-fondo orbe-a"></span>
+          <span class="orbe-fondo orbe-b"></span>
+        }
+
         <div class="contenedor hero-int">
           <p class="etiqueta aparecer insignia-pulso">Empresas verificadas y activas</p>
           <h1 class="aparecer" style="--retraso: 90ms">
@@ -65,13 +109,39 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
             Un solo lugar para explorar el catalogo de tus proveedores favoritos, comparar precios
             y hacer seguimiento a tu pedido de principio a fin.
           </p>
+
+          @if (heroSlides().length) {
+            <button type="button" class="hero-destacado aparecer" style="--retraso: 220ms"
+                    (click)="abrirDetalle(heroSlides()[heroIndex()])">
+              Destacado: {{ heroSlides()[heroIndex()].nombre }} —
+              <strong>\${{ heroSlides()[heroIndex()].precio | number }}</strong>
+            </button>
+          }
+
           <div class="hero-acciones aparecer" style="--retraso: 270ms">
-            <button type="button" class="btn btn-primario" (click)="irAlCatalogo()">Explorar catalogo</button>
+            <button type="button" class="btn btn-primario" (click)="irAlCatalogo()">
+              <svg class="hero-cta-icono" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+                <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+              </svg>
+              Ver Ofertas Destacadas
+            </button>
             @if (!sesion()) {
               <a routerLink="/registro-comprador" class="btn btn-secundario">Crear cuenta gratis</a>
             }
           </div>
         </div>
+
+        @if (heroSlides().length > 1) {
+          <div class="hero-puntos" role="tablist" aria-label="Seleccionar banner">
+            @for (s of heroSlides(); track s.id; let i = $index) {
+              <button type="button" class="hero-punto" [class.hero-punto-activo]="i === heroIndex()"
+                      role="tab" [attr.aria-selected]="i === heroIndex()"
+                      [attr.aria-label]="'Ver banner ' + (i + 1)" (click)="irHeroSlide(i)"></button>
+            }
+          </div>
+        }
       </section>
 
       <section class="confianza" appRevelarAlEntrar>
@@ -375,6 +445,26 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
     }
     .btn-buscar:hover { opacity: .9; }
 
+    /* Sugerencias del buscador (autocompletado visual) */
+    .sugerencias {
+      position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 600;
+      background: #fff; border: 1px solid var(--linea); border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(15,23,42,.16); list-style: none; margin: 0; padding: 6px;
+      max-height: 360px; overflow-y: auto;
+    }
+    .sugerencia-info { padding: 10px 12px; font-size: 13.5px; color: var(--gris); }
+    .sugerencia {
+      width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px;
+      background: none; border: 0; border-radius: 8px; cursor: pointer; text-align: left;
+      font: inherit; transition: background .12s;
+    }
+    .sugerencia:hover, .sugerencia:focus-visible { background: var(--primario-suave); }
+    .sugerencia-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #f1f5f9; }
+    .sugerencia-img-vacia { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--primario); }
+    .sugerencia-info-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .sugerencia-nombre { font-size: 13.5px; font-weight: 600; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sugerencia-precio { font-size: 12.5px; color: var(--primario); font-weight: 700; }
+
     .acciones { display: flex; align-items: center; gap: var(--e3); }
     .cuenta { display: flex; align-items: center; gap: var(--e2); }
     .cuenta-nombre { font-size: 14px; font-weight: 600; color: var(--tinta); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -409,6 +499,7 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       content: ''; position: absolute; inset: 0; pointer-events: none;
       background: radial-gradient(420px circle at var(--brillo-x) var(--brillo-y), rgba(38,87,217,.16), transparent 70%);
     }
+    .hero-con-imagen::before { display: none; }
     .hero-int { position: relative; z-index: 1; text-align: center; max-width: 1100px; margin: 0 auto; padding: 0 var(--e4); }
     .orbe-a { width: 320px; height: 320px; top: -80px; left: -60px; }
     .orbe-b { width: 260px; height: 260px; bottom: -100px; right: -40px; animation-delay: 1.2s; }
@@ -420,6 +511,45 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
     .resaltado { color: var(--primario-osc); }
     .entrada { max-width: 560px; margin: 0 auto var(--e5); color: var(--gris); font-size: 16px; }
     .hero-acciones { display: flex; gap: var(--e3); justify-content: center; flex-wrap: wrap; }
+    .hero-cta-icono { width: 18px; height: 18px; }
+
+    /* Carousel de productos destacados en el hero */
+    .hero-carrusel { position: absolute; inset: 0; overflow: hidden; }
+    .hero-slide {
+      position: absolute; inset: 0; background-size: cover; background-position: center;
+      opacity: 0; transition: opacity .8s ease;
+    }
+    .hero-slide-activo { opacity: 1; }
+    .hero-con-imagen .etiqueta { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.3); color: #fff; backdrop-filter: blur(4px); }
+    .hero-con-imagen h1 { color: #fff; }
+    .hero-con-imagen .resaltado { color: #9dc0ff; }
+    .hero-con-imagen .entrada { color: rgba(255,255,255,.85); }
+    .hero-destacado {
+      display: inline-block; margin: 0 0 var(--e4); padding: 8px 16px; border-radius: 999px;
+      background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.3); color: #fff;
+      font: inherit; font-size: 13.5px; cursor: pointer; backdrop-filter: blur(4px); transition: background .15s;
+    }
+    .hero-destacado:hover { background: rgba(255,255,255,.24); }
+    .hero-destacado strong { font-weight: 700; }
+
+    .hero-flecha {
+      position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+      width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4);
+      background: rgba(15,23,42,.35); color: #fff; font-size: 15px; cursor: pointer;
+      opacity: .75; transition: opacity .2s, background .2s, transform .2s;
+    }
+    .hero-flecha:hover { opacity: 1; background: rgba(15,23,42,.55); }
+    .hero-flecha-izq { left: var(--e4); }
+    .hero-flecha-der { right: var(--e4); }
+    .hero-puntos {
+      position: absolute; bottom: var(--e4); left: 50%; transform: translateX(-50%); z-index: 2;
+      display: flex; gap: 8px;
+    }
+    .hero-punto {
+      width: 8px; height: 8px; border-radius: 999px; border: 0; padding: 0; cursor: pointer;
+      background: rgba(255,255,255,.45); transition: background .2s, width .2s;
+    }
+    .hero-punto-activo { width: 22px; background: #fff; }
 
     .confianza { border-bottom: 1px solid var(--linea); background: #fff; }
     .confianza-grilla {
@@ -638,16 +768,20 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       .skeleton::after { animation: none; }
       .exito-toast { animation: none; }
       .btn-agregar-ok, .btn-carrito-contador.rebote { animation: none; }
+      .hero-slide { transition: none; }
     }
 
     @media (max-width: 700px) {
       .barra-int { flex-wrap: wrap; }
       .buscador { order: 3; flex-basis: 100%; }
       .llamado-int { justify-content: center; text-align: center; }
+      .hero-flecha { width: 32px; height: 32px; font-size: 12px; }
+      .hero-flecha-izq { left: 8px; }
+      .hero-flecha-der { right: 8px; }
     }
   `],
 })
-export class CatalogoComponent implements OnInit {
+export class CatalogoComponent implements OnInit, OnDestroy {
   private readonly tienda = inject(TiendaService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
@@ -684,6 +818,18 @@ export class CatalogoComponent implements OnInit {
   /** Cantidad de tarjetas fantasma mientras carga el catalogo. */
   readonly esqueletos = Array.from({ length: 8 }, (_, i) => i);
 
+  // ---- Carousel de productos destacados en el hero ----
+  readonly heroSlides = signal<ProductoTienda[]>([]);
+  readonly heroIndex = signal(0);
+  readonly heroPausado = signal(false);
+  private heroTimer: ReturnType<typeof setInterval> | null = null;
+
+  // ---- Sugerencias del buscador (autocompletado) ----
+  readonly sugerencias = signal<ProductoTienda[]>([]);
+  readonly mostrarSugerencias = signal(false);
+  readonly cargandoSugerencias = signal(false);
+  private sugerenciasTimer: ReturnType<typeof setTimeout> | null = null;
+
   private busquedaTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly campoBusqueda = viewChild<ElementRef<HTMLInputElement>>('campoBusqueda');
 
@@ -696,6 +842,47 @@ export class CatalogoComponent implements OnInit {
   ngOnInit(): void {
     this.cargarCatalogo();
     this.cargarCarrito();
+    this.cargarDestacados();
+    this.heroTimer = setInterval(() => {
+      if (this.heroPausado() || this.heroSlides().length < 2) return;
+      this.heroSiguiente();
+    }, 5000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.heroTimer) clearInterval(this.heroTimer);
+    if (this.busquedaTimer) clearTimeout(this.busquedaTimer);
+    if (this.sugerenciasTimer) clearTimeout(this.sugerenciasTimer);
+  }
+
+  /** Banner del hero: productos con imagen mejor calificados (o mas recientes si nadie ha calificado aun). */
+  cargarDestacados(): void {
+    this.tienda.listarCatalogo({ orden: 'reciente' }).subscribe({
+      next: (r) => {
+        const conImagen = r.resultados.filter((p) => !!p.imagen);
+        const ordenados = [...conImagen].sort((a, b) =>
+          (b.promedio_calificacion ?? 0) - (a.promedio_calificacion ?? 0)
+          || b.total_comentarios - a.total_comentarios);
+        this.heroSlides.set(ordenados.slice(0, 5));
+      },
+      error: () => {},
+    });
+  }
+
+  heroSiguiente(): void {
+    const total = this.heroSlides().length;
+    if (!total) return;
+    this.heroIndex.set((this.heroIndex() + 1) % total);
+  }
+
+  heroAnterior(): void {
+    const total = this.heroSlides().length;
+    if (!total) return;
+    this.heroIndex.set((this.heroIndex() - 1 + total) % total);
+  }
+
+  irHeroSlide(i: number): void {
+    this.heroIndex.set(i);
   }
 
   cargarCatalogo(): void {
@@ -718,14 +905,58 @@ export class CatalogoComponent implements OnInit {
 
   /** Busqueda/filtro nuevo: siempre vuelve a la pagina 1. */
   buscar(): void {
+    this.mostrarSugerencias.set(false);
     this.pagina.set(1);
     this.cargarCatalogo();
   }
 
-  /** Debounce de 350ms para no disparar una request en cada tecla. */
+  /** Debounce de 350ms para la busqueda completa y de 250ms para las sugerencias. */
   onBusquedaInput(): void {
     if (this.busquedaTimer) clearTimeout(this.busquedaTimer);
     this.busquedaTimer = setTimeout(() => this.buscar(), 350);
+
+    const texto = this.busqueda.trim();
+    if (this.sugerenciasTimer) clearTimeout(this.sugerenciasTimer);
+    if (texto.length < 2) {
+      this.mostrarSugerencias.set(false);
+      this.sugerencias.set([]);
+      return;
+    }
+    this.sugerenciasTimer = setTimeout(() => this.cargarSugerencias(texto), 250);
+  }
+
+  onBuscadorFocus(): void {
+    if (this.busqueda.trim().length >= 2 && this.sugerencias().length) {
+      this.mostrarSugerencias.set(true);
+    }
+  }
+
+  /** Cierra el menu de sugerencias solo si el foco sale del contenedor por completo. */
+  onBuscadorBlur(evento: FocusEvent): void {
+    const contenedor = evento.currentTarget as HTMLElement;
+    const siguiente = evento.relatedTarget as Node | null;
+    if (!siguiente || !contenedor.contains(siguiente)) {
+      this.mostrarSugerencias.set(false);
+    }
+  }
+
+  cargarSugerencias(texto: string): void {
+    this.cargandoSugerencias.set(true);
+    this.mostrarSugerencias.set(true);
+    this.tienda.listarCatalogo({ busqueda: texto }).subscribe({
+      next: (r) => {
+        if (this.busqueda.trim() !== texto) return; // respuesta obsoleta, ya se escribio otra cosa
+        this.sugerencias.set(r.resultados.slice(0, 6));
+        this.cargandoSugerencias.set(false);
+      },
+      error: () => { this.cargandoSugerencias.set(false); this.sugerencias.set([]); },
+    });
+  }
+
+  seleccionarSugerencia(producto: ProductoTienda): void {
+    this.mostrarSugerencias.set(false);
+    this.busqueda = producto.nombre;
+    this.abrirDetalle(producto);
   }
 
   filtrarPorCategoria(categoriaId: string): void {
