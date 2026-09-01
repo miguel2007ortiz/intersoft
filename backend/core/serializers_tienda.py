@@ -24,7 +24,7 @@ class ProductoTiendaSerializer(serializers.ModelSerializer):
         model = Producto
         fields = ["id", "nombre", "sku", "precio", "stock",
                   "categoria", "categoria_nombre", "imagen", "descripcion",
-                  "empresa_id", "empresa_nombre",
+                  "empresa_id", "empresa_nombre", "created_at",
                   "promedio_calificacion", "total_comentarios"]
 
     def get_stock(self, obj):

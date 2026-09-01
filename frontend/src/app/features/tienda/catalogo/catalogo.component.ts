@@ -40,7 +40,14 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
               <a routerLink="/registro-comprador" class="btn btn-primario">Registrarse</a>
             }
             <a routerLink="/carrito" class="btn-carrito">
-              Carrito ({{ totalItems() }})
+              <svg class="btn-carrito-icono" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+              </svg>
+              Carrito
+              <span class="btn-carrito-contador" [class.rebote]="carritoAnimado()">{{ totalItems() }}</span>
             </a>
           </nav>
         </div>
@@ -152,21 +159,37 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
         } @else {
           <section class="grid">
             @for (p of productos(); track p.id; let i = $index) {
-              <div class="card tarjeta-flot aparecer" [style.--retraso.ms]="(i % 12) * 60"
+              <div class="card tarjeta-flot tarjeta-hover aparecer" [style.--retraso.ms]="(i % 12) * 60"
                    (dblclick)="abrirDetalle(p)" title="Doble click para ver el detalle">
                 <div class="card-img">
-                  @if (p.imagen) {
-                    <img [src]="p.imagen" [alt]="p.nombre" />
+                  @if (p.imagen && !imagenesFallidas().has(p.id)) {
+                    <img [src]="p.imagen" [alt]="p.nombre" loading="lazy" (error)="marcarImagenFallida(p.id)" />
                   } @else {
                     <div class="placeholder-img">{{ p.nombre.charAt(0) }}</div>
                   }
-                  @if (p.stock > 0 && p.stock <= 5) {
-                    <span class="badge badge-urgencia">¡Ultimas {{ p.stock }}!</span>
-                  }
+                  <div class="card-badges">
+                    @if (p.stock > 0 && p.stock <= 5) {
+                      <span class="badge badge-urgencia">¡Ultimas {{ p.stock }}!</span>
+                    }
+                    @if (esTopCalificado(p)) {
+                      <span class="badge badge-top">★ Top calificado</span>
+                    }
+                    @if (esNuevo(p)) {
+                      <span class="badge badge-nuevo">Nuevo</span>
+                    }
+                  </div>
                 </div>
                 <div class="card-body">
                   <span class="card-categoria">{{ p.categoria_nombre || 'Sin categoria' }}</span>
                   <h3 class="card-nombre">{{ p.nombre }}</h3>
+                  @if (p.total_comentarios > 0) {
+                    <p class="card-calificacion">
+                      <span class="estrellas-mini">{{ estrellasTexto(redondear(p.promedio_calificacion)) }}</span>
+                      {{ p.promedio_calificacion }} <span class="gris">({{ p.total_comentarios }})</span>
+                    </p>
+                  } @else {
+                    <p class="card-calificacion gris">Sin calificaciones aun</p>
+                  }
                   <p class="card-sku">SKU: {{ p.sku }}</p>
                   <div class="card-footer">
                     <span class="card-precio">\${{ p.precio | number }}</span>
@@ -178,9 +201,19 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
                         @if (agregandoId() === p.id) {
                           Agregando...
                         } @else if (agregadoId() === p.id) {
-                          ✓ Agregado
+                          <svg class="icono-check" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                          ¡Añadido!
                         } @else {
-                          + Carrito
+                          <svg class="icono-carrito" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="9" cy="21" r="1" />
+                            <circle cx="20" cy="21" r="1" />
+                            <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+                          </svg>
+                          Carrito
                         }
                       </button>
                     } @else {
@@ -210,13 +243,14 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
 
       @if (productoDetalle(); as p) {
         <div class="modal-fondo" (click)="cerrarDetalle()">
-          <div class="modal-caja" (click)="$event.stopPropagation()">
+          <div class="modal-caja" role="dialog" aria-modal="true" [attr.aria-label]="p.nombre"
+               (click)="$event.stopPropagation()">
             <button type="button" class="modal-cerrar" (click)="cerrarDetalle()" aria-label="Cerrar">✕</button>
 
             <div class="detalle">
               <div class="detalle-img">
-                @if (p.imagen) {
-                  <img [src]="p.imagen" [alt]="p.nombre" />
+                @if (p.imagen && !imagenesFallidas().has(p.id)) {
+                  <img [src]="p.imagen" [alt]="p.nombre" (error)="marcarImagenFallida(p.id)" />
                 } @else {
                   <div class="placeholder-img placeholder-grande">{{ p.nombre.charAt(0) }}</div>
                 }
@@ -346,11 +380,26 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
     .cuenta-nombre { font-size: 14px; font-weight: 600; color: var(--tinta); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .btn-sm { padding: 6px 12px; font-size: 13px; }
     .btn-carrito {
+      display: inline-flex; align-items: center; gap: 8px;
       padding: 8px 18px; background: var(--primario); color: #fff;
       border: 0; border-radius: 8px; font: inherit; font-size: 14px;
       font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap;
+      transition: opacity .15s, transform .15s;
     }
-    .btn-carrito:hover { opacity: .9; }
+    .btn-carrito:hover { opacity: .9; transform: translateY(-1px); }
+    .btn-carrito-icono { width: 18px; height: 18px; flex-shrink: 0; }
+    .btn-carrito-contador {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+      background: rgba(255,255,255,.25); font-size: 12px; font-weight: 700;
+    }
+    .btn-carrito-contador.rebote { animation: rebote-contador .5s cubic-bezier(.36,1.8,.4,1); }
+    @keyframes rebote-contador {
+      0%, 100% { transform: scale(1); }
+      30% { transform: scale(1.5); }
+      55% { transform: scale(.9); }
+      75% { transform: scale(1.15); }
+    }
 
     .hero {
       position: relative; overflow: hidden; padding: var(--e7) 0 var(--e6);
@@ -393,7 +442,7 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
       border: 1px solid var(--linea); border-radius: 999px; background: #fff;
       font: inherit; font-size: 13.5px; font-weight: 600; color: var(--tinta);
-      cursor: pointer; transition: border-color .15s, background .15s, color .15s, transform .15s;
+      cursor: pointer; transition: all .2s ease;
     }
     .chip:hover { border-color: var(--primario); color: var(--primario-osc); transform: translateY(-1px); }
     .chip-activo { background: var(--primario); border-color: var(--primario); color: #fff; }
@@ -421,41 +470,62 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
       gap: var(--e4);
     }
+    @media (min-width: 980px) {
+      .grid { grid-template-columns: repeat(4, 1fr); }
+    }
     .card {
       background: #fff; border: 1px solid var(--linea); border-radius: 12px;
       overflow: hidden;
     }
+    .tarjeta-hover { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+    .tarjeta-hover:hover {
+      transform: translateY(-6px); border-color: transparent;
+      box-shadow: 0 16px 32px rgba(15,23,42,.12), 0 4px 10px rgba(15,23,42,.06);
+    }
     .card-img {
-      position: relative; height: 160px; background: #f1f5f9; overflow: hidden;
+      position: relative; height: 180px; background: #f1f5f9; overflow: hidden;
       display: flex; align-items: center; justify-content: center;
     }
-    .card-img img { max-height: 100%; max-width: 100%; object-fit: contain; transition: transform .35s ease; }
-    .card:hover .card-img img { transform: scale(1.08); }
+    .card-img img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
+    .tarjeta-hover:hover .card-img img { transform: scale(1.08); }
     .placeholder-img {
       width: 60px; height: 60px; border-radius: 50%;
       background: var(--primario); color: #fff; font-size: 24px; font-weight: 700;
       display: flex; align-items: center; justify-content: center;
     }
+    .card-badges {
+      position: absolute; top: 8px; left: 8px; right: 8px;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+    }
     .badge {
-      position: absolute; top: 8px; left: 8px; padding: 4px 9px; border-radius: 999px;
+      padding: 4px 9px; border-radius: 999px; box-shadow: 0 2px 6px rgba(0,0,0,.08);
       font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
     }
     .badge-urgencia { background: #fef3f2; color: #b42318; border: 1px solid #fecdca; }
+    .badge-top { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .badge-nuevo { background: var(--primario-suave); color: var(--primario-osc); border: 1px solid #bfdbfe; }
     .card-body { padding: 14px; }
     .card-categoria { font-size: 12px; color: var(--primario); font-weight: 600; text-transform: uppercase; }
     .card-nombre { margin: 6px 0 4px; font-size: 16px; }
+    .card-calificacion { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: #b45309; }
+    .estrellas-mini { color: #f59e0b; letter-spacing: 1px; }
     .card-sku { margin: 0 0 12px; font-size: 12px; color: var(--gris); }
     .card-footer { display: flex; justify-content: space-between; align-items: center; }
     .card-precio { font-size: 18px; font-weight: 700; color: var(--primario); }
     .btn-agregar {
+      display: inline-flex; align-items: center; gap: 6px;
       padding: 6px 14px; background: var(--primario); color: #fff;
       border: 0; border-radius: 6px; font: inherit; font-size: 13px;
       font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s, background .2s;
     }
-    .btn-agregar:hover { opacity: .9; }
+    .icono-carrito, .icono-check { width: 15px; height: 15px; flex-shrink: 0; }
+    .btn-agregar:hover { opacity: .9; transform: translateY(-1px); }
     .btn-agregar:active { transform: scale(.94); }
     .btn-agregar:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-agregar-ok { background: #067647; }
+    .btn-agregar-ok { background: #067647; animation: pulso-ok .35s ease; }
+    @keyframes pulso-ok {
+      0% { transform: scale(1); } 50% { transform: scale(1.06); } 100% { transform: scale(1); }
+    }
     .sin-stock { font-size: 13px; color: #b42318; font-weight: 600; }
 
     /* Esqueletos de carga (shimmer) mientras llega el catalogo */
@@ -563,10 +633,11 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .card-img img, .btn-agregar, .chip { transition: none; }
-      .card:hover .card-img img { transform: none; }
+      .card-img img, .btn-agregar, .chip, .tarjeta-hover { transition: none; }
+      .tarjeta-hover:hover, .tarjeta-hover:hover .card-img img { transform: none; }
       .skeleton::after { animation: none; }
       .exito-toast { animation: none; }
+      .btn-agregar-ok, .btn-carrito-contador.rebote { animation: none; }
     }
 
     @media (max-width: 700px) {
@@ -590,6 +661,9 @@ export class CatalogoComponent implements OnInit {
   readonly agregandoId = signal<string | null>(null);
   readonly agregadoId = signal<string | null>(null);
   readonly exito = signal('');
+  readonly carritoAnimado = signal(false);
+  /** IDs de producto cuya imagen fallo al cargar; se muestra el placeholder. */
+  readonly imagenesFallidas = signal<Set<string>>(new Set());
 
   busqueda = '';
   categoriaSeleccionada = '';
@@ -688,6 +762,9 @@ export class CatalogoComponent implements OnInit {
         setTimeout(() => this.agregadoId.set(null), 1200);
         this.exito.set(`${producto.nombre} agregado al carrito`);
         setTimeout(() => this.exito.set(''), 3000);
+        this.carritoAnimado.set(false);
+        requestAnimationFrame(() => this.carritoAnimado.set(true));
+        setTimeout(() => this.carritoAnimado.set(false), 600);
       },
       error: (e) => { this.error.set(e.detalle || 'Error al agregar.'); this.agregandoId.set(null); },
     });
@@ -745,5 +822,24 @@ export class CatalogoComponent implements OnInit {
   /** Estrellas llenas/vacias en texto para mostrar la calificacion de otros. */
   estrellasTexto(calificacion: number): string {
     return '★'.repeat(calificacion) + '☆'.repeat(5 - calificacion);
+  }
+
+  redondear(valor: number | null): number {
+    return valor ? Math.round(valor) : 0;
+  }
+
+  /** Deja de intentar cargar la imagen rota; el template cae al placeholder. */
+  marcarImagenFallida(productoId: string): void {
+    this.imagenesFallidas.update((set) => new Set(set).add(productoId));
+  }
+
+  esTopCalificado(p: ProductoTienda): boolean {
+    return (p.promedio_calificacion ?? 0) >= 4.5 && p.total_comentarios >= 3;
+  }
+
+  /** Publicado en los ultimos 14 dias. */
+  esNuevo(p: ProductoTienda): boolean {
+    const dias = (Date.now() - new Date(p.created_at).getTime()) / 86_400_000;
+    return dias <= 14;
   }
 }

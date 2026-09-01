@@ -12,6 +12,7 @@ export interface ProductoTienda {
   descripcion: string;
   empresa_id: string;
   empresa_nombre: string;
+  created_at: string;
   promedio_calificacion: number | null;
   total_comentarios: number;
 }

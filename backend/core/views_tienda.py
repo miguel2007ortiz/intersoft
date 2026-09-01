@@ -115,7 +115,8 @@ class CatalogoPublicoView(APIView):
         por_pagina = 24
         inicio = (pagina - 1) * por_pagina
         serializer = ProductoTiendaSerializer(
-            productos[inicio:inicio + por_pagina], many=True)
+            productos[inicio:inicio + por_pagina], many=True,
+            context={"request": request})
 
         categorias = Categoria.objects.annotate(
             num_productos=Count('productos', filter=Q(
@@ -147,7 +148,7 @@ class CatalogoProductoDetailView(APIView):
                 {"codigo": "NO_ENCONTRADO",
                  "detalle": "Producto no encontrado."},
                 status=status.HTTP_404_NOT_FOUND)
-        return Response(ProductoTiendaSerializer(producto).data)
+        return Response(ProductoTiendaSerializer(producto, context={"request": request}).data)
 
 
 # ---------------------------- Comentarios ----------------------------------
