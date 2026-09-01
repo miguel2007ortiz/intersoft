@@ -1,16 +1,16 @@
-import { DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, ElementRef, inject, signal, computed, OnInit, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { ProductoTienda, CategoriaTienda } from '../../../core/models/tienda.model';
+import { ProductoTienda, CategoriaTienda, ComentarioProducto } from '../../../core/models/tienda.model';
 import { BrilloCursorDirective } from '../../../shared/directives/brillo-cursor.directive';
 import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-entrar.directive';
 
 @Component({
   selector: 'app-catalogo',
-  imports: [DecimalPipe, FormsModule, RouterLink, BrilloCursorDirective, RevelarAlEntrarDirective],
+  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, BrilloCursorDirective, RevelarAlEntrarDirective],
   template: `
     <div class="catalogo">
       <header class="barra aparecer">
@@ -152,7 +152,8 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
         } @else {
           <section class="grid">
             @for (p of productos(); track p.id; let i = $index) {
-              <div class="card tarjeta-flot aparecer" [style.--retraso.ms]="(i % 12) * 60">
+              <div class="card tarjeta-flot aparecer" [style.--retraso.ms]="(i % 12) * 60"
+                   (dblclick)="abrirDetalle(p)" title="Doble click para ver el detalle">
                 <div class="card-img">
                   @if (p.imagen) {
                     <img [src]="p.imagen" [alt]="p.nombre" />
@@ -205,6 +206,99 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
 
       @if (exito()) {
         <div class="exito-toast">{{ exito() }}</div>
+      }
+
+      @if (productoDetalle(); as p) {
+        <div class="modal-fondo" (click)="cerrarDetalle()">
+          <div class="modal-caja" (click)="$event.stopPropagation()">
+            <button type="button" class="modal-cerrar" (click)="cerrarDetalle()" aria-label="Cerrar">✕</button>
+
+            <div class="detalle">
+              <div class="detalle-img">
+                @if (p.imagen) {
+                  <img [src]="p.imagen" [alt]="p.nombre" />
+                } @else {
+                  <div class="placeholder-img placeholder-grande">{{ p.nombre.charAt(0) }}</div>
+                }
+              </div>
+
+              <div class="detalle-info">
+                <span class="card-categoria">{{ p.categoria_nombre || 'Sin categoria' }}</span>
+                <h2 class="detalle-nombre">{{ p.nombre }}</h2>
+                <p class="detalle-vendedor">Vendido por <strong>{{ p.empresa_nombre }}</strong></p>
+
+                @if (p.total_comentarios > 0) {
+                  <p class="detalle-calificacion">
+                    ★ {{ p.promedio_calificacion }} <span class="gris">({{ p.total_comentarios }} comentarios)</span>
+                  </p>
+                } @else {
+                  <p class="detalle-calificacion gris">Sin comentarios todavia</p>
+                }
+
+                <p class="detalle-precio">\${{ p.precio | number }}</p>
+                <p class="detalle-descripcion">{{ p.descripcion || 'Sin descripcion.' }}</p>
+
+                @if (p.stock > 0) {
+                  <button type="button" class="btn btn-primario"
+                          [disabled]="agregandoId() === p.id"
+                          (click)="agregarAlCarrito(p)">
+                    @if (agregandoId() === p.id) { Agregando... } @else { + Agregar al carrito }
+                  </button>
+                } @else {
+                  <span class="sin-stock">Sin stock</span>
+                }
+              </div>
+            </div>
+
+            <div class="comentarios">
+              <h3>Comentarios</h3>
+
+              @if (sesion()) {
+                <div class="form-comentario">
+                  <label>Tu calificacion</label>
+                  <div class="estrellas">
+                    @for (n of [1, 2, 3, 4, 5]; track n) {
+                      <button type="button" class="estrella" [class.estrella-activa]="n <= miCalificacion()"
+                              (click)="miCalificacion.set(n)">★</button>
+                    }
+                  </div>
+                  <textarea class="input" rows="2" placeholder="Que te parecio el producto? (opcional)"
+                            [(ngModel)]="miComentario"></textarea>
+                  @if (errorComentario()) {
+                    <p class="error-comentario">{{ errorComentario() }}</p>
+                  }
+                  <button type="button" class="btn btn-secundario btn-sm" [disabled]="enviandoComentario()"
+                          (click)="enviarComentario(p.id)">
+                    @if (enviandoComentario()) { Enviando... } @else { Publicar comentario }
+                  </button>
+                </div>
+              } @else {
+                <p class="gris"><a routerLink="/login">Inicia sesion</a> para dejar tu comentario.</p>
+              }
+
+              @if (cargandoComentarios()) {
+                <p class="gris">Cargando comentarios...</p>
+              } @else if (!comentarios().length) {
+                <p class="gris">Aun no hay comentarios para este producto.</p>
+              } @else {
+                <ul class="lista-comentarios">
+                  @for (c of comentarios(); track c.id) {
+                    <li>
+                      <div class="comentario-cabeza">
+                        <strong>{{ c.usuario_nombre || 'Comprador' }}</strong>
+                        <span class="comentario-estrellas">{{ estrellasTexto(c.calificacion) }}</span>
+                        <span class="gris">{{ c.created_at | date: 'dd/MM/yyyy' }}</span>
+                      </div>
+                      @if (c.comentario) {
+                        <p>{{ c.comentario }}</p>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          </div>
+        </div>
       }
 
       <section class="llamado" appRevelarAlEntrar>
@@ -413,6 +507,61 @@ import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
+    /* Modal de detalle de producto (doble click en la tarjeta) */
+    .modal-fondo {
+      position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, .55);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: var(--e5) var(--e4); overflow-y: auto;
+    }
+    .modal-caja {
+      position: relative; background: #fff; border-radius: 14px; max-width: 760px;
+      width: 100%; padding: var(--e5); margin-top: var(--e5);
+      box-shadow: 0 24px 60px rgba(0,0,0,.25);
+    }
+    .modal-cerrar {
+      position: absolute; top: 14px; right: 14px; width: 32px; height: 32px;
+      border-radius: 50%; border: 1px solid var(--linea); background: #fff;
+      cursor: pointer; font-size: 14px; color: var(--gris);
+    }
+    .modal-cerrar:hover { color: var(--tinta); border-color: var(--gris); }
+
+    .detalle { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e5); }
+    .detalle-img {
+      height: 280px; background: #f1f5f9; border-radius: 10px; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .detalle-img img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .placeholder-grande { width: 100px; height: 100px; font-size: 36px; }
+    .detalle-info { display: flex; flex-direction: column; gap: 6px; }
+    .detalle-nombre { margin: 0; font-size: 22px; }
+    .detalle-vendedor { margin: 0; font-size: 14px; color: var(--gris); }
+    .detalle-calificacion { margin: 0; font-size: 14px; color: #b45309; font-weight: 600; }
+    .detalle-precio { margin: 6px 0; font-size: 24px; font-weight: 700; color: var(--primario); }
+    .detalle-descripcion { margin: 0 0 var(--e3); font-size: 14px; color: var(--tinta); line-height: 1.5; }
+    .gris { color: var(--gris); }
+
+    .comentarios { margin-top: var(--e5); padding-top: var(--e5); border-top: 1px solid var(--linea); }
+    .comentarios h3 { margin: 0 0 var(--e3); font-size: 16px; }
+    .form-comentario {
+      display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--e4);
+      padding: var(--e3); background: #f8fafc; border-radius: 10px;
+    }
+    .estrellas { display: flex; gap: 4px; }
+    .estrella { border: 0; background: none; font-size: 20px; color: #d1d5db; cursor: pointer; padding: 0; }
+    .estrella-activa { color: #f59e0b; }
+    .error-comentario { margin: 0; color: #b42318; font-size: 13px; }
+    .lista-comentarios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--e3); }
+    .lista-comentarios li { padding-bottom: var(--e3); border-bottom: 1px solid var(--linea); }
+    .lista-comentarios li:last-child { border-bottom: 0; padding-bottom: 0; }
+    .comentario-cabeza { display: flex; align-items: center; gap: 10px; font-size: 13.5px; margin-bottom: 4px; }
+    .comentario-estrellas { color: #f59e0b; }
+    .lista-comentarios p { margin: 0; font-size: 14px; color: var(--tinta); }
+
+    @media (max-width: 640px) {
+      .detalle { grid-template-columns: 1fr; }
+      .detalle-img { height: 200px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .card-img img, .btn-agregar, .chip { transition: none; }
       .card:hover .card-img img { transform: none; }
@@ -449,6 +598,15 @@ export class CatalogoComponent implements OnInit {
   readonly totalItems = signal(0);
   readonly pagina = signal(1);
   readonly totalPaginas = signal(1);
+
+  // ---- Detalle de producto (modal por doble click) ----
+  readonly productoDetalle = signal<ProductoTienda | null>(null);
+  readonly comentarios = signal<ComentarioProducto[]>([]);
+  readonly cargandoComentarios = signal(false);
+  readonly miCalificacion = signal(5);
+  miComentario = '';
+  readonly enviandoComentario = signal(false);
+  readonly errorComentario = signal('');
   /** Cantidad de tarjetas fantasma mientras carga el catalogo. */
   readonly esqueletos = Array.from({ length: 8 }, (_, i) => i);
 
@@ -537,5 +695,55 @@ export class CatalogoComponent implements OnInit {
 
   salir(): void {
     this.auth.cerrarSesion();
+  }
+
+  // ---- Detalle de producto ----
+  abrirDetalle(producto: ProductoTienda): void {
+    this.productoDetalle.set(producto);
+    this.miCalificacion.set(5);
+    this.miComentario = '';
+    this.errorComentario.set('');
+    this.cargarComentarios(producto.id);
+  }
+
+  cerrarDetalle(): void {
+    this.productoDetalle.set(null);
+    this.comentarios.set([]);
+  }
+
+  cargarComentarios(productoId: string): void {
+    this.cargandoComentarios.set(true);
+    this.tienda.listarComentarios(productoId).subscribe({
+      next: (r) => { this.comentarios.set(r.resultados); this.cargandoComentarios.set(false); },
+      error: () => this.cargandoComentarios.set(false),
+    });
+  }
+
+  enviarComentario(productoId: string): void {
+    if (!this.auth.estaAutenticado()) {
+      this.router.navigate(['/login']);
+      return;
+    }
+    this.enviandoComentario.set(true);
+    this.errorComentario.set('');
+    this.tienda.comentarProducto(productoId, {
+      calificacion: this.miCalificacion(),
+      comentario: this.miComentario.trim(),
+    }).subscribe({
+      next: () => {
+        this.miComentario = '';
+        this.enviandoComentario.set(false);
+        this.cargarComentarios(productoId);
+      },
+      error: (e) => {
+        this.errorComentario.set(e.detalle || 'No se pudo publicar el comentario.');
+        this.enviandoComentario.set(false);
+      },
+    });
+  }
+
+  /** Estrellas llenas/vacias en texto para mostrar la calificacion de otros. */
+  estrellasTexto(calificacion: number): string {
+    return '★'.repeat(calificacion) + '☆'.repeat(5 - calificacion);
   }
 }

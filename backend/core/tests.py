@@ -6,8 +6,8 @@ from rest_framework.test import APIClient
 from cuentas.models import Perfil, Rol
 
 from .models import (Camara, Categoria, Carrito, CarritoItem, Cliente,
-                     DetalleVenta, Empresa, MovimientoInventario,
-                     Notificacion, Producto, Venta)
+                     ComentarioProducto, DetalleVenta, Empresa,
+                     MovimientoInventario, Notificacion, Producto, Venta)
 
 
 class BaseCoreTest(TestCase):
@@ -1024,6 +1024,58 @@ class MarketplaceCatalogoTest(BaseMarketplaceTest):
         resp = APIClient().get("/api/tienda/catalogo/")
         ids = {p["id"] for p in resp.data["resultados"]}
         self.assertNotIn(str(self.producto_inactivo.id), ids)
+
+
+class ComentarioProductoTest(BaseMarketplaceTest):
+    """Reseñas/comentarios de productos del marketplace."""
+
+    def test_detalle_incluye_empresa_y_calificacion_vacia(self):
+        resp = APIClient().get(f"/api/tienda/catalogo/{self.producto_a.id}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["empresa_nombre"], "Vendedor A")
+        self.assertIsNone(resp.data["promedio_calificacion"])
+        self.assertEqual(resp.data["total_comentarios"], 0)
+
+    def test_anonimo_no_puede_comentar(self):
+        resp = APIClient().post(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+            {"calificacion": 5, "comentario": "Excelente"}, format="json")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_autenticado_comenta_y_aparece_en_el_listado(self):
+        api = self.api_como(self.comprador)
+        resp = api.post(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+            {"calificacion": 4, "comentario": "Buena calidad"}, format="json")
+        self.assertEqual(resp.status_code, 201)
+
+        listado = APIClient().get(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/")
+        self.assertEqual(listado.status_code, 200)
+        self.assertEqual(len(listado.data["resultados"]), 1)
+        self.assertEqual(listado.data["resultados"][0]["calificacion"], 4)
+
+        detalle = APIClient().get(f"/api/tienda/catalogo/{self.producto_a.id}/")
+        self.assertEqual(detalle.data["promedio_calificacion"], 4.0)
+        self.assertEqual(detalle.data["total_comentarios"], 1)
+
+    def test_comentar_dos_veces_actualiza_el_mismo(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+                 {"calificacion": 3, "comentario": "Regular"}, format="json")
+        api.post(f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+                 {"calificacion": 5, "comentario": "Cambie de opinion, excelente"},
+                 format="json")
+        self.assertEqual(
+            ComentarioProducto.objects.filter(
+                producto=self.producto_a, usuario=self.comprador).count(), 1)
+
+    def test_calificacion_fuera_de_rango_rechazada(self):
+        api = self.api_como(self.comprador)
+        resp = api.post(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+            {"calificacion": 7}, format="json")
+        self.assertEqual(resp.status_code, 400)
 
 
 class MarketplaceCarritoTest(BaseMarketplaceTest):

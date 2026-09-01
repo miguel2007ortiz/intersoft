@@ -2,9 +2,11 @@
 
 from decimal import Decimal
 
+from django.db import models
 from rest_framework import serializers
 
-from .models import Carrito, CarritoItem, Cliente, Cupon, Producto, Categoria, Venta
+from .models import (Carrito, CarritoItem, Cliente, ComentarioProducto,
+                     Cupon, Producto, Categoria, Venta)
 from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
@@ -12,18 +14,55 @@ from .serializers_ventas import DetalleVentaLecturaSerializer
 
 class ProductoTiendaSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    empresa_id = serializers.CharField(source='empresa.id', read_only=True)
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
     stock = serializers.SerializerMethodField()
+    promedio_calificacion = serializers.SerializerMethodField()
+    total_comentarios = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
         fields = ["id", "nombre", "sku", "precio", "stock",
-                  "categoria", "categoria_nombre", "imagen", "descripcion"]
+                  "categoria", "categoria_nombre", "imagen", "descripcion",
+                  "empresa_id", "empresa_nombre",
+                  "promedio_calificacion", "total_comentarios"]
 
     def get_stock(self, obj):
         # Ocultar el stock real a visitantes anonimos de la tienda publica.
         if self.context.get("anonimo"):
             return None
         return obj.stock
+
+    def get_promedio_calificacion(self, obj):
+        # Usa la anotacion del queryset si esta disponible (evita N+1 en
+        # listados); si no, calcula al vuelo (ej. detalle de un solo producto).
+        if hasattr(obj, '_promedio_calificacion'):
+            promedio = obj._promedio_calificacion
+        else:
+            promedio = obj.comentarios.aggregate(models.Avg('calificacion'))['calificacion__avg']
+        return round(promedio, 1) if promedio is not None else None
+
+    def get_total_comentarios(self, obj):
+        if hasattr(obj, '_total_comentarios'):
+            return obj._total_comentarios
+        return obj.comentarios.count()
+
+
+# --------------------------- Comentarios ----------------------------------
+
+class ComentarioProductoSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.CharField(source='usuario.get_full_name', read_only=True)
+
+    class Meta:
+        model = ComentarioProducto
+        fields = ["id", "usuario_nombre", "calificacion", "comentario", "created_at"]
+        read_only_fields = ["id", "usuario_nombre", "created_at"]
+
+
+class ComentarioProductoEscrituraSerializer(serializers.Serializer):
+    calificacion = serializers.IntegerField(min_value=1, max_value=5)
+    comentario = serializers.CharField(required=False, allow_blank=True,
+                                       max_length=1000, default="")
 
 
 class CategoriaTiendaSerializer(serializers.ModelSerializer):

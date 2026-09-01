@@ -10,6 +10,23 @@ export interface ProductoTienda {
   categoria_nombre: string | null;
   imagen: string | null;
   descripcion: string;
+  empresa_id: string;
+  empresa_nombre: string;
+  promedio_calificacion: number | null;
+  total_comentarios: number;
+}
+
+export interface ComentarioProducto {
+  id: string;
+  usuario_nombre: string;
+  calificacion: number;
+  comentario: string;
+  created_at: string;
+}
+
+export interface DatosComentario {
+  calificacion: number;
+  comentario?: string;
 }
 
 export interface CategoriaTienda {

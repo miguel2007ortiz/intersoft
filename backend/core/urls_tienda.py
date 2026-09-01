@@ -14,6 +14,8 @@ urlpatterns = [
     # Catálogo público (sin auth) - compatibilidad (scoped a la empresa del usuario)
     path("tienda/catalogo/", views_tienda.CatalogoPublicoView.as_view()),
     path("tienda/catalogo/<uuid:id>/", views_tienda.CatalogoProductoDetailView.as_view()),
+    path("tienda/catalogo/<uuid:id>/comentarios/",
+         views_tienda.ComentariosProductoView.as_view()),
 
     # Cupones
     path("tienda/cupones/", views_tienda.CuponesView.as_view()),

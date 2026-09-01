@@ -107,6 +107,32 @@ class Producto(TimeStampedModel):
         return self.stock <= self.stock_minimo
 
 
+class ComentarioProducto(TimeStampedModel):
+    """Reseña/comentario de un comprador sobre un producto del marketplace.
+
+    Un usuario autenticado deja como maximo un comentario por producto
+    (unique_together); si vuelve a comentar, se actualiza el existente
+    (ver ComentarioProductoSerializer)."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='comentarios')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='comentarios_productos')
+    calificacion = models.PositiveSmallIntegerField()
+    comentario = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'comentario_producto'
+        unique_together = ('producto', 'usuario')
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(calificacion__gte=1) & models.Q(calificacion__lte=5),
+                name='comentario_calificacion_entre_1_y_5'),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto} ({self.calificacion}/5)"
+
+
 class Cliente(TimeStampedModel):
     TIPO_DOC_CHOICES = [('CC', 'Cedula de Ciudadania'), ('NIT', 'NIT'),
                         ('CE', 'Cedula de Extranjeria'), ('PAS', 'Pasaporte')]

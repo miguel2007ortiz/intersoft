@@ -4,7 +4,8 @@ import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Carrito, CarritoItem, CategoriaTienda, CheckoutResponse,
-  Cupon, DatosComprador, ErrorTienda, Pedido, ProductoTienda,
+  ComentarioProducto, Cupon, DatosComentario, DatosComprador,
+  ErrorTienda, Pedido, ProductoTienda,
 } from '../models/tienda.model';
 
 interface Lista<T> {
@@ -33,6 +34,20 @@ export class TiendaService {
   obtenerProducto(id: string): Observable<ProductoTienda> {
     return this.http.get<ProductoTienda>(`${this.api}/catalogo/${id}/`)
       .pipe(capturarError<ProductoTienda>());
+  }
+
+  // ---- Comentarios / reseñas ----
+  listarComentarios(productoId: string): Observable<{ resultados: ComentarioProducto[] }> {
+    return this.http.get<{ resultados: ComentarioProducto[] }>(
+      `${this.api}/catalogo/${productoId}/comentarios/`)
+      .pipe(capturarError<{ resultados: ComentarioProducto[] }>());
+  }
+
+  /** Deja (o actualiza) el comentario propio sobre un producto. Requiere sesion. */
+  comentarProducto(productoId: string, datos: DatosComentario): Observable<ComentarioProducto> {
+    return this.http.post<ComentarioProducto>(
+      `${this.api}/catalogo/${productoId}/comentarios/`, datos)
+      .pipe(capturarError<ComentarioProducto>());
   }
 
   // ---- Cupones ----

@@ -11,7 +11,7 @@ from decimal import Decimal
 import os
 
 from django.db import models, transaction
-from django.db.models import Q, Sum, Count
+from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -21,11 +21,13 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (Carrito, CarritoItem, Categoria, Cliente, Cupon,
-                     DetalleVenta, Empresa, MovimientoInventario, Notificacion,
+from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
+                     Cupon, DetalleVenta, Empresa, MovimientoInventario, Notificacion,
                      Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
+                                  ComentarioProductoEscrituraSerializer,
+                                  ComentarioProductoSerializer,
                                   CompletarCompradorSerializer, CuponSerializer,
                                   CuponValidarSerializer, PedidoCompradorSerializer,
                                   ProductoTiendaSerializer)
@@ -66,7 +68,9 @@ class CatalogoPublicoView(APIView):
     def get(self, request):
         productos = Producto.objects.filter(
             activo=True, deleted_at__isnull=True
-        ).select_related('categoria')
+        ).select_related('categoria', 'empresa').annotate(
+            _promedio_calificacion=Avg('comentarios__calificacion'),
+            _total_comentarios=Count('comentarios', distinct=True))
 
         busqueda = request.query_params.get('busqueda', '').strip()
         if busqueda:
@@ -135,13 +139,57 @@ class CatalogoProductoDetailView(APIView):
     def get(self, request, id):
         producto = Producto.objects.filter(
             activo=True, deleted_at__isnull=True, id=id
-        ).select_related('categoria').first()
+        ).select_related('categoria', 'empresa').annotate(
+            _promedio_calificacion=Avg('comentarios__calificacion'),
+            _total_comentarios=Count('comentarios', distinct=True)).first()
         if not producto:
             return Response(
                 {"codigo": "NO_ENCONTRADO",
                  "detalle": "Producto no encontrado."},
                 status=status.HTTP_404_NOT_FOUND)
         return Response(ProductoTiendaSerializer(producto).data)
+
+
+# ---------------------------- Comentarios ----------------------------------
+
+class ComentariosProductoView(APIView):
+    """GET lista comentarios de un producto (publico) / POST deja el propio
+    (autenticado; si ya comento, actualiza su comentario existente)."""
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, id):
+        producto = Producto.objects.filter(
+            activo=True, deleted_at__isnull=True, id=id).first()
+        if not producto:
+            return Response(
+                {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND)
+        comentarios = producto.comentarios.select_related('usuario')
+        return Response({"resultados": ComentarioProductoSerializer(comentarios, many=True).data})
+
+    def post(self, request, id):
+        producto = Producto.objects.filter(
+            activo=True, deleted_at__isnull=True, id=id).first()
+        if not producto:
+            return Response(
+                {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND)
+
+        entrada = ComentarioProductoEscrituraSerializer(data=request.data)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS", "errores": entrada.errors},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        comentario, _creado = ComentarioProducto.objects.update_or_create(
+            producto=producto, usuario=request.user,
+            defaults=entrada.validated_data)
+        return Response(ComentarioProductoSerializer(comentario).data,
+                        status=status.HTTP_201_CREATED)
 
 
 # ------------------------------ Cupones ----------------------------------
