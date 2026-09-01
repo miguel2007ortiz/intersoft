@@ -851,6 +851,29 @@ class CamarasApiTest(BaseCatalogoTest):
         nombres = [c["nombre"] for c in api.get("/api/camaras/").json()["resultados"]]
         self.assertNotIn("Camara ajena", nombres)
 
+    def test_url_stream_invalida_rechazada(self):
+        res = self.api_como(self.admin).post(
+            "/api/camaras/",
+            {"nombre": "Bodega", "url_stream": "no-es-una-url"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_url_stream_vacia_permitida(self):
+        res = self.api_como(self.admin).post(
+            "/api/camaras/", {"nombre": "Bodega", "url_stream": ""}, format="json")
+        self.assertEqual(res.status_code, 201)
+
+    def test_filtro_activas_invalido_rechazado(self):
+        res = self.api_como(self.admin).get("/api/camaras/?activas=si")
+        self.assertEqual(res.status_code, 400)
+
+    def test_listado_incluye_paginacion(self):
+        api = self.api_como(self.admin)
+        api.post("/api/camaras/", self.DATOS, format="json")
+        cuerpo = api.get("/api/camaras/").json()
+        self.assertIn("total", cuerpo)
+        self.assertIn("pagina", cuerpo)
+        self.assertIn("total_paginas", cuerpo)
+
     def test_grabacion_historica_no_disponible(self):
         api = self.api_como(self.admin)
         camara = api.post("/api/camaras/", self.DATOS, format="json").json()

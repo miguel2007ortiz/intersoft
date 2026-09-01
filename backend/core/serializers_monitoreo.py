@@ -5,6 +5,8 @@ Todo queda restringido al ADMINISTRADOR en las vistas. Respecto a
 a `estado != 'nueva'`.
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from .models import Camara, Notificacion
@@ -23,6 +25,16 @@ class CamaraSerializer(serializers.ModelSerializer):
         valor = (valor or '').strip()
         if not valor:
             raise serializers.ValidationError("El nombre de la camara es obligatorio.")
+        return valor
+
+    def validate_url_stream(self, valor):
+        valor = (valor or '').strip()
+        if not valor:
+            return valor
+        try:
+            URLValidator(schemes=['http', 'https', 'rtsp'])(valor)
+        except DjangoValidationError:
+            raise serializers.ValidationError("La URL del stream no es valida.")
         return valor
 
 

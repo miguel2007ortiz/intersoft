@@ -27,14 +27,40 @@ def _obtener_empresa(request):
 class CamarasView(APIView):
     """Lista y crea camaras de la empresa (solo ADMINISTRADOR)."""
     permission_classes = [IsAuthenticated, EsAdministrador]
+    # Alto a proposito: el frontend actual no tiene controles de pagina,
+    # asi que una empresa real (decenas de camaras, no miles) sigue viendo
+    # el listado completo en la pagina 1 sin cambios de UI.
+    POR_PAGINA = 100
 
     def get(self, request):
         empresa = _obtener_empresa(request)
         qs = Camara.objects.filter(empresa=empresa, deleted_at__isnull=True)
-        if request.query_params.get('activas') == '1':
-            qs = qs.filter(activa=True)
-        datos = CamaraSerializer(qs, many=True).data
-        return Response({"resultados": datos})
+
+        activas = request.query_params.get('activas')
+        if activas is not None:
+            if activas not in ('0', '1'):
+                return Response(
+                    {"codigo": "DATOS_INVALIDOS",
+                     "detalle": "El filtro 'activas' solo acepta '0' o '1'."},
+                    status=status.HTTP_400_BAD_REQUEST)
+            qs = qs.filter(activa=(activas == '1'))
+
+        qs = qs.order_by('nombre')
+        total = qs.count()
+        try:
+            pagina = max(int(request.query_params.get('pagina', 1)), 1)
+        except (TypeError, ValueError):
+            pagina = 1
+        inicio = (pagina - 1) * self.POR_PAGINA
+        datos = CamaraSerializer(
+            qs[inicio:inicio + self.POR_PAGINA], many=True).data
+        return Response({
+            "resultados": datos,
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": self.POR_PAGINA,
+            "total_paginas": max((total + self.POR_PAGINA - 1) // self.POR_PAGINA, 1),
+        })
 
     def post(self, request):
         empresa = _obtener_empresa(request)
