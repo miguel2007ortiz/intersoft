@@ -48,6 +48,7 @@ export interface Producto {
   activo: boolean;
   stock_bajo: boolean;
   tiene_ventas: boolean;
+  imagen: string | null;
 }
 
 export interface DatosProducto {
@@ -58,6 +59,8 @@ export interface DatosProducto {
   precio: number;
   stock: number;
   stock_minimo: number;
+  /** Archivo nuevo a subir (opcional); ausente = conservar la imagen actual. */
+  imagen?: File | null;
 }
 
 export interface Categoria {

@@ -71,13 +71,28 @@ export class CatalogoService {
   }
 
   crearProducto(datos: DatosProducto): Observable<Producto> {
-    return this.http.post<Producto>(`${this.api}/productos/`, datos)
+    return this.http.post<Producto>(`${this.api}/productos/`, this.cuerpoProducto(datos))
       .pipe(capturarError<Producto>());
   }
 
   editarProducto(id: string, datos: Partial<DatosProducto>): Observable<Producto> {
-    return this.http.patch<Producto>(`${this.api}/productos/${id}/`, datos)
+    return this.http.patch<Producto>(`${this.api}/productos/${id}/`, this.cuerpoProducto(datos))
       .pipe(capturarError<Producto>());
+  }
+
+  /** Si hay un archivo de imagen nuevo, arma FormData (multipart); si no,
+   * manda JSON normal (mas liviano, y permite mandar categoria_id: null). */
+  private cuerpoProducto(datos: Partial<DatosProducto>): FormData | Partial<DatosProducto> {
+    if (!(datos.imagen instanceof File)) {
+      const { imagen, ...resto } = datos;
+      return resto;
+    }
+    const forma = new FormData();
+    for (const [clave, valor] of Object.entries(datos)) {
+      if (valor === null || valor === undefined) continue;
+      forma.append(clave, valor instanceof File ? valor : String(valor));
+    }
+    return forma;
   }
 
   cambiarEstadoProducto(id: string, accion: 'desactivar' | 'reactivar'): Observable<Producto> {

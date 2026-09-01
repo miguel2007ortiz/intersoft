@@ -44,6 +44,14 @@
                     placeholder="Detalles del producto..."></textarea>
         </div>
 
+        <div class="campo">
+          <label for="imagen">Imagen</label>
+          <input id="imagen" type="file" accept="image/*" (change)="seleccionarImagen($event)" />
+          @if (imagenPreview()) {
+            <img class="preview-imagen" [src]="imagenPreview()" alt="Vista previa" />
+          }
+        </div>
+
         <div class="fila-triple">
           <div class="campo">
             <label for="categoria_id">Categoria</label>
@@ -122,9 +130,14 @@
           <tbody>
             @for (p of productos(); track p.id) {
               <tr>
-                <td>
-                  <strong>{{ p.nombre }}</strong>
-                  <span class="linea-dato gris">{{ p.sku }}</span>
+                <td class="celda-producto">
+                  @if (p.imagen) {
+                    <img class="miniatura" [src]="p.imagen" [alt]="p.nombre" />
+                  }
+                  <div>
+                    <strong>{{ p.nombre }}</strong>
+                    <span class="linea-dato gris">{{ p.sku }}</span>
+                  </div>
                 </td>
                 <td>{{ p.categoria_nombre || '—' }}</td>
                 <td>${{ p.precio }}</td>

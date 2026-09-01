@@ -154,7 +154,7 @@ class ProductoLecturaSerializer(serializers.ModelSerializer):
         model = Producto
         fields = ["id", "nombre", "descripcion", "sku", "categoria_id",
                   "categoria_nombre", "precio", "stock", "stock_minimo",
-                  "activo", "stock_bajo", "tiene_ventas", "created_at"]
+                  "activo", "stock_bajo", "tiene_ventas", "imagen", "created_at"]
 
     def get_categoria_id(self, producto):
         return str(producto.categoria_id) if producto.categoria_id else None
@@ -175,11 +175,12 @@ class ProductoEscrituraSerializer(serializers.ModelSerializer):
         # estado solo cambia con los endpoints /desactivar/ y /reactivar/
         # (evita que un formulario sin checkbox lo apague por accidente).
         fields = ["nombre", "descripcion", "sku", "categoria_id", "precio",
-                  "stock", "stock_minimo"]
+                  "stock", "stock_minimo", "imagen"]
         extra_kwargs = {
             "precio": {"min_value": 0},
             "stock": {"min_value": 0},          # regla fase 3: stock >= 0
             "stock_minimo": {"min_value": 0},
+            "imagen": {"required": False, "allow_null": True},
         }
 
     def validate_categoria_id(self, valor):
