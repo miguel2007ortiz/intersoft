@@ -11,6 +11,7 @@ Cubre los huecos de cobertura y las correcciones de la fase 5:
 
 import threading
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
@@ -24,6 +25,7 @@ from rest_framework.test import APIClient
 from .models import (Camara, Carrito, CarritoItem, Categoria, Cliente, Cupon,
                      Empresa, FacturaElectronica, MovimientoInventario,
                      NotaCredito, Producto, Venta)
+from .services.dian_adapter import RespuestaDIAN
 
 
 class BaseFase5Test(TestCase):
@@ -293,6 +295,78 @@ class FacturacionDobleTest(BaseFase5Test):
                              {"venta_id": str(venta.id)}, format="json")
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "ESTADO_INVALIDO")
+
+
+# -------------------- Fase 4: comprobantes PDF/XML -------------------------
+# El adaptador mock de la DIAN tiene fallos aleatorios (10% factura, 5%
+# nota credito), asi que estas pruebas fuerzan una respuesta aprobada
+# parcheando el adaptador, en vez de depender del azar.
+
+class ComprobantesDianTest(BaseFase5Test):
+    # MEDIA_ROOT ya apunta a un directorio temporal en tests (ver
+    # intersoft/settings.py), asi que estos archivos no ensucian el repo.
+    RESPUESTA_APROBADA = RespuestaDIAN(
+        aprobada=True, cufe="CUFE-DE-PRUEBA",
+        mensaje="Factura aprobada por la DIAN.",
+        comprobante_pdf="contenido pdf de prueba",
+        comprobante_xml="<FacturaElectronica/>",
+    )
+
+    def test_generar_factura_aprobada_guarda_pdf_y_xml(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        with patch("core.views_facturacion.enviar_factura",
+                  return_value=self.RESPUESTA_APROBADA):
+            respuesta = api.post("/api/facturacion/",
+                                 {"venta_id": str(venta.id)}, format="json")
+        self.assertEqual(respuesta.status_code, 201)
+        factura = FacturaElectronica.objects.get(venta=venta)
+        self.assertEqual(factura.estado, "aprobada")
+        self.assertTrue(factura.pdf.name)
+        self.assertTrue(factura.xml.name)
+        self.assertEqual(factura.pdf.read().decode(), "contenido pdf de prueba")
+        self.assertEqual(factura.xml.read().decode(), "<FacturaElectronica/>")
+
+    def test_reintentar_factura_aprobada_guarda_pdf_y_xml(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(
+            venta=venta, numero=f"FE-{venta.numero_factura}",
+            estado="fallida", motivo_rechazo="Servicio no disponible",
+            intentos=1)
+        with patch("core.views_facturacion.enviar_factura",
+                  return_value=self.RESPUESTA_APROBADA):
+            respuesta = api.post(f"/api/facturacion/{factura.id}/reintentar/")
+        self.assertEqual(respuesta.status_code, 200)
+        factura.refresh_from_db()
+        self.assertEqual(factura.estado, "aprobada")
+        self.assertTrue(factura.pdf.name)
+        self.assertTrue(factura.xml.name)
+
+    def test_crear_nota_credito_aprobada_guarda_pdf_y_xml(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        FacturaElectronica.objects.create(
+            venta=venta, numero=f"FE-{venta.numero_factura}",
+            estado="aprobada", cufe="CUFE-FACTURA")
+        respuesta_nc = RespuestaDIAN(
+            aprobada=True, cufe="CUFE-NC-PRUEBA",
+            mensaje="Nota credito aprobada por la DIAN.",
+            comprobante_pdf="contenido pdf nota credito",
+            comprobante_xml="<NotaCredito/>",
+        )
+        with patch("core.views_facturacion.enviar_nota_credito",
+                  return_value=respuesta_nc):
+            respuesta = api.post("/api/notas-credito/",
+                                 {"venta_id": str(venta.id),
+                                  "motivo": "Producto defectuoso"}, format="json")
+        self.assertEqual(respuesta.status_code, 201)
+        nota = NotaCredito.objects.get(venta_original=venta)
+        self.assertEqual(nota.estado, "aprobada")
+        self.assertTrue(nota.pdf.name)
+        self.assertTrue(nota.xml.name)
+        self.assertEqual(nota.pdf.read().decode(), "contenido pdf nota credito")
+        self.assertEqual(nota.xml.read().decode(), "<NotaCredito/>")
 
 
 # -------------------- Carreras: POS ---------------------------------------

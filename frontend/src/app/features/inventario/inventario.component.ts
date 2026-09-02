@@ -1,9 +1,10 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { InventarioProducto, MovimientoInventario } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-inventario',
@@ -65,7 +66,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
           <!-- Lista de productos -->
           <section class="filtros">
             <input type="text" aria-label="Buscar producto" placeholder="Buscar producto..."
-                   [(ngModel)]="busquedaProducto" (input)="cargarProductos()" class="input" />
+                   [(ngModel)]="busquedaProducto" (input)="buscarProductosDebounced()" class="input" />
             <label class="filtro-stock">
               <input type="checkbox" [(ngModel)]="filtroStockBajo" (ngModelChange)="cargarProductos()" />
               Solo stock bajo
@@ -245,6 +246,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class InventarioComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly productos = signal<InventarioProducto[]>([]);
   readonly movimientos = signal<MovimientoInventario[]>([]);
@@ -253,6 +255,8 @@ export class InventarioComponent implements OnInit {
   readonly errorMovimientos = signal<string | null>(null);
   busquedaProducto = '';
   filtroStockBajo = false;
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  readonly buscarProductosDebounced = debounce(this.destroyRef, () => this.cargarProductos(), 300);
   readonly mostrarAjuste = signal(false);
 
   ajusteProducto = '';

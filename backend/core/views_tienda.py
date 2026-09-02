@@ -199,7 +199,10 @@ class ComentariosProductoView(APIView):
             return Response(
                 {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
                 status=status.HTTP_404_NOT_FOUND)
-        comentarios = producto.comentarios.select_related('usuario')
+        # Lista acotada (nunca ilimitada): un producto popular puede acumular
+        # miles de comentarios (uno por comprador distinto).
+        limite = _limite_paginacion(request.query_params.get('limite', 50))
+        comentarios = producto.comentarios.select_related('usuario')[:limite]
         return Response({"resultados": ComentarioProductoSerializer(comentarios, many=True).data})
 
     def post(self, request, id):
@@ -610,6 +613,17 @@ class CheckoutView(APIView):
                     fallidos.append({
                         'producto': str(item.producto.id),
                         'producto_nombre': 'No encontrado',
+                        'solicitado': item.cantidad,
+                        'disponible': 0,
+                    })
+                    continue
+                if not producto.activo:
+                    # Se pudo agregar al carrito cuando estaba activo, pero
+                    # el vendedor lo desactivo antes del checkout: no se
+                    # vende, se reporta igual que stock insuficiente.
+                    fallidos.append({
+                        'producto': str(producto.id),
+                        'producto_nombre': producto.nombre,
                         'solicitado': item.cantidad,
                         'disponible': 0,
                     })

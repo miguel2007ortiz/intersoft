@@ -12,6 +12,7 @@ Reglas clave:
 - Productos desactivados no generan alerta aunque tengan stock bajo.
 - Todo queda auditado en actividad_usuario."""
 
+import re
 from decimal import Decimal
 
 from django.db import models, transaction
@@ -28,7 +29,8 @@ from cuentas.permissions import EsPersonal
 from .models import (Cliente, DetalleVenta, Empresa,
                      MovimientoInventario, Notificacion, Producto, Venta)
 from .serializers_monitoreo import NotificacionLecturaSerializer
-from .serializers_ventas import (AjusteInventarioSerializer, AnulacionSerializer,
+from .serializers_ventas import (AjusteInventarioSerializer,
+                                 AlertaReabastecerSerializer, AnulacionSerializer,
                                  MovimientoInventarioLecturaSerializer,
                                  VentaLecturaSerializer, VentaPOSInputSerializer)
 
@@ -165,7 +167,13 @@ class VentaPOSView(APIView):
                 for l in lineas_stock_ok
             )
             descuento = Decimal(str(datos['descuento']))
-            total = max(subtotal - descuento, Decimal('0'))
+            if descuento > subtotal:
+                return Response(
+                    {"codigo": "DESCUENTO_INVALIDO",
+                     "detalle": f"El descuento (${descuento}) no puede superar "
+                                f"el subtotal (${subtotal})."},
+                    status=status.HTTP_400_BAD_REQUEST)
+            total = subtotal - descuento
 
             venta = Venta.objects.create(
                 empresa=empresa,
@@ -475,7 +483,12 @@ class AlertasView(APIView):
 
 
 class AlertaActualizarStockView(APIView):
-    """POST reabastece directamente desde la alerta."""
+    """POST reabastece el producto de una alerta de stock bajo: aumenta el
+    stock, registra el movimiento de inventario y marca la alerta como
+    revisada, todo en una sola transaccion.
+
+    Body opcional `{"cantidad": N}`; sin ella, repone lo necesario para
+    superar el minimo (stock_minimo - stock + 1)."""
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def post(self, request, id):
@@ -494,22 +507,47 @@ class AlertaActualizarStockView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         # Buscar el producto por SKU en el mensaje
-        import re
         match = re.search(r'\(([^)]+)\)', mensaje)
         if not match:
             return Response(
                 {"codigo": "ALERTA_INVALIDA",
                  "detalle": "No se pudo identificar el producto."},
                 status=status.HTTP_400_BAD_REQUEST)
-
         sku = match.group(1)
-        producto = Producto.objects.filter(
-            empresa=empresa, sku=sku, deleted_at__isnull=True).first()
-        if not producto:
+
+        entrada = AlertaReabastecerSerializer(data=request.data)
+        if not entrada.is_valid():
             return Response(
-                {"codigo": "PRODUCTO_NO_ENCONTRADO",
-                 "detalle": "El producto ya no existe."},
+                {"codigo": "DATOS_INVALIDOS",
+                 "detalle": "La cantidad debe ser un entero mayor a 0.",
+                 "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            producto = Producto.objects.select_for_update().filter(
+                empresa=empresa, sku=sku, deleted_at__isnull=True).first()
+            if not producto:
+                return Response(
+                    {"codigo": "PRODUCTO_NO_ENCONTRADO",
+                     "detalle": "El producto ya no existe."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            cantidad = entrada.validated_data.get('cantidad') or max(
+                producto.stock_minimo - producto.stock + 1, 1)
+
+            producto.stock += cantidad
+            producto.save(update_fields=['stock'])
+            _registrar_movimiento(
+                producto, request.user, 'entrada', cantidad,
+                f"Reabastecimiento desde alerta #{str(alerta.id)[:8]}")
+
+            alerta.leida = True
+            alerta.save(update_fields=['leida'])
+
+            ActividadUsuario.registrar(
+                request.user, "ALERTA_REABASTECIDA",
+                f"{producto.nombre}: +{cantidad} unidades "
+                f"(alerta #{str(alerta.id)[:8]})")
 
         return Response({
             "producto": {
@@ -518,7 +556,8 @@ class AlertaActualizarStockView(APIView):
                 "sku": producto.sku,
                 "stock": producto.stock,
                 "stock_minimo": producto.stock_minimo,
-            }
+            },
+            "cantidad_agregada": cantidad,
         })
 
 

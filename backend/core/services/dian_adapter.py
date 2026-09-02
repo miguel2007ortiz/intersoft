@@ -63,6 +63,31 @@ def _generar_xml_simulado(numero_factura: str, datos: dict) -> str:
     )
 
 
+def _generar_pdf_nota_credito(numero_nota: str, numero_factura_original: str,
+                              total: str, motivo: str) -> str:
+    """Genera contenido PDF simulado de la nota credito."""
+    return (
+        f"NOTA CREDITO - {numero_nota}\n"
+        f"Factura original: {numero_factura_original}\n"
+        f"Total: ${total}\n"
+        f"Motivo: {motivo}\n"
+        f"[Documento generado por DIAN Mock]"
+    )
+
+
+def _generar_xml_nota_credito(numero_nota: str, datos: dict) -> str:
+    """Genera XML simulado de la nota credito."""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<NotaCredito>\n'
+        f'  <Numero>{numero_nota}</Numero>\n'
+        f'  <FacturaOriginal>{datos.get("numero_factura_original", "")}</FacturaOriginal>\n'
+        f'  <Fecha>{datos.get("fecha", "")}</Fecha>\n'
+        f'  <Total>{datos.get("total", "")}</Total>\n'
+        '</NotaCredito>'
+    )
+
+
 def enviar_factura(datos_venta: dict) -> RespuestaDIAN:
     """Envia un comprobante a la DIAN para validacion.
 
@@ -166,9 +191,18 @@ def enviar_nota_credito(datos_nota: dict) -> RespuestaDIAN:
         'cliente_doc': datos_nota.get('cliente_doc', ''),
         'total': datos_nota.get('total', 0),
     })
+    pdf = _generar_pdf_nota_credito(
+        datos_nota.get('numero_nota', ''),
+        datos_nota.get('numero_factura_original', ''),
+        datos_nota.get('total', '0'),
+        datos_nota.get('motivo', ''),
+    )
+    xml = _generar_xml_nota_credito(datos_nota.get('numero_nota', ''), datos_nota)
 
     return RespuestaDIAN(
         aprobada=True,
         cufe=cufe_nota,
         mensaje='Nota credito aprobada por la DIAN.',
+        comprobante_pdf=pdf,
+        comprobante_xml=xml,
     )

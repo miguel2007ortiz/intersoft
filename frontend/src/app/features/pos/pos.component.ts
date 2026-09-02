@@ -1,10 +1,11 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { Cliente, Producto, LineaPOS, VentaPOSInput, StockInsuficiente } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-pos',
@@ -268,6 +269,10 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class PosComponent {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarProductosDebounced = debounce(
+    this.destroyRef, () => this.buscarProductosInmediato(), 300);
 
   readonly clientes = signal<Cliente[]>([]);
   readonly cargandoClientes = signal(true);
@@ -343,6 +348,10 @@ export class PosComponent {
       this.resultadosBusqueda.set([]);
       return;
     }
+    this.buscarProductosDebounced();
+  }
+
+  private buscarProductosInmediato(): void {
     this.catalogo.listarProductos({ busqueda: this.busquedaProducto, activo: true })
       .subscribe({
         next: (r) => this.resultadosBusqueda.set(r.resultados),

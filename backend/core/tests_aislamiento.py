@@ -312,6 +312,35 @@ class AislamientoCuponTest(BaseAislamientoTest):
                                 {"codigo": "CUPON-A"}, format="json")
         self.assertEqual(resp.status_code, 401)
 
+    def test_crear_cupon_rechaza_porcentaje_fuera_de_rango(self):
+        api = self.api_a()
+        resp = api.post("/api/tienda/cupones/", {
+            "codigo": "MAL-500", "porcentaje": "500",
+            "fecha_inicio": self.ahora.isoformat(),
+            "fecha_fin": (self.ahora + timedelta(days=1)).isoformat(),
+        }, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("porcentaje", str(resp.json()["errores"]).lower())
+        self.assertFalse(Cupon.objects.filter(codigo="MAL-500").exists())
+
+        resp = api.post("/api/tienda/cupones/", {
+            "codigo": "MAL-NEG", "porcentaje": "-10",
+            "fecha_inicio": self.ahora.isoformat(),
+            "fecha_fin": (self.ahora + timedelta(days=1)).isoformat(),
+        }, format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_crear_cupon_rechaza_fecha_fin_anterior_a_inicio(self):
+        api = self.api_a()
+        resp = api.post("/api/tienda/cupones/", {
+            "codigo": "FECHAS-MAL", "porcentaje": "10",
+            "fecha_inicio": self.ahora.isoformat(),
+            "fecha_fin": (self.ahora - timedelta(days=1)).isoformat(),
+        }, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("fecha_fin", resp.json()["errores"])
+        self.assertFalse(Cupon.objects.filter(codigo="FECHAS-MAL").exists())
+
 
 # ======================== Reportes (alcance por empresa) =====================
 

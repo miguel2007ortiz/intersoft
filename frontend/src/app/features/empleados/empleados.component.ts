@@ -3,7 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { EmpleadosService } from '../../core/services/empleados.service';
 import { AuthService } from '../../core/services/auth.service';
-import { programarAviso } from '../../core/utils/temporizador.util';
+import { debounce, programarAviso } from '../../core/utils/temporizador.util';
 import { DatosEmpleado, Empleado, ErrorEmpleado, RolAsignable } from '../../core/models/empleado.model';
 
 const CERRAR_AVISO_MS = 4000;
@@ -35,6 +35,8 @@ export class EmpleadosComponent {
   /** Contrasena temporal a mostrar una sola vez (RN-09), tras crear o
    * regenerar; se pierde al cerrar el aviso. */
   readonly passwordTemporal = signal<string | null>(null);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
   readonly formulario = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(120)]],
@@ -73,7 +75,7 @@ export class EmpleadosComponent {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
-    this.cargar();
+    this.buscarDebounced();
   }
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {

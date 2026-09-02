@@ -89,6 +89,20 @@ class CuponSerializer(serializers.ModelSerializer):
         fields = ["id", "codigo", "porcentaje", "activo",
                   "fecha_inicio", "fecha_fin", "esta_vigente"]
 
+    def validate_porcentaje(self, valor):
+        if valor < 0 or valor > 100:
+            raise serializers.ValidationError(
+                "El porcentaje debe estar entre 0 y 100.")
+        return valor
+
+    def validate(self, datos):
+        inicio = datos.get('fecha_inicio', getattr(self.instance, 'fecha_inicio', None))
+        fin = datos.get('fecha_fin', getattr(self.instance, 'fecha_fin', None))
+        if inicio and fin and inicio > fin:
+            raise serializers.ValidationError(
+                {"fecha_fin": "La fecha de fin no puede ser anterior a la fecha de inicio."})
+        return datos
+
 
 class CuponValidarSerializer(serializers.Serializer):
     codigo = serializers.CharField(max_length=30)

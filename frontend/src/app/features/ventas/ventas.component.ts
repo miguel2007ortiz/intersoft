@@ -1,10 +1,11 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-ventas',
@@ -20,7 +21,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         <!-- Filtros -->
         <section class="filtros">
           <input type="text" placeholder="Buscar por factura o cliente..."
-                 [(ngModel)]="busqueda" (input)="cargarVentas()" class="input" />
+                 [(ngModel)]="busqueda" (input)="buscarDebounced()" class="input" />
           <select [(ngModel)]="filtroEstado" (ngModelChange)="cargarVentas()" class="input input-estado">
             <option value="">Todos los estados</option>
             <option value="completada">Completadas</option>
@@ -202,12 +203,15 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class VentasComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly ventas = signal<Venta[]>([]);
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   busqueda = '';
   filtroEstado = '';
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  readonly buscarDebounced = debounce(this.destroyRef, () => this.cargarVentas(), 300);
   readonly estadisticas = signal<{ total_ventas: string; total_registros: number } | null>(null);
 
   readonly ventaAnulando = signal<Venta | null>(null);

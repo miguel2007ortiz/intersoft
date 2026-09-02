@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { FacturaElectronica, NotaCredito, Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
-import { programarAviso } from '../../core/utils/temporizador.util';
+import { debounce, programarAviso } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-facturacion',
@@ -33,7 +33,7 @@ import { programarAviso } from '../../core/utils/temporizador.util';
         @if (pestana() === 'facturas') {
           <section class="filtros">
             <input type="text" aria-label="Buscar factura" placeholder="Buscar por numero, CUFE, cliente..."
-                   [(ngModel)]="busquedaFactura" (input)="cargarFacturas()" class="input" />
+                   [(ngModel)]="busquedaFactura" (input)="buscarFacturasDebounced()" class="input" />
             <select [(ngModel)]="filtroEstado" (change)="cargarFacturas()" class="input input-select">
               <option value="">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
@@ -79,6 +79,12 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                     <td class="acciones-celda">
                       @if (f.estado === 'aprobada') {
                         <button class="btn-sm btn-primary" (click)="reenviar(f)">Reenviar</button>
+                      }
+                      @if (f.pdf) {
+                        <a class="btn-sm btn-outline" [href]="f.pdf" target="_blank" rel="noopener">PDF</a>
+                      }
+                      @if (f.xml) {
+                        <a class="btn-sm btn-outline" [href]="f.xml" target="_blank" rel="noopener">XML</a>
                       }
                       @if (f.estado === 'fallida' || f.estado === 'rechazada') {
                         <button class="btn-sm btn-warning" (click)="reintentar(f)"
@@ -165,6 +171,7 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                     <th>Estado</th>
                     <th>Reverso stock</th>
                     <th>Motivo</th>
+                    <th>Comprobantes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,6 +188,15 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                       </td>
                       <td>{{ nc.reverso_stock ? '✓' : '—' }}</td>
                       <td>{{ nc.motivo }}</td>
+                      <td class="acciones-celda">
+                        @if (nc.pdf) {
+                          <a class="btn-sm btn-outline" [href]="nc.pdf" target="_blank" rel="noopener">PDF</a>
+                        }
+                        @if (nc.xml) {
+                          <a class="btn-sm btn-outline" [href]="nc.xml" target="_blank" rel="noopener">XML</a>
+                        }
+                        @if (!nc.pdf && !nc.xml) { — }
+                      </td>
                     </tr>
                   }
                 </tbody>
@@ -234,6 +250,17 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                   }
                   <p><strong>Intentos:</strong> {{ detalleSeleccion()!.intentos }}</p>
                   <p><strong>Correo enviado:</strong> {{ detalleSeleccion()!.enviado_correo ? 'Si' : 'No' }}</p>
+                  @if (detalleSeleccion()!.pdf || detalleSeleccion()!.xml) {
+                    <p><strong>Comprobantes:</strong></p>
+                    <div class="acciones-celda">
+                      @if (detalleSeleccion()!.pdf) {
+                        <a class="btn-sm btn-outline" [href]="detalleSeleccion()!.pdf!" target="_blank" rel="noopener">PDF</a>
+                      }
+                      @if (detalleSeleccion()!.xml) {
+                        <a class="btn-sm btn-outline" [href]="detalleSeleccion()!.xml!" target="_blank" rel="noopener">XML</a>
+                      }
+                    </div>
+                  }
                 </div>
               }
               <button class="btn-outline" (click)="detalleVisible.set(false)">Cerrar</button>
@@ -393,6 +420,8 @@ export class FacturacionComponent implements OnInit {
   readonly exito = signal('');
   readonly accionId = signal<string | null>(null);
   readonly generandoId = signal<string | null>(null);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  readonly buscarFacturasDebounced = debounce(this.destroyRef, () => this.cargarFacturas(), 300);
 
   readonly detalleVisible = signal(false);
   readonly detalleSeleccion = signal<FacturaElectronica | null>(null);

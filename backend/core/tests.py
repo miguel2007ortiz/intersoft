@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from cuentas.models import Perfil, Rol
 
 from .models import (Camara, Categoria, Carrito, CarritoItem, Cliente,
-                     ComentarioProducto, DetalleVenta, Empresa,
+                     ComentarioProducto, DetalleVenta, Empresa, IAConversacion,
                      MovimientoInventario, Notificacion, Producto, Venta)
 
 
@@ -738,6 +738,17 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(detalle.status_code, 200)
         self.assertEqual(len(detalle.json()["mensajes"]), 2)
 
+    def test_listado_de_conversaciones_esta_acotado(self):
+        # Lista acotada (nunca ilimitada): con mas de 100 sesiones, el
+        # listado no debe devolverlas todas.
+        IAConversacion.objects.bulk_create([
+            IAConversacion(usuario=self.admin, titulo=f"Sesion {i}")
+            for i in range(105)
+        ])
+        lista = self.api_como(self.admin).get(
+            "/api/ia/conversaciones/").json()["resultados"]
+        self.assertEqual(len(lista), 100)
+
     def test_crear_conversacion_explícita(self):
         api = self.api_como(self.admin)
         res = api.post("/api/ia/conversaciones/", {"titulo": "Mi sesion"},
@@ -1077,6 +1088,24 @@ class ComentarioProductoTest(BaseMarketplaceTest):
             {"calificacion": 7}, format="json")
         self.assertEqual(resp.status_code, 400)
 
+    def test_listado_de_comentarios_respeta_el_limite(self):
+        # Lista acotada (nunca ilimitada): 3 compradores distintos comentan,
+        # se pide limite=2 y solo deben volver 2.
+        for i in range(3):
+            comprador = User.objects.create_user(
+                username=f"resenador{i}@test.co", email=f"resenador{i}@test.co",
+                password="Clave12345")
+            Perfil.objects.create(usuario=comprador, empresa=None,
+                                  rol=Rol.de_nombre("CLIENTE"))
+            self.api_como(comprador).post(
+                f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+                {"calificacion": 5, "comentario": f"Comentario {i}"}, format="json")
+
+        resp = APIClient().get(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/?limite=2")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data["resultados"]), 2)
+
 
 class MarketplaceCarritoTest(BaseMarketplaceTest):
     def test_carrito_acepta_productos_de_dos_empresas_distintas(self):
@@ -1153,6 +1182,27 @@ class MarketplaceCheckoutTest(BaseMarketplaceTest):
                         format="json")
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data["codigo"], "SIN_CLIENTE")
+
+    def test_checkout_rechaza_producto_desactivado_tras_agregarlo(self):
+        # El producto estaba activo cuando se agrego al carrito; si el
+        # vendedor lo desactiva antes del checkout, no debe poder comprarse.
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+
+        self.producto_a.activo = False
+        self.producto_a.save(update_fields=["activo"])
+
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"},
+                        format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+        self.assertEqual(resp.data["productos"][0]["disponible"], 0)
+        self.assertEqual(Venta.objects.count(), 0)
+
+        # El stock no se toco: la venta nunca se creo.
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, 10)
 
 
 class RegistroCompradorTest(TestCase):
@@ -1236,6 +1286,43 @@ class AlertasAislamientoTest(BaseCatalogoTest):
         res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
         self.assertEqual(res.status_code, 404)
 
+    def test_actualizar_stock_reabastece_y_marca_alerta_revisada(self):
+        producto = Producto.objects.create(
+            empresa=self.empresa, nombre="Bajo", sku="SKU-BAJO",
+            precio=10, stock=2, stock_minimo=5)
+        alerta = crear_notificacion(
+            empresa=self.empresa, tipo="stock",
+            mensaje=f"Stock bajo: {producto.nombre} ({producto.sku}) "
+                    f"tiene 2 unidades (minimo 5).")
+
+        api = self.api_como(self.empleado)
+        res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
+        self.assertEqual(res.status_code, 200, res.json())
+
+        producto.refresh_from_db()
+        alerta.refresh_from_db()
+        self.assertEqual(producto.stock, 6)  # stock_minimo(5) - stock(2) + 1
+        self.assertTrue(alerta.leida)
+        self.assertTrue(
+            MovimientoInventario.objects.filter(
+                producto=producto, tipo="entrada", cantidad=4).exists())
+
+    def test_actualizar_stock_admite_cantidad_explicita(self):
+        producto = Producto.objects.create(
+            empresa=self.empresa, nombre="Bajo2", sku="SKU-BAJO2",
+            precio=10, stock=1, stock_minimo=5)
+        alerta = crear_notificacion(
+            empresa=self.empresa, tipo="stock",
+            mensaje=f"Stock bajo: {producto.nombre} ({producto.sku}) "
+                    f"tiene 1 unidades (minimo 5).")
+
+        api = self.api_como(self.empleado)
+        res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/",
+                       {"cantidad": 20}, format="json")
+        self.assertEqual(res.status_code, 200, res.json())
+        producto.refresh_from_db()
+        self.assertEqual(producto.stock, 21)
+
 
 class VentaIntegridadTest(BaseCatalogoTest):
     """Fase 3: integridad de stock y correlativo de factura por empresa."""
@@ -1278,6 +1365,22 @@ class VentaIntegridadTest(BaseCatalogoTest):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 duplicada.save()
+
+    def test_descuento_mayor_al_subtotal_se_rechaza(self):
+        # producto cuesta 75000, 1 unidad -> subtotal 75000
+        api = self.api_como(self.empleado)
+        res = self._pos(api, self.producto, 1, descuento='100000')
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["codigo"], "DESCUENTO_INVALIDO")
+        self.assertEqual(Venta.objects.count(), 0)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 40)
+
+    def test_descuento_igual_al_subtotal_se_acepta_total_cero(self):
+        api = self.api_como(self.empleado)
+        res = self._pos(api, self.producto, 1, descuento='75000')
+        self.assertEqual(res.status_code, 201, res.json())
+        self.assertEqual(res.json()["total"], "0.00")
 
 
 class RendimientoQueriesTest(BaseCatalogoTest):

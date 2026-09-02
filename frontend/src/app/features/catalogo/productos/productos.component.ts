@@ -2,7 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
-import { programarAviso } from '../../../core/utils/temporizador.util';
+import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import {
   Categoria, ErrorCatalogo, Producto,
 } from '../../../core/models/catalogo.model';
@@ -35,6 +35,8 @@ export class ProductosComponent {
   readonly busqueda = signal('');
   /** filtro del catalogo: todos | activos | inactivos */
   readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
   readonly formulario = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(150)]],
@@ -74,7 +76,7 @@ export class ProductosComponent {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
-    this.cargar();
+    this.buscarDebounced();
   }
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {

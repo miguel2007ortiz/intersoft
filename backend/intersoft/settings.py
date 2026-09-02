@@ -5,6 +5,8 @@ Plataforma SaaS de gestion empresarial multi-tenant.
 Base de datos: MySQL 8
 """
 
+import sys
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 from decouple import config
@@ -129,7 +131,12 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# `manage.py test` escribe comprobantes DIAN reales (Fase 4) en disco; usar un
+# directorio temporal evita ensuciar media/ del repo en cada corrida de tests.
+if 'test' in sys.argv:
+    MEDIA_ROOT = Path(tempfile.mkdtemp(prefix='intersoft_test_media_'))
+else:
+    MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
