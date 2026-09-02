@@ -52,12 +52,19 @@ class EmpleadoLecturaSerializer(serializers.Serializer):
 
 class EmpleadoDetalleSerializer(EmpleadoLecturaSerializer):
     """Igual que el listado, mas las ultimas 5 ventas registradas por el
-    empleado (historial rapido en su ficha)."""
+    empleado (historial rapido en su ficha).
+
+    El contexto espera `empresa` (la empresa del usuario que consulta) para
+    aislar el historial de ventas a esa empresa: asi un tenant nunca ve las
+    ventas que este usuario registro como vendedor en OTRA empresa."""
     ultimas_ventas = serializers.SerializerMethodField()
 
     def get_ultimas_ventas(self, perfil):
+        empresa = (self.context.get("empresa") if self.context
+                   else perfil.empresa)
         ventas = (perfil.usuario.ventas_realizadas
-                  .filter(deleted_at__isnull=True).order_by("-fecha")[:5])
+                  .filter(empresa=empresa, deleted_at__isnull=True)
+                  .order_by("-fecha")[:5])
         return VentaResumenSerializer(ventas, many=True).data
 
 

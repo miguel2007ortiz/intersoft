@@ -1,7 +1,8 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { capturarErrorDjango, ErrorDjango } from '../utils/django-error.util';
 import {
   ConversacionIA, ConversacionIAResumen, ErrorIA, RespuestaChatIA,
   ResultadoListaIA,
@@ -37,27 +38,21 @@ export class IaService {
   }
 }
 
-function capturarErrorIA<T>(): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) => throwError(() => traducirIA(e)));
-}
-
-function traducirIA(e: HttpErrorResponse): ErrorIA {
-  const cuerpo = (e.error ?? {}) as ErrorIA;
-  if (e.status === 0) {
-    return { codigo: 'SIN_CONEXION', detalle: 'No hay conexion con el servidor.' };
-  }
-  if (e.status === 502 && cuerpo.conversacion) {
-    // El motor fallo pero la conversacion se conservo para reintentar.
-    return {
-      codigo: cuerpo.codigo ?? 'IA_NO_DISPONIBLE',
-      detalle: cuerpo.detalle ?? 'El asistente no pudo responder en este momento.',
-      conversacion: cuerpo.conversacion,
-    };
-  }
-  if (cuerpo.errores) {
-    const primerCampo = Object.values(cuerpo.errores)[0];
-    const mensaje = Array.isArray(primerCampo) ? String(primerCampo[0]) : cuerpo.detalle;
-    return { codigo: cuerpo.codigo, detalle: mensaje };
-  }
-  return { codigo: cuerpo.codigo, detalle: cuerpo.detalle ?? 'Ocurrio un error inesperado.' };
-}
+/** Convierte la respuesta de error de Django en un mensaje legible,
+ * conservando la conversacion cuando el motor de IA falla (502). */
+const capturarErrorIA = <T,>() =>
+  capturarErrorDjango<T, ErrorIA>({
+    enriquecer: (e, cuerpo, base) => {
+      const conConversacion = e.status === 502 && !!cuerpo['conversacion'];
+      if (!conConversacion) return base as ErrorIA & ErrorDjango;
+      return {
+        ...base,
+        codigo: typeof cuerpo['codigo'] === 'string' ? cuerpo['codigo'] : 'IA_NO_DISPONIBLE',
+        detalle:
+          typeof cuerpo['detalle'] === 'string'
+            ? cuerpo['detalle']
+            : 'El asistente no pudo responder en este momento.',
+        conversacion: cuerpo['conversacion'] as ConversacionIA,
+      } as ErrorIA & ErrorDjango;
+    },
+  });

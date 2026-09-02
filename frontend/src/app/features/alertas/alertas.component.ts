@@ -17,6 +17,11 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
         @if (cargando()) {
           <p class="cargando">Cargando alertas...</p>
+        } @else if (error()) {
+          <div class="estado-error" role="alert">
+            <p>{{ error() }}</p>
+            <button type="button" class="btn-reintentar" (click)="cargarAlertas()">Reintentar</button>
+          </div>
         } @else if (!alertas().length) {
           <div class="vacio">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor"
@@ -64,6 +69,17 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
     .cargando { color: var(--gris); text-align: center; padding: var(--e6); }
 
+    .estado-error {
+      text-align: center; padding: var(--e6) var(--e4); color: #b42318;
+      display: flex; flex-direction: column; align-items: center; gap: var(--e3);
+    }
+    .estado-error p { margin: 0; }
+    .btn-reintentar {
+      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
+      border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }
+
     .vacio {
       text-align: center; padding: var(--e8) var(--e4); color: var(--gris);
     }
@@ -98,22 +114,39 @@ export class AlertasComponent implements OnInit {
 
   readonly alertas = signal<Notificacion[]>([]);
   readonly cargando = signal(true);
+  readonly error = signal<string | null>(null);
+  readonly resolviendo = signal(false);
 
   ngOnInit(): void {
     this.cargarAlertas();
   }
 
   cargarAlertas(): void {
+    this.cargando.set(true);
     this.catalogo.listarAlertas().subscribe({
-      next: (r) => { this.alertas.set(r.resultados); this.cargando.set(false); },
-      error: () => this.cargando.set(false),
+      next: (r) => {
+        this.alertas.set(r.resultados);
+        this.error.set(null);
+        this.cargando.set(false);
+      },
+      error: (e) => {
+        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+        this.cargando.set(false);
+      },
     });
   }
 
   marcarRevisada(alerta: Notificacion): void {
+    if (this.resolviendo()) return;
+    this.resolviendo.set(true);
     this.catalogo.marcarAlertaRevisada(alerta.id).subscribe({
       next: () => {
         this.alertas.update(a => a.filter(x => x.id !== alerta.id));
+        this.resolviendo.set(false);
+      },
+      error: (e) => {
+        this.error.set(e.detalle ?? 'No se pudo marcar la alerta como revisada.');
+        this.resolviendo.set(false);
       },
     });
   }

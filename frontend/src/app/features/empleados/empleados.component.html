@@ -14,7 +14,10 @@
       <div class="aviso aviso-ok">{{ exito() }}</div>
     }
     @if (error() && !formularioAbierto()) {
-      <div class="aviso aviso-error">{{ error() }}</div>
+      <div class="aviso aviso-error" role="alert">
+        {{ error() }}
+        <button type="button" class="enlace" (click)="cargar()">Reintentar</button>
+      </div>
     }
 
     @if (passwordTemporal()) {
@@ -33,16 +36,16 @@
         <div class="fila-doble">
           <div class="campo">
             <label for="nombre">Nombre</label>
-            <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Perez" />
+            <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Perez" autocomplete="name" />
             @if (campoInvalido('nombre')) {
-              <p class="mensaje-error">Escribe el nombre del empleado.</p>
+              <p class="mensaje-error" role="alert">Escribe el nombre del empleado.</p>
             }
           </div>
           <div class="campo">
             <label for="email">Correo</label>
-            <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" />
+            <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" autocomplete="email" />
             @if (campoInvalido('email')) {
-              <p class="mensaje-error">Escribe un correo valido.</p>
+              <p class="mensaje-error" role="alert">Escribe un correo valido.</p>
             }
           </div>
         </div>
@@ -57,7 +60,7 @@
               }
             </select>
             @if (campoInvalido('rol')) {
-              <p class="mensaje-error">Selecciona el rol del empleado.</p>
+              <p class="mensaje-error" role="alert">Selecciona el rol del empleado.</p>
             }
           </div>
           <div class="campo">
@@ -100,20 +103,20 @@
         </div>
 
         @if (error()) {
-          <div class="aviso aviso-error">{{ error() }}</div>
+          <div class="aviso aviso-error" role="alert">{{ error() }}</div>
         }
 
         <div class="acciones-form">
           <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
-          <button type="submit" class="btn btn-primario">
-            {{ editando() ? 'Guardar cambios' : 'Crear empleado' }}
+          <button type="submit" class="btn btn-primario" [disabled]="guardando()">
+            {{ guardando() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Crear empleado') }}
           </button>
         </div>
       </form>
     }
 
     <div class="barra-listado">
-      <input type="search" class="buscador" placeholder="Buscar por nombre, correo o documento..."
+      <input type="search" class="buscador" aria-label="Buscar empleados" placeholder="Buscar por nombre, correo o documento..."
              [value]="busqueda()" (input)="buscar($event)" />
       <div class="filtros">
         <button type="button" class="filtro" [class.activo]="filtroEstado() === 'todos'"

@@ -27,7 +27,11 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                 <option [value]="c.id">{{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})</option>
               }
             </select>
-            @if (!clientes().length && !cargandoClientes()) {
+            @if (errorClientes()) {
+              <span class="hint error">{{ errorClientes() }}
+                <button type="button" class="btn-reintentar" (click)="cargarClientes()">Reintentar</button>
+              </span>
+            } @else if (!clientes().length && !cargandoClientes()) {
               <span class="hint">No hay clientes. <a routerLink="/clientes">Crear uno</a></span>
             }
           </div>
@@ -183,7 +187,13 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
     .cliente-select { position: relative; }
     .hint { display: block; margin-top: var(--e1); font-size: 13px; color: var(--gris); }
+    .hint.error { color: #b42318; }
     .hint a { color: var(--primario); }
+    .btn-reintentar {
+      margin-left: 8px; padding: 4px 12px; border: 1px solid var(--linea); background: #fff;
+      border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+    }
+    .btn-reintentar:hover { border-color: #b42318; color: #b42318; }
 
     .producto-add { position: relative; display: flex; gap: var(--e3); }
     .resultados-busqueda {
@@ -255,6 +265,7 @@ export class PosComponent {
 
   readonly clientes = signal<Cliente[]>([]);
   readonly cargandoClientes = signal(true);
+  readonly errorClientes = signal('');
   busquedaProducto = '';
   readonly resultadosBusqueda = signal<Producto[]>([]);
   readonly lineas = signal<LineaPOS[]>([]);
@@ -288,9 +299,17 @@ export class PosComponent {
   }
 
   cargarClientes(): void {
+    this.cargandoClientes.set(true);
     this.catalogo.listarClientes().subscribe({
-      next: (r) => { this.clientes.set(r.resultados); this.cargandoClientes.set(false); },
-      error: () => this.cargandoClientes.set(false),
+      next: (r) => {
+        this.clientes.set(r.resultados);
+        this.errorClientes.set('');
+        this.cargandoClientes.set(false);
+      },
+      error: (e) => {
+        this.errorClientes.set(e.detalle ?? 'No se pudieron cargar los clientes.');
+        this.cargandoClientes.set(false);
+      },
     });
   }
 

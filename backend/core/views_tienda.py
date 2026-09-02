@@ -9,6 +9,7 @@ Reglas clave:
 
 from decimal import Decimal
 import os
+import uuid as uuid_mod
 
 from django.db import models, transaction
 from django.db.models import Q, Sum, Count
@@ -32,6 +33,14 @@ from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
 
 def _obtener_empresa(request):
     return request.user.perfil.empresa
+
+
+def _limite_paginacion(valor, por_defecto=50, maximo=200):
+    """Limite de filas a devolver, acotado a [1, maximo]."""
+    try:
+        return max(1, min(int(valor), maximo))
+    except (TypeError, ValueError):
+        return por_defecto
 
 
 def _registrar_alerta_stock(producto, empresa):
@@ -76,14 +85,35 @@ class CatalogoPublicoView(APIView):
 
         categoria_id = request.query_params.get('categoria')
         if categoria_id:
+            try:
+                uuid_mod.UUID(categoria_id)
+            except (ValueError, AttributeError, TypeError):
+                return Response(
+                    {"codigo": "CATEGORIA_INVALIDA",
+                     "detalle": "El filtro categoria debe ser un ID valido."},
+                    status=status.HTTP_400_BAD_REQUEST)
             productos = productos.filter(categoria__id=categoria_id)
 
         precio_min = request.query_params.get('precio_min')
         if precio_min:
+            try:
+                Decimal(precio_min)
+            except Exception:
+                return Response(
+                    {"codigo": "PRECIO_INVALIDO",
+                     "detalle": "precio_min debe ser un numero."},
+                    status=status.HTTP_400_BAD_REQUEST)
             productos = productos.filter(precio__gte=precio_min)
 
         precio_max = request.query_params.get('precio_max')
         if precio_max:
+            try:
+                Decimal(precio_max)
+            except Exception:
+                return Response(
+                    {"codigo": "PRECIO_INVALIDO",
+                     "detalle": "precio_max debe ser un numero."},
+                    status=status.HTTP_400_BAD_REQUEST)
             productos = productos.filter(precio__lte=precio_max)
 
         con_stock = request.query_params.get('con_stock')
@@ -185,10 +215,20 @@ class CuponesView(APIView):
 
 
 class CuponValidarView(APIView):
-    """POST valida un cupón (lo retorna si es vigente)."""
-    permission_classes = [AllowAny]
+    """POST valida un cupón (lo retorna si es vigente) para el carrito del
+    comprador autenticado.
+
+    Aislamiento multiempresa: un comprador (sin empresa propia) solo puede
+    validar cupones de las EMPRESAS VENDEDORAS que estan en su carrito. El
+    alcance se deriva del estado del carrito (datos de servidor), nunca de
+    un ID/empresa aportado por el cliente. Asi no se puede enumerar ni leer
+    cupones de tenants ajenos.
+    """
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        carrito = _carrito_de(request)
+
         entrada = CuponValidarSerializer(data=request.data)
         if not entrada.is_valid():
             return Response(
@@ -198,12 +238,18 @@ class CuponValidarView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         codigo = entrada.validated_data['codigo'].upper()
-        cupon = Cupon.objects.filter(codigo=codigo).first()
+
+        # Empresas vendedoras presentes en el carrito del comprador.
+        empresas_carrito = (carrito.items.select_related("producto")
+                            .values_list("producto__empresa_id", flat=True))
+        cupon = (Cupon.objects
+                 .filter(codigo=codigo, empresa_id__in=empresas_carrito)
+                 .first())
 
         if not cupon:
             return Response(
                 {"codigo": "NO_ENCONTRADO",
-                 "detalle": "No existe un cupon con ese codigo."},
+                 "detalle": "No existe un cupon con ese codigo para tu carrito."},
                 status=status.HTTP_404_NOT_FOUND)
 
         if not cupon.esta_vigente:
@@ -217,9 +263,15 @@ class CuponValidarView(APIView):
 
 # ------------------------------ Carrito ----------------------------------
 
-def _carrito_de(request):
-    """Carrito del comprador (marketplace): se identifica por usuario."""
-    carrito = Carrito.objects.filter(usuario=request.user).first()
+def _carrito_de(request, bloquear=False):
+    """Carrito del comprador (marketplace): se identifica por usuario.
+
+    Con `bloquear=True` toma SELECT FOR UPDATE sobre la fila del carrito para
+    serializar operaciones concurrentes del mismo comprador (agregar items,
+    actualizar cantidades o aplicar cupon).
+    """
+    qs = Carrito.objects.select_for_update() if bloquear else Carrito.objects
+    carrito = qs.filter(usuario=request.user).first()
     if carrito is None:
         carrito = Carrito.objects.create(usuario=request.user, empresa=None)
     elif carrito.empresa_id is not None:
@@ -263,34 +315,46 @@ class CarritoItemView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        producto = Producto.objects.filter(
-            activo=True, deleted_at__isnull=True,
-            id=entrada.validated_data['producto']
-        ).first()
-        if not producto:
-            return Response(
-                {"codigo": "PRODUCTO_NO_ENCONTRADO",
-                 "detalle": "El producto no existe o no esta activo."},
-                status=status.HTTP_400_BAD_REQUEST)
-
+        producto_id = entrada.validated_data['producto']
         cantidad = entrada.validated_data['cantidad']
-        carrito = _carrito_de(request)
 
-        item, created = CarritoItem.objects.get_or_create(
-            carrito=carrito, producto=producto,
-            defaults={'cantidad': cantidad})
+        # Transaccion unica: el carrito y el producto se bloquean para
+        # evitar doble insercion o sobrepasar stock en peticiones
+        # simultaneas del mismo comprador.
+        with transaction.atomic():
+            carrito = _carrito_de(request, bloquear=True)
 
-        if not created:
-            nueva_cantidad = item.cantidad + cantidad
-            if nueva_cantidad > producto.stock:
+            producto = Producto.objects.select_for_update().filter(
+                activo=True, deleted_at__isnull=True, id=producto_id
+            ).first()
+            if not producto:
                 return Response(
-                    {"codigo": "STOCK_INSUFICIENTE",
-                     "detalle": f"Stock disponible: {producto.stock}, "
-                                f"en carrito: {item.cantidad}, "
-                                f"intenta agregar: {cantidad}."},
+                    {"codigo": "PRODUCTO_NO_ENCONTRADO",
+                     "detalle": "El producto no existe o no esta activo."},
                     status=status.HTTP_400_BAD_REQUEST)
-            item.cantidad = nueva_cantidad
-            item.save(update_fields=['cantidad'])
+
+            item = CarritoItem.objects.filter(
+                carrito=carrito, producto=producto).first()
+
+            if item is None:
+                if cantidad > producto.stock:
+                    return Response(
+                        {"codigo": "STOCK_INSUFICIENTE",
+                         "detalle": f"Stock disponible: {producto.stock}."},
+                        status=status.HTTP_400_BAD_REQUEST)
+                item = CarritoItem.objects.create(
+                    carrito=carrito, producto=producto, cantidad=cantidad)
+            else:
+                nueva_cantidad = item.cantidad + cantidad
+                if nueva_cantidad > producto.stock:
+                    return Response(
+                        {"codigo": "STOCK_INSUFICIENTE",
+                         "detalle": f"Stock disponible: {producto.stock}, "
+                                    f"en carrito: {item.cantidad}, "
+                                    f"intenta agregar: {cantidad}."},
+                        status=status.HTTP_400_BAD_REQUEST)
+                item.cantidad = nueva_cantidad
+                item.save(update_fields=['cantidad'])
 
         return Response(_carrito_serializado(carrito),
                         status=status.HTTP_201_CREATED)
@@ -304,24 +368,30 @@ class CarritoItemView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        carrito = _carrito_de(request)
-        item = CarritoItem.objects.filter(
-            id=item_id, carrito=carrito).first()
-        if not item:
-            return Response(
-                {"codigo": "ITEM_NO_ENCONTRADO",
-                 "detalle": "El item no existe en tu carrito."},
-                status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            carrito = _carrito_de(request, bloquear=True)
+            item = CarritoItem.objects.select_for_update().filter(
+                id=item_id, carrito=carrito).first()
+            if not item:
+                return Response(
+                    {"codigo": "ITEM_NO_ENCONTRADO",
+                     "detalle": "El item no existe en tu carrito."},
+                    status=status.HTTP_404_NOT_FOUND)
 
-        nueva_cantidad = entrada.validated_data['cantidad']
-        if nueva_cantidad > item.producto.stock:
-            return Response(
-                {"codigo": "STOCK_INSUFICIENTE",
-                 "detalle": f"Stock disponible: {item.producto.stock}."},
-                status=status.HTTP_400_BAD_REQUEST)
+            producto = Producto.objects.select_for_update().filter(
+                id=item.producto_id
+            ).first()
 
-        item.cantidad = nueva_cantidad
-        item.save(update_fields=['cantidad'])
+            nueva_cantidad = entrada.validated_data['cantidad']
+            stock = producto.stock if producto else 0
+            if nueva_cantidad > stock:
+                return Response(
+                    {"codigo": "STOCK_INSUFICIENTE",
+                     "detalle": f"Stock disponible: {stock}."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            item.cantidad = nueva_cantidad
+            item.save(update_fields=['cantidad'])
 
         return Response(_carrito_serializado(carrito))
 
@@ -356,33 +426,50 @@ class CarritoCuponView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        carrito = _carrito_de(request)
+        with transaction.atomic():
+            carrito = _carrito_de(request, bloquear=True)
 
-        cupon_id = entrada.validated_data.get('cupon_id')
-        if not cupon_id:
-            carrito.cupon = None
+            cupon_id = entrada.validated_data.get('cupon_id')
+            if not cupon_id:
+                carrito.cupon = None
+                carrito.save(update_fields=['cupon'])
+                return Response(_carrito_serializado(carrito))
+
+            # Aislamiento multiempresa: el cupon solo puede pertenecer a una
+            # empresa vendedora que este efectivamente en el carrito. El alcance
+            # se deriva de los productos del carrito (datos de servidor), nunca
+            # de un ID/empresa aportado por el cliente.
+            items = carrito.items.select_related('producto').all()
+            if not items:
+                return Response(
+                    {"codigo": "CARRITO_VACIO",
+                     "detalle": "Tu carrito esta vacio."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            empresas_carrito = {i.producto.empresa_id for i in items
+                                if i.producto.empresa_id is not None}
+            cupon = (Cupon.objects
+                     .filter(id=cupon_id, empresa_id__in=empresas_carrito)
+                     .first())
+            if not cupon or not cupon.esta_vigente:
+                return Response(
+                    {"codigo": "CUPON_NO_ENCONTRADO",
+                     "detalle": "El cupon no existe o no esta vigente."},
+                    status=status.HTTP_404_NOT_FOUND)
+
+            # El cupon aplica solo si TODOS los items del carrito son de la
+            # empresa que lo emite (regla del marketplace).
+            if any(i.producto.empresa_id != cupon.empresa_id for i in items):
+                return Response(
+                    {"codigo": "CUPON_NO_APLICA",
+                     "detalle": "El cupon solo aplica si todos los productos "
+                                "del carrito son de la empresa que lo emite."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            carrito.cupon = cupon
             carrito.save(update_fields=['cupon'])
+
             return Response(_carrito_serializado(carrito))
-
-        cupon = Cupon.objects.filter(id=cupon_id).first()
-        if not cupon or not cupon.esta_vigente:
-            return Response(
-                {"codigo": "CUPON_NO_ENCONTRADO",
-                 "detalle": "El cupon no existe o no esta vigente."},
-                status=status.HTTP_404_NOT_FOUND)
-
-        items = carrito.items.select_related('producto').all()
-        if not items or any(i.producto.empresa_id != cupon.empresa_id for i in items):
-            return Response(
-                {"codigo": "CUPON_NO_APLICA",
-                 "detalle": "El cupon solo aplica si todos los productos "
-                            "del carrito son de la empresa que lo emite."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        carrito.cupon = cupon
-        carrito.save(update_fields=['cupon'])
-
-        return Response(_carrito_serializado(carrito))
 
     def delete(self, request):
         carrito = _carrito_de(request)
@@ -412,27 +499,14 @@ class CheckoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        carrito = _carrito_de(request)
-
-        if not carrito.items.exists():
-            return Response(
-                {"codigo": "CARRITO_VACIO",
-                 "detalle": "Tu carrito esta vacio."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        cliente = Cliente.objects.filter(
-            usuario=request.user, deleted_at__isnull=True
-        ).first()
-        if not cliente:
-            return Response(
-                {"codigo": "SIN_CLIENTE",
-                 "detalle": "Completa tus datos de comprador "
-                            "(Registrate como cliente) para poder comprar."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        items = list(carrito.items.select_related('producto').all())
-
         metodo_pago = request.data.get('metodo_pago', 'tarjeta')
+        if metodo_pago not in dict(Venta.METODO_PAGO_CHOICES):
+            return Response(
+                {"codigo": "METODO_PAGO_INVALIDO",
+                 "detalle": "Metodo de pago no valido.",
+                 "opciones": [c for c, _ in Venta.METODO_PAGO_CHOICES]},
+                status=status.HTTP_400_BAD_REQUEST)
+
         mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
         if mock_habilitado:
             pasarelarespuesta = {
@@ -453,7 +527,30 @@ class CheckoutView(APIView):
                  "detalle": pasarelarespuesta['mensaje']},
                 status=status.HTTP_402_PAYMENT_REQUIRED)
 
+        # Transaccion unica: bloquea el carrito del comprador (evita doble
+        # checkout concurrente), los productos y la fila de cada empresa
+        # vendedora (serializa el correlativo de numero_factura).
         with transaction.atomic():
+            carrito = _carrito_de(request, bloquear=True)
+
+            if not carrito.items.exists():
+                return Response(
+                    {"codigo": "CARRITO_VACIO",
+                     "detalle": "Tu carrito esta vacio."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            cliente = Cliente.objects.filter(
+                usuario=request.user, deleted_at__isnull=True
+            ).first()
+            if not cliente:
+                return Response(
+                    {"codigo": "SIN_CLIENTE",
+                     "detalle": "Completa tus datos de comprador "
+                                "(Registrate como cliente) para poder comprar."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            items = list(carrito.items.select_related('producto').all())
+
             fallidos = []
             for item in items:
                 producto = Producto.objects.select_for_update().filter(
@@ -493,7 +590,8 @@ class CheckoutView(APIView):
 
             ventas = []
             for empresa_id, lineas in por_vendedor.items():
-                empresa = Empresa.objects.get(pk=empresa_id)
+                empresa = Empresa.objects.select_for_update().filter(
+                    pk=empresa_id).first()
                 subtotal = sum(
                     Decimal(str(item.producto.precio)) * item.cantidad
                     for item in lineas
@@ -573,5 +671,7 @@ class MisPedidosView(APIView):
                    .select_related('empresa')
                    .prefetch_related('detalles__producto')
                    .order_by('-created_at'))
-        datos = PedidoCompradorSerializer(pedidos, many=True).data
+        # Lista acotada (nunca ilimitada).
+        limite = _limite_paginacion(request.query_params.get('limite', 50))
+        datos = PedidoCompradorSerializer(pedidos[:limite], many=True).data
         return Response({"resultados": datos, "total": len(datos)})

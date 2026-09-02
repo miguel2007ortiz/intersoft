@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core import mail
@@ -6,10 +7,11 @@ from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import Empresa
 
-from .models import ActividadUsuario, Perfil, Rol, RolPermiso
+from .models import ActividadUsuario, Perfil, Rol, RolPermiso, TokenRecuperacion
 
 
 class BaseCuentasTest(TestCase):
@@ -390,7 +392,7 @@ class CrudRolesTest(BaseSeguridadTest):
         respuesta = self.api.patch(f"/api/seguridad/roles/{rol.id}/", {
             "nombre": "JEFE_TOTAL"}, format="json")
         self.assertEqual(respuesta.status_code, 400)
-        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+        self.assertEqual(respuesta.json()["codigo"], "ROL_SISTEMA_LECTURA_ONLY")
 
     def test_eliminar_rol_sin_usuarios(self):
         creado = self.api.post("/api/seguridad/roles/", {
@@ -414,7 +416,7 @@ class CrudRolesTest(BaseSeguridadTest):
         for nombre in ("ADMINISTRADOR", "EMPLEADO", "CLIENTE"):
             rol = Rol.objects.get(nombre=nombre)
             respuesta = self.api.delete(f"/api/seguridad/roles/{rol.id}/")
-            self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+            self.assertEqual(respuesta.json()["codigo"], "ROL_SISTEMA_LECTURA_ONLY")
 
     def test_clonar_rol_duplica_permisos_con_nombre_temporal(self):
         origen = Rol.objects.get(nombre="EMPLEADO")
@@ -529,3 +531,135 @@ class RendimientoQueriesRolesTest(BaseSeguridadTest):
         self.assertEqual(respuesta.status_code, 200)
         self.assertGreaterEqual(len(respuesta.json()["resultados"]), 3)
         self.assertLessEqual(len(contexto.captured_queries), 10)
+
+
+# ==================== FASE 5: JWT, /me, refresh y token reset ================
+
+from rest_framework_simplejwt.tokens import RefreshToken   # noqa: E402
+
+
+class JWTyMeTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, _ = cls.crear_cuenta(email="jwt@test.co")
+
+    def obtener_tokens(self):
+        respuesta = self.login("jwt@test.co", "Clave12345")
+        return respuesta.json()
+
+    def test_me_devuelve_perfil_y_permisos(self):
+        tokens = self.obtener_tokens()
+        api = APIClient()
+        api.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+        respuesta = api.get(reverse("auth-me"))
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["email"], "jwt@test.co")
+        self.assertEqual(datos["rol"], "EMPLEADO")
+        self.assertIn("permisos", datos)
+        self.assertIn("empresa_nombre", datos)
+
+    def test_me_con_token_invalido_devuelve_401(self):
+        api = APIClient()
+        api.credentials(HTTP_AUTHORIZATION="Bearer token-falso-invalido")
+        respuesta = api.get(reverse("auth-me"))
+        self.assertEqual(respuesta.status_code, 401)
+
+    def test_me_sin_token_devuelve_401(self):
+        respuesta = APIClient().get(reverse("auth-me"))
+        self.assertEqual(respuesta.status_code, 401)
+
+    def test_me_con_token_expirado_devuelve_401(self):
+        # Forzamos un access token con 'exp' en el pasado para probar la
+        # ruta "expirado" de simplejwt sin esperar 30 minutos.
+        tokens = self.obtener_tokens()
+        refresh = RefreshToken(tokens["refresh"])
+        access = refresh.access_token
+        access["exp"] = timezone.now().timestamp() - 60
+        api = APIClient()
+        api.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {access}")
+        respuesta = api.get(reverse("auth-me"))
+        self.assertEqual(respuesta.status_code, 401)
+
+
+class RefreshTokenTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, _ = cls.crear_cuenta(email="refresh@test.co")
+
+    def get_client(self):
+        return self.client
+
+    def test_refresh_devuelve_nuevo_access(self):
+        tokens = self.login("refresh@test.co", "Clave12345").json()
+        respuesta = self.client.post(reverse("auth-refresh"),
+                                     {"refresh": tokens["refresh"]},
+                                     content_type="application/json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("access", respuesta.json())
+
+    def test_refresh_con_token_invalido_devuelve_401(self):
+        respuesta = self.client.post(reverse("auth-refresh"),
+                                     {"refresh": "no-es-un-token"},
+                                     content_type="application/json")
+        self.assertEqual(respuesta.status_code, 401)
+
+    def test_refresh_con_body_invalido_devuelve_400(self):
+        respuesta = self.client.post(reverse("auth-refresh"),
+                                     {}, content_type="application/json")
+        # Falta el campo refresh -> validacion de DRF (error de peticion).
+        self.assertIn(respuesta.status_code, (400,))
+
+    def test_access_tokens_dan_acceso_a_datos_protegidos(self):
+        tokens = self.login("refresh@test.co", "Clave12345").json()
+        respuesta = self.client.get(
+            "/api/seguridad/roles/",
+            HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+        # Como es EMPLEADO no puede ver roles -> 403 (autenticado pero sin
+        # permiso). Lo importante es que NO sea 401.
+        self.assertEqual(respuesta.status_code, 403)
+
+
+class RecuperacionTokenExpiradoTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, _ = cls.crear_cuenta(email="expirado@test.co")
+
+    def solicitar(self):
+        return self.client.post(reverse("auth-password-reset"),
+                                {"email": "expirado@test.co"},
+                                content_type="application/json")
+
+    def extraer_token(self, cuerpo):
+        coincidencia = re.search(r"token=([\w-]+)", cuerpo)
+        return coincidencia.group(1) if coincidencia else None
+
+    def test_restablecer_con_token_expirado_devuelve_400(self):
+        self.solicitar()
+        token = self.extraer_token(mail.outbox[0].body)
+        registro = TokenRecuperacion.objects.get(
+            token_hash=TokenRecuperacion.calcular_hash(token))
+        registro.expira = timezone.now() - timedelta(minutes=1)
+        registro.save(update_fields=["expira"])
+
+        respuesta = self.client.post(
+            reverse("auth-password-reset-confirmar"),
+            {"token": token, "password": "NuevaClave99"},
+            content_type="application/json")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "TOKEN_INVALIDO")
+
+    def test_restablecer_con_token_inexistente_devuelve_400(self):
+        respuesta = self.client.post(
+            reverse("auth-password-reset-confirmar"),
+            {"token": "token-que-no-existe", "password": "NuevaClave99"},
+            content_type="application/json")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "TOKEN_INVALIDO")

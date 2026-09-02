@@ -5,6 +5,8 @@ Todo queda restringido al ADMINISTRADOR en las vistas. Respecto a
 a `estado != 'nueva'`.
 """
 
+from urllib.parse import urlsplit
+
 from rest_framework import serializers
 
 from .models import Camara, Notificacion
@@ -23,6 +25,21 @@ class CamaraSerializer(serializers.ModelSerializer):
         valor = (valor or '').strip()
         if not valor:
             raise serializers.ValidationError("El nombre de la camara es obligatorio.")
+        return valor
+
+    def validate_url_stream(self, valor):
+        valor = (valor or '').strip()
+        if not valor:
+            return ''   # camara sin video en vivo es valida (se oculta del panel)
+        try:
+            partes = urlsplit(valor)
+        except ValueError:
+            raise serializers.ValidationError(
+                "La URL del stream no es valida.")
+        esquemas_validos = ('http', 'https', 'rtsp', 'rtmp', 'rtmps')
+        if partes.scheme.lower() not in esquemas_validos or not partes.netloc:
+            raise serializers.ValidationError(
+                "La URL del stream debe ser http(s), rtsp o rtmp.")
         return valor
 
 

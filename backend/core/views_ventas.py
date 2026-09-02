@@ -25,8 +25,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (Cliente, DetalleVenta, MovimientoInventario, Notificacion,
-                     Producto, Venta)
+from .models import (Cliente, DetalleVenta, Empresa,
+                     MovimientoInventario, Notificacion, Producto, Venta)
 from .serializers_monitoreo import NotificacionLecturaSerializer
 from .serializers_ventas import (AjusteInventarioSerializer, AnulacionSerializer,
                                  MovimientoInventarioLecturaSerializer,
@@ -35,6 +35,24 @@ from .serializers_ventas import (AjusteInventarioSerializer, AnulacionSerializer
 
 def _obtener_empresa(request):
     return request.user.perfil.empresa
+
+
+def _es_fecha_valida(valor):
+    """True si `valor` es una fecha ISO YYYY-MM-DD real (p. ej. '2026-09-01')."""
+    try:
+        timezone.datetime.strptime(valor, '%Y-%m-%d')
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _limite_paginacion(valor, por_defecto=50, maximo=200):
+    """Limite de filas a devolver: acotado a [1, maximo] para que una
+    lista nunca devuelva resultados ilimitados (uso de memoria/CPU acotado)."""
+    try:
+        return max(1, min(int(valor), maximo))
+    except (TypeError, ValueError):
+        return por_defecto
 
 
 def _registrar_alerta_stock(producto, empresa):
@@ -98,7 +116,10 @@ class VentaPOSView(APIView):
                  "detalle": "El cliente no existe en tu empresa."},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Validar stock de cada linea (con lock para evitar carreras)
+        # Un solo bloque transaction.atomic(): valida stock con
+        # select_for_update, crea la venta, descuenta stock y registra
+        # movimientos manteniendo el lock de producto hasta el commit
+        # (evita oversell entre dos POST simultaneos).
         lineas_stock_ok = []
         lineas_stock_fallido = []
         with transaction.atomic():
@@ -128,15 +149,17 @@ class VentaPOSView(APIView):
                     'precio_unitario': producto.precio,
                 })
 
-        if lineas_stock_fallido:
-            return Response(
-                {"codigo": "STOCK_INSUFICIENTE",
-                 "detalle": "Algunos productos no tienen stock suficiente.",
-                 "productos": lineas_stock_fallido},
-                status=status.HTTP_400_BAD_REQUEST)
+            if lineas_stock_fallido:
+                return Response(
+                    {"codigo": "STOCK_INSUFICIENTE",
+                     "detalle": "Algunos productos no tienen stock suficiente.",
+                     "productos": lineas_stock_fallido},
+                    status=status.HTTP_400_BAD_REQUEST)
 
-        # Crear venta con toda la logica
-        with transaction.atomic():
+            # Lock de la fila de la empresa: serializa el correlativo
+            # numero_factura dentro de la misma empresa.
+            Empresa.objects.select_for_update().filter(pk=empresa.pk).first()
+
             subtotal = sum(
                 Decimal(str(l['precio_unitario'])) * l['cantidad']
                 for l in lineas_stock_ok
@@ -201,10 +224,20 @@ class VentasView(APIView):
             ventas = ventas.filter(estado=estado)
 
         fecha_inicio = request.query_params.get('fecha_inicio')
+        if fecha_inicio and not _es_fecha_valida(fecha_inicio):
+            return Response(
+                {"codigo": "FECHA_INVALIDA",
+                 "detalle": "fecha_inicio debe usar el formato YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST)
         if fecha_inicio:
             ventas = ventas.filter(fecha__date__gte=fecha_inicio)
 
         fecha_fin = request.query_params.get('fecha_fin')
+        if fecha_fin and not _es_fecha_valida(fecha_fin):
+            return Response(
+                {"codigo": "FECHA_INVALIDA",
+                 "detalle": "fecha_fin debe usar el formato YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST)
         if fecha_fin:
             ventas = ventas.filter(fecha__date__lte=fecha_fin)
 
@@ -252,32 +285,8 @@ class VentaDetalleView(APIView):
 
     def anular(self, request, id):
         empresa = _obtener_empresa(request)
-        venta = Venta.objects.filter(
-            empresa=empresa, deleted_at__isnull=True, id=id).first()
-        if not venta:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-
-        if venta.estado == 'anulada':
-            return Response(
-                {"codigo": "YA_ANULADA",
-                 "detalle": "Esta venta ya fue anulada."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if venta.estado != 'completada':
-            return Response(
-                {"codigo": "ESTADO_INVALIDO",
-                 "detalle": "Solo se pueden anular ventas completadas."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if hasattr(venta, 'factura_electronica') and \
-                venta.factura_electronica.estado == 'aprobada':
-            return Response(
-                {"codigo": "FACTURADA_DIAN",
-                 "detalle": "Esta venta ya fue facturada ante la DIAN. "
-                            "Para reversarla, crea una Nota Credito desde "
-                            "el modulo de Facturacion."},
-                status=status.HTTP_400_BAD_REQUEST)
-
+        # Valida el motivo antes de tomar lock (evita sostener filas
+        # bloqueadas por una peticion malformada).
         entrada = AnulacionSerializer(data=request.data)
         if not entrada.is_valid():
             return Response(
@@ -286,9 +295,44 @@ class VentaDetalleView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
+        # Dentro del bloque transaction.atomic() se toma el lock de la fila
+        # de la venta (serializa dobles anulaciones) y el de los productos.
         with transaction.atomic():
-            # Revertir stock
-            detalles = venta.detalles.select_related('producto').all()
+            venta = Venta.objects.select_for_update().filter(
+                empresa=empresa, deleted_at__isnull=True, id=id).first()
+            if not venta:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+
+            if venta.estado == 'anulada':
+                return Response(
+                    {"codigo": "YA_ANULADA",
+                     "detalle": "Esta venta ya fue anulada."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if venta.estado != 'completada':
+                return Response(
+                    {"codigo": "ESTADO_INVALIDO",
+                     "detalle": "Solo se pueden anular ventas completadas."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if hasattr(venta, 'factura_electronica') and \
+                    venta.factura_electronica.estado == 'aprobada':
+                return Response(
+                    {"codigo": "FACTURADA_DIAN",
+                     "detalle": "Esta venta ya fue facturada ante la DIAN. "
+                                "Para reversarla, crea una Nota Credito desde "
+                                "el modulo de Facturacion."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            # Lock de las filas de producto para revertir stock sin
+            # colisionar con ventas POS o ajustes concurrentes.
+            detalles = list(venta.detalles.select_related('producto').all())
+            Producto.objects.filter(
+                id__in=[d.producto_id for d in detalles],
+                empresa=empresa,
+            ).select_for_update().all()
+
+            # Revertir stock con la fila ya bloqueada
             for detalle in detalles:
                 producto = detalle.producto
                 producto.stock += detalle.cantidad
@@ -336,11 +380,18 @@ class InventarioView(APIView):
 
         return Response({"resultados": datos, "total": len(datos)})
 
-    def post(self, request):
-        return self.ajuste_manual(request)
+    def post(self, request, id=None):
+        return self.ajuste_manual(request, id=id)
 
-    def ajuste_manual(self, request):
-        entrada = AjusteInventarioSerializer(data=request.data)
+    def ajuste_manual(self, request, id=None):
+        # La ruta /inventario/<uuid:id>/ajustar/ identifica el producto por
+        # URL; en ese caso `producto` no se exige en el cuerpo. En el POST
+        # canonico /inventario/ (usado por el frontend) viene en el payload.
+        datos = request.data.copy() if hasattr(request.data, "copy") \
+            else dict(request.data)
+        if id is not None:
+            datos["producto"] = id
+        entrada = AjusteInventarioSerializer(data=datos)
         if not entrada.is_valid():
             return Response(
                 {"codigo": "DATOS_INVALIDOS",
@@ -351,16 +402,18 @@ class InventarioView(APIView):
         datos = entrada.validated_data
         empresa = _obtener_empresa(request)
 
-        producto = Producto.objects.select_for_update().filter(
-            empresa=empresa, deleted_at__isnull=True, id=datos['producto']
-        ).first()
-        if not producto:
-            return Response(
-                {"codigo": "PRODUCTO_NO_ENCONTRADO",
-                 "detalle": "El producto no existe en tu empresa."},
-                status=status.HTTP_400_BAD_REQUEST)
-
         with transaction.atomic():
+            # Lock dentro de la transaccion: el stock se lee y escribe bajo
+            # SELECT FOR UPDATE.
+            producto = Producto.objects.select_for_update().filter(
+                empresa=empresa, deleted_at__isnull=True, id=datos['producto']
+            ).first()
+            if not producto:
+                return Response(
+                    {"codigo": "PRODUCTO_NO_ENCONTRADO",
+                     "detalle": "El producto no existe en tu empresa."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
             tipo = datos['tipo']
             cantidad = datos['cantidad']
             motivo = datos['motivo']
@@ -385,9 +438,11 @@ class InventarioView(APIView):
                 request.user, "AJUSTE_INVENTARIO",
                 f"{tipo.upper()} {cantidad} - {producto.nombre}: {motivo}")
 
-        return Response(MovimientoInventarioLecturaSerializer(
-            MovimientoInventario.objects.latest('created_at')).data,
-            status=status.HTTP_201_CREATED)
+        movimiento = (MovimientoInventario.objects
+                      .filter(producto__empresa=empresa)
+                      .latest('created_at'))
+        return Response(MovimientoInventarioLecturaSerializer(movimiento).data,
+                        status=status.HTTP_201_CREATED)
 
 
 # ------------------------------ Alertas -----------------------------------
@@ -487,8 +542,11 @@ class InventarioProductosView(APIView):
         if filtro_stock == 'true':
             productos = productos.filter(stock__lte=models.F('stock_minimo'))
 
+        # Lista acotada (nunca ilimitada).
+        limite = _limite_paginacion(
+            request.query_params.get('limite', 50))
         datos = []
-        for p in productos:
+        for p in productos[:limite]:
             datos.append({
                 "id": str(p.id),
                 "nombre": p.nombre,

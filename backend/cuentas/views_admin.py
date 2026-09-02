@@ -29,6 +29,14 @@ def respuesta_datos_invalidas(errores):
                      "errores": errores}, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _limite_paginacion(valor, por_defecto=50, maximo=200):
+    """Limite de filas a devolver, acotado a [1, maximo]."""
+    try:
+        return max(1, min(int(valor), maximo))
+    except (TypeError, ValueError):
+        return por_defecto
+
+
 def perfiles_de_empresa(empresa: Empresa):
     return (Perfil.objects.filter(empresa=empresa, deleted_at__isnull=True)
             .select_related("usuario", "rol").order_by("usuario__first_name"))
@@ -46,7 +54,8 @@ class UsuariosSeguridadView(APIView):
 
     def get(self, request):
         perfiles = perfiles_de_empresa(request.user.perfil.empresa)
-        datos = UsuarioLecturaSerializer(perfiles, many=True).data
+        limite = _limite_paginacion(request.query_params.get('limite', 50))
+        datos = UsuarioLecturaSerializer(perfiles[:limite], many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):
@@ -214,7 +223,18 @@ class RolesSeguridadView(APIView):
 
 
 class RolDetalleView(APIView):
-    """GET / PUT-PATCH (nombre, descripcion y permisos) / DELETE."""
+    """GET / PUT-PATCH (nombre, descripcion y permisos) / DELETE.
+
+    Estrategia de roles del sistema (ADMINISTRADOR, EMPLEADO, CLIENTE):
+    son roles GLOBALES (empresa=None) compartidos por todos los tenants, por
+    lo que se tratan como LECTURA-ONLY. Cualquier empresa puede VERLOS y
+    ASIGNARLOS (y clonarlos como plantilla), pero NINGUN administrador puede
+    renombrarlos, cambiar su descripcion, modificar sus permisos ni
+    eliminarlos. Asi se evita que un tenant altere la autorizacion global de
+    los demas (escalamiento transversal) y se garantiza la integridad del
+    RBAC base del sistema. Los roles PERSONALIZADOS (empresa=None) no existen:
+    los creados por un admin pertenecen a SU empresa y quedan aislados.
+    """
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     @staticmethod
@@ -239,6 +259,16 @@ class RolDetalleView(APIView):
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
+        # Los roles del sistema son globales y compartidos por todos los
+        # tenants: no se pueden editar (ni nombre, ni descripcion, ni
+        # permisos) para impedir que una empresa altere la autorizacion de
+        # las demas (requisito fase 3: aislamiento multiempresa).
+        if rol.nombre in ROLES_DEL_SISTEMA:
+            return Response({"codigo": "ROL_SISTEMA_LECTURA_ONLY",
+                             "detalle": "Los roles base del sistema son de "
+                                        "solo lectura: no se pueden editar."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         entrada = RolEscrituraSerializer(rol, data=request.data, partial=parcial,
                                          context={"empresa": request.user.perfil.empresa})
         if not entrada.is_valid():
@@ -246,11 +276,6 @@ class RolDetalleView(APIView):
 
         datos = entrada.validated_data
         nombre_anterior = rol.nombre
-        if "nombre" in datos and datos["nombre"] != rol.nombre \
-                and rol.nombre in ROLES_DEL_SISTEMA:
-            return Response({"codigo": "ROL_DEL_SISTEMA",
-                             "detalle": "Los roles base del sistema no se pueden renombrar."},
-                            status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             if "nombre" in datos:
@@ -271,8 +296,9 @@ class RolDetalleView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         if rol.nombre in ROLES_DEL_SISTEMA:
-            return Response({"codigo": "ROL_DEL_SISTEMA",
-                             "detalle": "Los roles base del sistema no se pueden eliminar."},
+            return Response({"codigo": "ROL_SISTEMA_LECTURA_ONLY",
+                             "detalle": "Los roles base del sistema no se "
+                                        "pueden eliminar."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         activos = Perfil.objects.filter(rol=rol, deleted_at__isnull=True,

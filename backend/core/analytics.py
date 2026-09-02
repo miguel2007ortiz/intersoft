@@ -23,11 +23,34 @@ class FiltrosDashboard:
 
     def __init__(self, request):
         self.empresa_id = request.user.perfil.empresa_id
-        self.fecha_inicio = request.query_params.get('fecha_inicio') or None
-        self.fecha_fin = request.query_params.get('fecha_fin') or None
-        self.categoria_id = request.query_params.get('categoria') or None
+        self.fecha_inicio = self._fecha_valida(
+            request.query_params.get('fecha_inicio'))
+        self.fecha_fin = self._fecha_valida(
+            request.query_params.get('fecha_fin'))
+        self.categoria_id = None
+        categoria = request.query_params.get('categoria')
+        if categoria:
+            try:
+                self.categoria_id = uuid_mod.UUID(str(categoria))
+            except (ValueError, TypeError):
+                raise ValueError(
+                    "El filtro categoria debe ser un ID valido.")
         self.limite = self._limite(
             request.query_params.get('limite', '100'))
+
+    @staticmethod
+    def _fecha_valida(valor):
+        """Valida formato ISO YYYY-MM-DD; devuelve None si viene vacio y
+        lanza ValueError si el texto no es una fecha real (evita que un
+        filtro malformado rompa la consulta SQL de las vistas)."""
+        if not valor:
+            return None
+        try:
+            datetime.strptime(valor, '%Y-%m-%d')
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Fecha invalida: '{valor}'. Formato esperado YYYY-MM-DD.")
+        return valor
 
     @staticmethod
     def _limite(valor):

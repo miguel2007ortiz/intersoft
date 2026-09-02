@@ -130,6 +130,7 @@ class Cliente(TimeStampedModel):
         # NULL se consideran distintos, asi que los clientes del marketplace
         # (empresa=None) no colisionan entre si ni con los de las empresas.
         unique_together = ('empresa', 'tipo_documento', 'numero_documento')
+        indexes = [models.Index(fields=['empresa', 'nombre'])]
         ordering = ['nombre']
 
     def __str__(self):
@@ -166,7 +167,10 @@ class Venta(TimeStampedModel):
 
     class Meta:
         ordering = ['-fecha']
-        indexes = [models.Index(fields=['empresa', '-fecha']), models.Index(fields=['estado'])]
+        indexes = [models.Index(fields=['empresa', '-fecha']),
+                   models.Index(fields=['estado']),
+                   models.Index(fields=['empresa', 'estado', '-fecha'],
+                                name='venta_empresa_estado_fecha_idx')]
         constraints = [
             models.CheckConstraint(condition=models.Q(total__gte=0),
                                    name='venta_total_no_negativo'),

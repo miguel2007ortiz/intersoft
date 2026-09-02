@@ -15,7 +15,7 @@
           <label for="emp-nombre">Nombre del negocio</label>
           <input id="emp-nombre" type="text" formControlName="nombre" placeholder="Tienda El Progreso" />
           @if (empresa.nombre.touched && empresa.nombre.invalid) {
-            <p class="mensaje-error">
+            <p class="mensaje-error" role="alert">
               @if (empresa.nombre.hasError('required')) { Escribe el nombre del negocio. }
               @else { Debe tener al menos 3 caracteres. }
             </p>
@@ -26,7 +26,7 @@
           <label for="emp-nit">NIT</label>
           <input id="emp-nit" type="text" inputmode="numeric" formControlName="nit" placeholder="900123456" />
           @if (empresa.nit.touched && empresa.nit.invalid) {
-            <p class="mensaje-error">El NIT son 9 digitos, sin puntos ni guiones.</p>
+            <p class="mensaje-error" role="alert">El NIT son 9 digitos, sin puntos ni guiones.</p>
           }
         </div>
       </fieldset>
@@ -39,7 +39,7 @@
           <input id="adm-nombre" type="text" formControlName="nombre" autocomplete="name"
                  placeholder="Ana Torres" />
           @if (admin.nombre.touched && admin.nombre.invalid) {
-            <p class="mensaje-error">Escribe tu nombre completo (minimo 3 caracteres).</p>
+            <p class="mensaje-error" role="alert">Escribe tu nombre completo (minimo 3 caracteres).</p>
           }
         </div>
 
@@ -50,7 +50,7 @@
           @if (admin.email.pending) {
             <p class="ayuda">Verificando disponibilidad...</p>
           } @else if (admin.email.touched && admin.email.invalid) {
-            <p class="mensaje-error">
+            <p class="mensaje-error" role="alert">
               @if (admin.email.hasError('required')) { Escribe tu correo. }
               @else if (admin.email.hasError('emailEnUso')) { Ya existe una cuenta con este correo. }
               @else { Ese correo no tiene un formato valido. }
@@ -71,9 +71,9 @@
             </button>
           </div>
           @if (admin.password.touched && admin.password.hasError('fuerza')) {
-            <p class="mensaje-error">La contraseña necesita: {{ faltantesPassword().join(', ') }}.</p>
+            <p class="mensaje-error" role="alert">La contraseña necesita: {{ faltantesPassword().join(', ') }}.</p>
           } @else if (admin.password.touched && admin.password.hasError('required')) {
-            <p class="mensaje-error">Escribe una contraseña.</p>
+            <p class="mensaje-error" role="alert">Escribe una contraseña.</p>
           } @else {
             <p class="ayuda">Minimo 8 caracteres, con mayuscula, minuscula y numero.</p>
           }
@@ -83,7 +83,7 @@
           <label for="adm-password2">Repite la contraseña</label>
           <input id="adm-password2" type="password" formControlName="password2" autocomplete="new-password" />
           @if (grupoAdmin.hasError('passwordsDistintas') && admin.password2.touched) {
-            <p class="mensaje-error">Las contraseñas no coinciden.</p>
+            <p class="mensaje-error" role="alert">Las contraseñas no coinciden.</p>
           }
         </div>
       </fieldset>

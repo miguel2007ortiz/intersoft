@@ -15,7 +15,7 @@
         <input id="c-nombre" type="text" formControlName="nombre" autocomplete="name"
                placeholder="Ana Torres" />
         @if (c.nombre.touched && c.nombre.invalid) {
-          <p class="mensaje-error">Escribe tu nombre completo (minimo 3 caracteres).</p>
+          <p class="mensaje-error" role="alert">Escribe tu nombre completo (minimo 3 caracteres).</p>
         }
       </div>
 
@@ -26,7 +26,7 @@
         @if (c.email.pending) {
           <p class="ayuda">Verificando disponibilidad...</p>
         } @else if (c.email.touched && c.email.invalid) {
-          <p class="mensaje-error">
+          <p class="mensaje-error" role="alert">
             @if (c.email.hasError('required')) { Escribe tu correo. }
             @else if (c.email.hasError('emailEnUso')) { Ya existe una cuenta con este correo. }
             @else { Ese correo no tiene un formato valido. }
@@ -47,9 +47,9 @@
           </button>
         </div>
         @if (c.password.touched && c.password.hasError('fuerza')) {
-          <p class="mensaje-error">La contraseña necesita: {{ faltantesPassword().join(', ') }}.</p>
+          <p class="mensaje-error" role="alert">La contraseña necesita: {{ faltantesPassword().join(', ') }}.</p>
         } @else if (c.password.touched && c.password.hasError('required')) {
-          <p class="mensaje-error">Escribe una contraseña.</p>
+          <p class="mensaje-error" role="alert">Escribe una contraseña.</p>
         } @else {
           <p class="ayuda">Minimo 8 caracteres, con mayuscula, minuscula y numero.</p>
         }
@@ -59,7 +59,7 @@
         <label for="c-password2">Repite la contraseña</label>
         <input id="c-password2" type="password" formControlName="password2" autocomplete="new-password" />
         @if (formulario.hasError('passwordsDistintas') && c.password2.touched) {
-          <p class="mensaje-error">Las contraseñas no coinciden.</p>
+          <p class="mensaje-error" role="alert">Las contraseñas no coinciden.</p>
         }
       </div>
 
@@ -77,7 +77,7 @@
           <input id="c-numero" type="text" formControlName="numero_documento"
                  autocomplete="off" />
           @if (c.numero_documento.touched && c.numero_documento.invalid) {
-            <p class="mensaje-error">Escribe el numero de documento.</p>
+            <p class="mensaje-error" role="alert">Escribe el numero de documento.</p>
           }
         </div>
       </div>

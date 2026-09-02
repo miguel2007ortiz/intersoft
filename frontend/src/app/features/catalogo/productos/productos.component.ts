@@ -1,10 +1,13 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
+import { programarAviso } from '../../../core/utils/temporizador.util';
 import {
   Categoria, ErrorCatalogo, Producto,
 } from '../../../core/models/catalogo.model';
+
+const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-productos',
@@ -15,10 +18,12 @@ import {
 export class ProductosComponent {
   private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly productos = signal<Producto[]>([]);
   readonly categorias = signal<Categoria[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Producto | null>(null);
@@ -105,6 +110,7 @@ export class ProductosComponent {
   }
 
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
@@ -112,6 +118,7 @@ export class ProductosComponent {
     const valores = this.formulario.getRawValue();
     const datos = { ...valores, categoria_id: valores.categoria_id || null };
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     const peticion = enEdicion
       ? this.catalogo.editarProducto(enEdicion.id, datos)
@@ -119,13 +126,22 @@ export class ProductosComponent {
 
     peticion.subscribe({
       next: () => {
+        this.guardando.set(false);
         this.exito.set(enEdicion ? 'Producto actualizado.' : 'Producto creado.');
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
-      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorCatalogo) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
+  }
+
+  /** Oculta el aviso de "exito" despues de unos segundos. */
+  private avisarExito(): void {
+    programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
   }
 
   alternarActivo(producto: Producto): void {
@@ -137,7 +153,7 @@ export class ProductosComponent {
         this.exito.set(actualizado.activo
           ? 'Producto visible en el catalogo.'
           : 'Producto oculto del catalogo.');
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo cambiar el estado.'),
     });
@@ -151,13 +167,13 @@ export class ProductosComponent {
       next: () => {
         this.exito.set('Producto eliminado.');
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorCatalogo) => {
         // Regla fase 3: con ventas registradas solo se permite desactivar
         if (e.codigo === 'PRODUCTO_CON_VENTAS') {
           this.error.set(`${e.detalle} Usa "Desactivar" para ocultarlo.`);
-          setTimeout(() => this.error.set(null), 6000);
+          programarAviso(this.destroyRef, () => this.error.set(null), 6000);
           return;
         }
         this.error.set(e.detalle ?? 'No se pudo eliminar.');

@@ -1,13 +1,15 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
+import { programarAviso } from '../../../core/utils/temporizador.util';
 import { ErrorCatalogo, Cliente } from '../../../core/models/catalogo.model';
 import { UsuarioAdmin } from '../../../core/models/seguridad.model';
 
 const TIPOS_DOCUMENTO = ['CC', 'NIT', 'CE', 'PAS'] as const;
+const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-clientes',
@@ -19,12 +21,14 @@ export class ClientesComponent {
   private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
   private readonly seguridad = inject(SeguridadService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly auth = inject(AuthService);
 
   readonly tiposDocumento = TIPOS_DOCUMENTO;
   readonly clientes = signal<Cliente[]>([]);
   readonly usuarios = signal<UsuarioAdmin[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Cliente | null>(null);
@@ -133,6 +137,7 @@ export class ClientesComponent {
   }
 
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
@@ -143,6 +148,7 @@ export class ClientesComponent {
       usuario_id: valores.usuario_id || null,
     };
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     const peticion = enEdicion
       ? this.catalogo.editarCliente(enEdicion.id, datos)
@@ -150,13 +156,22 @@ export class ClientesComponent {
 
     peticion.subscribe({
       next: (cliente) => {
+        this.guardando.set(false);
         this.exito.set(enEdicion ? 'Cliente actualizado.' : `Cliente ${cliente.nombre} creado.`);
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
-      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorCatalogo) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
+  }
+
+  /** Oculta el aviso de "exito" despues de unos segundos. */
+  private avisarExito(): void {
+    programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
   }
 
   desactivar(cliente: Cliente): void {
@@ -168,7 +183,7 @@ export class ClientesComponent {
       next: () => {
         this.exito.set('Cliente desactivado.');
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo desactivar.'),
     });
@@ -179,7 +194,7 @@ export class ClientesComponent {
       next: () => {
         this.exito.set('Cliente reactivado.');
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo reactivar.'),
     });

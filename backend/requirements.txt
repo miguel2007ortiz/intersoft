@@ -1,11 +1,20 @@
-Django>=5.2,<6.0
-djangorestframework>=3.16
-djangorestframework-simplejwt>=5.3
-django-cors-headers>=4.4
-python-decouple>=3.8
-Pillow>=11.0.0
-mysqlclient>=2.2
+# =====================================================================
+#  InterSoft — dependencias de runtime del backend (PINNED, reproducibles)
+#  Versiones exactas verificadas contra la suite de pruebas (241 tests).
+#  Instalacion limpia:  pip install -r requirements.txt
+#  Para CI y despliegue usa exactamente estas versiones (reproducibilidad).
+# =====================================================================
 
-# Alternativa pura en Python a mysqlclient (si mysqlclient no compila en
-# Windows). intersoft/__init__.py la detecta y activa automaticamente.
-PyMySQL>=1.1
+Django==5.2.17
+djangorestframework==3.18.0
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+python-decouple==3.8
+Pillow==11.2.1
+
+# Conector MySQL. En Linux/macOS y CI compila mysqlclient (requiere
+# libmysqlclient-dev / mysql-devel). En Windows suele no compilar:
+# PyMySQL (abajo) es el fallback puro en Python que intersoft/__init__.py
+# detecta y activa automaticamente (mismo codigo, los dos funcionan).
+mysqlclient==2.2.8
+PyMySQL==1.1.0

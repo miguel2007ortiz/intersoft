@@ -1,9 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { EmpleadosService } from '../../core/services/empleados.service';
 import { AuthService } from '../../core/services/auth.service';
+import { programarAviso } from '../../core/utils/temporizador.util';
 import { DatosEmpleado, Empleado, ErrorEmpleado, RolAsignable } from '../../core/models/empleado.model';
+
+const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-empleados',
@@ -14,6 +17,7 @@ import { DatosEmpleado, Empleado, ErrorEmpleado, RolAsignable } from '../../core
 export class EmpleadosComponent {
   private readonly fb = inject(FormBuilder);
   private readonly empleados = inject(EmpleadosService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly auth = inject(AuthService);
 
   readonly tiposDocumento = ['CC', 'CE', 'NIT', 'PAS'];
@@ -21,6 +25,7 @@ export class EmpleadosComponent {
   readonly lista = signal<Empleado[]>([]);
   readonly roles = signal<RolAsignable[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Empleado | null>(null);
@@ -110,6 +115,7 @@ export class EmpleadosComponent {
   }
 
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
@@ -123,30 +129,44 @@ export class EmpleadosComponent {
     };
     if (!datos.password) delete datos.password;
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     if (enEdicion) {
       this.empleados.editar(enEdicion.id, datos).subscribe({
         next: () => {
+          this.guardando.set(false);
           this.exito.set('Empleado actualizado.');
           this.cerrarFormulario();
           this.cargar();
-          setTimeout(() => this.exito.set(null), 4000);
+          this.avisarExito();
         },
-        error: (e: ErrorEmpleado) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+        error: (e: ErrorEmpleado) => {
+          this.guardando.set(false);
+          this.error.set(e.detalle ?? 'Datos invalidos.');
+        },
       });
       return;
     }
 
     this.empleados.crear(datos as DatosEmpleado).subscribe({
       next: (creado) => {
+        this.guardando.set(false);
         this.exito.set('Empleado creado.');
         if (creado.password_temporal) this.passwordTemporal.set(creado.password_temporal);
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
-      error: (e: ErrorEmpleado) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorEmpleado) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
+  }
+
+  /** Oculta el aviso de "exito" despues de unos segundos. */
+  private avisarExito(): void {
+    programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
   }
 
   alternarActivo(empleado: Empleado): void {
@@ -156,7 +176,7 @@ export class EmpleadosComponent {
         this.lista.update((filas) =>
           filas.map((f) => (f.id === actualizado.id ? actualizado : f)));
         this.exito.set(actualizado.activo ? 'Empleado reactivado.' : 'Empleado desactivado.');
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorEmpleado) => this.error.set(e.detalle ?? 'No se pudo cambiar el estado.'),
     });

@@ -64,7 +64,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         } @else {
           <!-- Lista de productos -->
           <section class="filtros">
-            <input type="text" placeholder="Buscar producto..."
+            <input type="text" aria-label="Buscar producto" placeholder="Buscar producto..."
                    [(ngModel)]="busquedaProducto" (input)="cargarProductos()" class="input" />
             <label class="filtro-stock">
               <input type="checkbox" [(ngModel)]="filtroStockBajo" (ngModelChange)="cargarProductos()" />
@@ -74,6 +74,11 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
           @if (cargando()) {
             <p class="cargando">Cargando inventario...</p>
+          } @else if (error()) {
+            <div class="estado-error" role="alert">
+              <p>{{ error() }}</p>
+              <button type="button" class="btn-reintentar" (click)="cargarProductos()">Reintentar</button>
+            </div>
           } @else if (!productos().length) {
             <p class="vacio">No hay productos en inventario.</p>
           } @else {
@@ -114,7 +119,12 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
           }
 
           <!-- Historial de movimientos -->
-          @if (movimientos().length) {
+          @if (errorMovimientos()) {
+            <div class="estado-error" role="alert">
+              <p>{{ errorMovimientos() }}</p>
+              <button type="button" class="btn-reintentar" (click)="cargarMovimientos()">Reintentar</button>
+            </div>
+          } @else if (movimientos().length) {
             <section class="seccion">
               <h2>Ultimos movimientos</h2>
               <div class="tabla-wrap">
@@ -143,6 +153,11 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                   </tbody>
                 </table>
               </div>
+            </section>
+          } @else {
+            <section class="seccion">
+              <h2>Ultimos movimientos</h2>
+              <p class="vacio">No hay movimientos registrados.</p>
             </section>
           }
         }
@@ -176,6 +191,17 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
     .form-grid label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 
     .cargando, .vacio { color: var(--gris); text-align: center; padding: var(--e6); }
+
+    .estado-error {
+      text-align: center; padding: var(--e6) var(--e4); color: #b42318;
+      display: flex; flex-direction: column; align-items: center; gap: var(--e3);
+    }
+    .estado-error p { margin: 0; }
+    .btn-reintentar {
+      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
+      border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }
 
     .tabla-wrap { overflow-x: auto; }
     .tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -223,6 +249,8 @@ export class InventarioComponent implements OnInit {
   readonly productos = signal<InventarioProducto[]>([]);
   readonly movimientos = signal<MovimientoInventario[]>([]);
   readonly cargando = signal(true);
+  readonly error = signal<string | null>(null);
+  readonly errorMovimientos = signal<string | null>(null);
   busquedaProducto = '';
   filtroStockBajo = false;
   readonly mostrarAjuste = signal(false);
@@ -246,14 +274,25 @@ export class InventarioComponent implements OnInit {
       busqueda: this.busquedaProducto || undefined,
       stock_bajo: this.filtroStockBajo || undefined,
     }).subscribe({
-      next: (r) => { this.productos.set(r.resultados); this.cargando.set(false); },
-      error: () => this.cargando.set(false),
+      next: (r) => {
+        this.productos.set(r.resultados);
+        this.error.set(null);
+        this.cargando.set(false);
+      },
+      error: (e) => {
+        this.error.set(e.detalle ?? 'No se pudo cargar el inventario.');
+        this.cargando.set(false);
+      },
     });
   }
 
   cargarMovimientos(): void {
     this.catalogo.listarMovimientos().subscribe({
-      next: (r) => this.movimientos.set(r.resultados),
+      next: (r) => {
+        this.movimientos.set(r.resultados);
+        this.errorMovimientos.set(null);
+      },
+      error: (e) => this.errorMovimientos.set(e.detalle ?? 'No se pudieron cargar los movimientos.'),
     });
   }
 

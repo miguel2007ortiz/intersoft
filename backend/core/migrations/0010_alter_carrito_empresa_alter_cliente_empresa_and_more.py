@@ -7,8 +7,13 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    # Rama B: dependia de '0013_alter_venta_numero_factura_and_more' (tip de
+    # la rama A) solo para forzar un grafo lineal. Su parent real es 0009:
+    # todas sus operaciones (carrito/cliente.empresa nullable, indice de
+    # notificacion) dependen de campos presentes desde 0008/0001. El merge
+    # core/0014 concilia ambas ramas.
     dependencies = [
-        ('core', '0013_alter_venta_numero_factura_and_more'),
+        ('core', '0009_notificacion_entrega_pendiente'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

@@ -24,11 +24,19 @@ from .serializers_catalogo import (
     ClienteLecturaSerializer, ProductoEscrituraSerializer, ProductoLecturaSerializer,
 )
 
-
 def respuesta_datos_invalidos(errores):
     return Response({"codigo": "DATOS_INVALIDOS",
                      "detalle": "Revisa los datos del formulario.",
-                     "errores": errores}, status=status.HTTP_400_BAD_REQUEST)
+                     "errores": errores},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+
+def _limite_paginacion(valor, por_defecto=50, maximo=200):
+    """Limite de filas a devolver, acotado a [1, maximo]."""
+    try:
+        return max(1, min(int(valor), maximo))
+    except (TypeError, ValueError):
+        return por_defecto
 
 
 # ------------------------------ Clientes -----------------------------------
@@ -217,7 +225,9 @@ class ProductosView(APIView):
         productos = productos.annotate(
             tiene_ventas_flag=Exists(
                 DetalleVenta.objects.filter(producto=OuterRef("pk"))))
-        datos = ProductoLecturaSerializer(productos.order_by("nombre"), many=True).data
+        limite = _limite_paginacion(request.query_params.get("limite", 50))
+        datos = ProductoLecturaSerializer(
+            productos.order_by("nombre")[:limite], many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):

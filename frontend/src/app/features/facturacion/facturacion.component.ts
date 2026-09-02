@@ -1,9 +1,10 @@
 import { DatePipe, DecimalPipe, SlicePipe } from '@angular/common';
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { FacturaElectronica, NotaCredito, Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { programarAviso } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-facturacion',
@@ -31,7 +32,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         <!-- ===== TAB: Facturas ===== -->
         @if (pestana() === 'facturas') {
           <section class="filtros">
-            <input type="text" placeholder="Buscar por numero, CUFE, cliente..."
+            <input type="text" aria-label="Buscar factura" placeholder="Buscar por numero, CUFE, cliente..."
                    [(ngModel)]="busquedaFactura" (input)="cargarFacturas()" class="input" />
             <select [(ngModel)]="filtroEstado" (change)="cargarFacturas()" class="input input-select">
               <option value="">Todos los estados</option>
@@ -378,6 +379,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class FacturacionComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly pestana = signal<'facturas' | 'notas' | 'generar' | 'crear-nc'>('facturas');
   readonly facturas = signal<FacturaElectronica[]>([]);
@@ -466,7 +468,7 @@ export class FacturacionComponent implements OnInit {
       next: (f) => {
         this.generandoId.set(null);
         this.exito.set(`Factura ${f.numero} generada — ${f.estado_display}`);
-        setTimeout(() => this.exito.set(''), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(''), 4000);
         this.cargarFacturas();
         this.cargarVentas();
       },
@@ -483,7 +485,7 @@ export class FacturacionComponent implements OnInit {
       next: () => {
         this.accionId.set(null);
         this.exito.set('Reintento procesado.');
-        setTimeout(() => this.exito.set(''), 3000);
+        programarAviso(this.destroyRef, () => this.exito.set(''), 3000);
         this.cargarFacturas();
       },
       error: (e) => {
@@ -508,7 +510,7 @@ export class FacturacionComponent implements OnInit {
       next: (r) => {
         this.reenviando.set(false);
         this.exitoReenvio.set(r.detalle);
-        setTimeout(() => { this.reenviarVisible.set(false); this.exitoReenvio.set(''); }, 3000);
+        programarAviso(this.destroyRef, () => { this.reenviarVisible.set(false); this.exitoReenvio.set(''); }, 3000);
       },
       error: (e) => {
         this.exitoReenvio.set('');
@@ -531,7 +533,7 @@ export class FacturacionComponent implements OnInit {
       next: (nc) => {
         this.creandoNc.set(false);
         this.exito.set(`Nota credito ${nc.numero} — ${nc.estado_display}`);
-        setTimeout(() => this.exito.set(''), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(''), 4000);
         this.ventaNcSeleccionada = '';
         this.motivoNc = '';
         this.pestana.set('notas');

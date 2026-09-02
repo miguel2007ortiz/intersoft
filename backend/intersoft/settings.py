@@ -8,19 +8,53 @@ Base de datos: MySQL 8
 from datetime import timedelta
 from pathlib import Path
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config(
-    'SECRET_KEY',
-    default='django-insecure-cambia-esta-clave-en-produccion-intersoft-2026'
-)
 DEBUG = config('DEBUG', default=False, cast=bool)
+
+# ---------------------------------------------------------------- SECRET_KEY
+# En produccion (DEBUG=False) la clave debe venir SIEMPRE de SECRET_KEY y no
+# puede ser el placeholder de desarrollo. Fail-fast: si falta o es el marcador
+# claro, la app no arranca con un mensaje accionable en vez de fallar a mitad
+# de camino o usar una clave predecible (riesgo de firmar tokens falsos).
+_SECRET_KEY = config('SECRET_KEY', default='')
+_DEV_SECRET_PLACEHOLDER = 'django-insecure-cambia-esta-clave-en-produccion-intersoft-2026'
+if not DEBUG:
+    if not _SECRET_KEY:
+        raise ImproperlyConfigured(
+            'SECRET_KEY no esta definida. Con DEBUG=False debes definir '
+            'SECRET_KEY en el entorno (ver backend/.env.example). Genera una '
+            "segura con: python -c \"from django.core.management.utils import "
+            "get_random_secret_key; print(get_random_secret_key())\""
+        )
+    if _SECRET_KEY == _DEV_SECRET_PLACEHOLDER or _SECRET_KEY.startswith('django-insecure-'):
+        raise ImproperlyConfigured(
+            'SECRET_KEY insegura para produccion: no uses el valor de '
+            'desarrollo (django-insecure-*) ni placeholders. Define una clave '
+            'aleatoria nueva en el entorno (ver backend/.env.example).'
+        )
+
+# En desarrollo permitimos el placeholder comodo; en cualquier entorno
+# compartido (DEBUG=False) ya se valido arriba que la clave sea real.
+SECRET_KEY = _SECRET_KEY or _DEV_SECRET_PLACEHOLDER
+
+# ------------------------------------------------------------ ALLOWED_HOSTS
+# En produccion debe declararse explícitamente el/los dominios/ips publicos.
+# Si no se configura (DEBUG=False) fallamos temprano para evitar el riesgo de
+# cabecera de host (DNS rebinding / Host header attacks) al arrancar con '*' .
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
     default='localhost,127.0.0.1',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
 )
+if not DEBUG and (not ALLOWED_HOSTS or '*' in ALLOWED_HOSTS):
+    raise ImproperlyConfigured(
+        'ALLOWED_HOSTS invalido para produccion: debe listar los dominios '
+        'publicos del despliegue separados por comas (sin "*"). '
+        'Ej: ALLOWED_HOSTS=api.intersoft.co,www.mitienda.com'
+    )
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -119,8 +153,50 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
     default='http://localhost:4200,http://127.0.0.1:4200',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
 )
+
+# --------------------------------------------------------- CORS / CSRF (prod)
+# En desarrollo el frontend corre en http://localhost:4200. En produccion
+# debe configurarse CORS_ALLOWED_ORIGINS con el/los origen/es reales y
+# CSRF_TRUSTED_ORIGINS con los mismos (para peticiones con cookies).
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default=CORS_ALLOWED_ORIGINS[0] if CORS_ALLOWED_ORIGINS else '',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()] if v else [],
+)
+
+# ------------------------------------------- Seguridad HTTP / cookies (prod)
+# Con DEBUG=False se endurece la config de cookies de sesion/CSRF y las
+# cabeceras de seguridad (HTTPS). En desarrollo se dejan los valores comodos
+# para servir sobre http://localhost sin friccion.
+if DEBUG:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+else:
+    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
+    SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=True, cast=bool)
+    CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
+    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)  # 1 anno
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Sesion segura por cookies y nombre de cookie razonable.
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # Angular debe leer el token CSRF via JS
+
+# El campo de cookie es razonablemente estricto por omision.
+SESSION_COOKIE_SAMESITE = config('SESSION_COOKIE_SAMESITE', default='Lax')
+CSRF_COOKIE_SAMESITE = config('CSRF_COOKIE_SAMESITE', default='Lax')
+
+# Prohibir nuestra API dentro de iframes ajenos (clickjacking).
+X_FRAME_OPTIONS = 'DENY'
 
 MAX_INTENTOS_LOGIN = 5
 MINUTOS_BLOQUEO = 15

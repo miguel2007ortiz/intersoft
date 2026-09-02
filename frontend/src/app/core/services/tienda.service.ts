@@ -1,10 +1,11 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { capturarErrorDjango } from '../utils/django-error.util';
 import {
   Carrito, CarritoItem, CategoriaTienda, CheckoutResponse,
-  Cupon, ErrorTienda, Pedido, ProductoTienda,
+  Cupon, Pedido, ProductoTienda,
 } from '../models/tienda.model';
 
 interface Lista<T> {
@@ -80,18 +81,7 @@ export class TiendaService {
   }
 }
 
-function capturarError<T>(): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) => throwError(() => traducir(e)));
-}
-
-function traducir(e: HttpErrorResponse): ErrorTienda {
-  const cuerpo = (e.error ?? {}) as ErrorTienda;
-  if (e.status === 0) return { detalle: 'No hay conexion con el servidor.' };
-  if (e.status === 401) return { detalle: 'Debes iniciar sesion.' };
-  if (cuerpo.errores) {
-    const primerCampo = Object.values(cuerpo.errores)[0];
-    const mensaje = Array.isArray(primerCampo) ? String(primerCampo[0]) : cuerpo.detalle;
-    return { codigo: cuerpo.codigo, detalle: mensaje };
-  }
-  return { codigo: cuerpo.codigo, detalle: cuerpo.detalle ?? 'Ocurrio un error inesperado.' };
-}
+const capturarError = <T,>() =>
+  capturarErrorDjango<T>({
+    mensajesPorStatus: { 401: 'Debes iniciar sesion.' },
+  });

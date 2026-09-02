@@ -27,7 +27,12 @@ class LoginView(APIView):
 
     def post(self, request):
         entrada = LoginSerializer(data=request.data)
-        entrada.is_valid(raise_exception=True)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS",
+                 "detalle": "Revisa email y contrasena.",
+                 "errores": entrada.errors},
+                status=status.HTTP_400_BAD_REQUEST)
         email = entrada.validated_data["email"]
         password = entrada.validated_data["password"]
 
@@ -117,7 +122,12 @@ class CambiarPasswordView(APIView):
 
     def post(self, request):
         entrada = CambiarPasswordSerializer(data=request.data)
-        entrada.is_valid(raise_exception=True)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS",
+                 "detalle": "Revisa los datos de la contrasena.",
+                 "errores": entrada.errors},
+                status=status.HTTP_400_BAD_REQUEST)
 
         usuario = request.user
         if not usuario.check_password(entrada.validated_data["password_actual"]):
@@ -182,7 +192,12 @@ class SolicitarRecuperacionView(APIView):
 
     def post(self, request):
         entrada = SolicitarRecuperacionSerializer(data=request.data)
-        entrada.is_valid(raise_exception=True)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS",
+                 "detalle": "Revisa los datos.",
+                 "errores": entrada.errors},
+                status=status.HTTP_400_BAD_REQUEST)
         email = entrada.validated_data["email"]
 
         perfil = (Perfil.objects.filter(usuario__email__iexact=email)

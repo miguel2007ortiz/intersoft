@@ -17,7 +17,10 @@ import { Pedido } from '../../../core/models/tienda.model';
       @if (cargando()) {
         <div class="cargando">Cargando tus pedidos...</div>
       } @else if (error()) {
-        <div class="error-box">{{ error() }}</div>
+        <div class="error-box" role="alert">
+          <p>{{ error() }}</p>
+          <button type="button" class="btn-reintentar" (click)="cargarPedidos()">Reintentar</button>
+        </div>
       } @else if (!pedidos().length) {
         <div class="vacio">
           <p>Todavia no has hecho ningun pedido.</p>
@@ -75,7 +78,15 @@ import { Pedido } from '../../../core/models/tienda.model';
     .error-box {
       background: #fef3f2; border: 1px solid #fecdca; border-radius: 8px;
       padding: 12px 16px; color: #b42318; font-size: 14px;
+      display: flex; align-items: center; justify-content: space-between; gap: var(--e3);
     }
+    .error-box p { margin: 0; }
+    .btn-reintentar {
+      padding: 8px 18px; border: 1px solid #fecdca; background: #fff;
+      border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .btn-reintentar:hover { border-color: #b42318; color: #b42318; }
 
     .lista { display: flex; flex-direction: column; gap: var(--e4); }
     .pedido {
@@ -117,9 +128,21 @@ export class PedidosComponent implements OnInit {
   Number = Number;
 
   ngOnInit(): void {
+    this.cargarPedidos();
+  }
+
+  cargarPedidos(): void {
+    this.cargando.set(true);
     this.tienda.misPedidos().subscribe({
-      next: (r) => { this.pedidos.set(r.resultados); this.cargando.set(false); },
-      error: (e) => { this.error.set(e.detalle || 'Error al cargar tus pedidos.'); this.cargando.set(false); },
+      next: (r) => {
+        this.pedidos.set(r.resultados);
+        this.error.set('');
+        this.cargando.set(false);
+      },
+      error: (e) => {
+        this.error.set(e.detalle || 'Error al cargar tus pedidos.');
+        this.cargando.set(false);
+      },
     });
   }
 }

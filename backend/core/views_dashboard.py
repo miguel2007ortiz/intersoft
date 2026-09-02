@@ -5,6 +5,7 @@ devolucion de series listas para graficar. Todos aceptan los filtros
 `fecha_inicio`, `fecha_fin` y `categoria` para refrescar sin recargar.
 """
 
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,12 +15,27 @@ from cuentas.permissions import EsAdministrador
 from . import analytics
 
 
+def _filtros_dashboard(request):
+    """Construye los filtros validados. Si el cliente manda una fecha o
+    categoria malformada devuelve el par (None, respuesta_400)."""
+    try:
+        filtros = analytics.FiltrosDashboard(request)
+    except ValueError as exc:
+        return None, Response(
+            {"codigo": "FILTROS_INVALIDOS",
+             "detalle": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST)
+    return filtros, None
+
+
 class DashboardResumenView(APIView):
     """KPIs del panel (ingresos, ventas, ticket, inventario, bajo minimo)."""
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        f = analytics.FiltrosDashboard(request)
+        f, error = _filtros_dashboard(request)
+        if error:
+            return error
         return Response(analytics.resumen(f))
 
 
@@ -28,7 +44,9 @@ class DashboardVentasView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        f = analytics.FiltrosDashboard(request)
+        f, error = _filtros_dashboard(request)
+        if error:
+            return error
         return Response({
             'por_dia': analytics.ventas_por_dia(f),
             'por_mes': analytics.ventas_por_mes(f),
@@ -39,7 +57,9 @@ class DashboardTopProductosView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        f = analytics.FiltrosDashboard(request)
+        f, error = _filtros_dashboard(request)
+        if error:
+            return error
         return Response({'resultados': analytics.top_productos(f)})
 
 
@@ -47,7 +67,9 @@ class DashboardClientesFrecuentesView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        f = analytics.FiltrosDashboard(request)
+        f, error = _filtros_dashboard(request)
+        if error:
+            return error
         return Response({'resultados': analytics.clientes_frecuentes(f)})
 
 

@@ -45,6 +45,11 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         <!-- Lista -->
         @if (cargando()) {
           <p class="cargando">Cargando ventas...</p>
+        } @else if (error()) {
+          <div class="estado-error" role="alert">
+            <p>{{ error() }}</p>
+            <button type="button" class="btn-reintentar" (click)="cargarVentas()">Reintentar</button>
+          </div>
         } @else if (!ventas().length) {
           <p class="vacio">No hay ventas registradas.</p>
         } @else {
@@ -136,6 +141,17 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
     .cargando, .vacio { color: var(--gris); text-align: center; padding: var(--e6); }
 
+    .estado-error {
+      text-align: center; padding: var(--e6) var(--e4); color: #b42318;
+      display: flex; flex-direction: column; align-items: center; gap: var(--e3);
+    }
+    .estado-error p { margin: 0; }
+    .btn-reintentar {
+      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
+      border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }
+
     .tabla-wrap { overflow-x: auto; }
     .tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
     .tabla th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--linea); font-weight: 600; }
@@ -189,6 +205,7 @@ export class VentasComponent implements OnInit {
 
   readonly ventas = signal<Venta[]>([]);
   readonly cargando = signal(true);
+  readonly error = signal<string | null>(null);
   busqueda = '';
   filtroEstado = '';
   readonly estadisticas = signal<{ total_ventas: string; total_registros: number } | null>(null);
@@ -212,9 +229,13 @@ export class VentasComponent implements OnInit {
         this.ventas.set(r.resultados);
         const est = r.estadisticas as { total_ventas: string; total_registros: number } | undefined;
         this.estadisticas.set(est ?? null);
+        this.error.set(null);
         this.cargando.set(false);
       },
-      error: () => this.cargando.set(false),
+      error: (e) => {
+        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+        this.cargando.set(false);
+      },
     });
   }
 

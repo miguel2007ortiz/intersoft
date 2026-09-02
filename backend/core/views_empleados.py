@@ -126,7 +126,8 @@ class EmpleadosView(APIView):
 
         ActividadUsuario.registrar(request.user, "EMPLEADO_CREADO",
                                    f"{perfil.usuario.email} ({perfil.rol.nombre})")
-        respuesta = EmpleadoDetalleSerializer(perfil).data
+        respuesta = EmpleadoDetalleSerializer(
+            perfil, context={"empresa": request.user.perfil.empresa}).data
         if password_generada:
             # RN-09: no hay canal de notificacion configurado -> se muestra
             # una unica vez en la respuesta, el frontend la despliega en un
@@ -150,7 +151,8 @@ class EmpleadoDetalleView(APIView):
         perfil = self.obtener_perfil(request, id)
         if perfil is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(EmpleadoDetalleSerializer(perfil).data)
+        return Response(EmpleadoDetalleSerializer(
+            perfil, context={"empresa": request.user.perfil.empresa}).data)
 
     def put(self, request, id):
         return self.editar(request, id, parcial=False)
@@ -188,7 +190,8 @@ class EmpleadoDetalleView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         ActividadUsuario.registrar(request.user, "EMPLEADO_EDITADO", perfil.usuario.email)
-        return Response(EmpleadoDetalleSerializer(perfil).data)
+        return Response(EmpleadoDetalleSerializer(
+            perfil, context={"empresa": request.user.perfil.empresa}).data)
 
     def delete(self, request, id):
         perfil = self.obtener_perfil(request, id)
@@ -237,7 +240,8 @@ class EmpleadoEstadoView(APIView):
         activo_actual = perfil.deleted_at is None and perfil.usuario.is_active
         deseado_activo = accion == "reactivar"
         if activo_actual == deseado_activo:
-            return Response(EmpleadoDetalleSerializer(perfil).data)
+            return Response(EmpleadoDetalleSerializer(
+                perfil, context={"empresa": request.user.perfil.empresa}).data)
 
         if not deseado_activo:
             bloqueo = EmpleadoDetalleView._bloqueo_desactivar(request, perfil)
@@ -257,7 +261,8 @@ class EmpleadoEstadoView(APIView):
             perfil.save(update_fields=["deleted_at"])
         evento = "EMPLEADO_REACTIVADO" if deseado_activo else "EMPLEADO_DESACTIVADO"
         ActividadUsuario.registrar(request.user, evento, perfil.usuario.email)
-        return Response(EmpleadoDetalleSerializer(perfil).data)
+        return Response(EmpleadoDetalleSerializer(
+            perfil, context={"empresa": request.user.perfil.empresa}).data)
 
 
 class EmpleadoPasswordView(APIView):

@@ -1,9 +1,10 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { capturarErrorDjango } from '../utils/django-error.util';
 import {
-  Camara, CamaraEscritura, ErrorMonitoreo, GrabacionCamara,
+  Camara, CamaraEscritura, GrabacionCamara,
   Notificacion, ResultadoListaMonitoreo,
 } from '../models/monitoreo.model';
 
@@ -61,20 +62,8 @@ export class MonitoreoService {
   }
 }
 
-function capturarErrorMonitoreo<T>(): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) => throwError(() => traducir(e)));
-}
-
-function traducir(e: HttpErrorResponse): ErrorMonitoreo {
-  const cuerpo = (e.error ?? {}) as ErrorMonitoreo;
-  if (e.status === 0) return { detalle: 'No hay conexion con el servidor.' };
-  if (e.status === 403) {
-    return { detalle: 'Solo el administrador puede ver esta informacion.' };
-  }
-  if (cuerpo.errores) {
-    const primerCampo = Object.values(cuerpo.errores)[0];
-    const mensaje = Array.isArray(primerCampo) ? String(primerCampo[0]) : cuerpo.detalle;
-    return { codigo: cuerpo.codigo, detalle: mensaje };
-  }
-  return { codigo: cuerpo.codigo, detalle: cuerpo.detalle ?? 'Ocurrio un error inesperado.' };
-}
+/** Convierte la respuesta de error de Django en un mensaje legible. */
+const capturarErrorMonitoreo = <T,>() =>
+  capturarErrorDjango<T>({
+    mensajesPorStatus: { 403: 'Solo el administrador puede ver esta informacion.' },
+  });

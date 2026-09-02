@@ -14,7 +14,10 @@
       <div class="aviso aviso-ok">{{ exito() }}</div>
     }
     @if (error() && !formularioAbierto()) {
-      <div class="aviso aviso-error">{{ error() }}</div>
+      <div class="aviso aviso-error" role="alert">
+        {{ error() }}
+        <button type="button" class="enlace" (click)="cargar()">Reintentar</button>
+      </div>
     }
 
     @if (formularioAbierto()) {
@@ -24,16 +27,16 @@
         <div class="fila-doble">
           <div class="campo">
             <label for="nombre">Nombre</label>
-            <input id="nombre" type="text" formControlName="nombre" placeholder="Tenis Run 42" />
+            <input id="nombre" type="text" formControlName="nombre" placeholder="Tenis Run 42" autocomplete="off" />
             @if (campoInvalido('nombre')) {
-              <p class="mensaje-error">Escribe el nombre del producto.</p>
+              <p class="mensaje-error" role="alert">Escribe el nombre del producto.</p>
             }
           </div>
           <div class="campo">
             <label for="sku">SKU</label>
             <input id="sku" type="text" formControlName="sku" placeholder="SKU-R1" />
             @if (campoInvalido('sku')) {
-              <p class="mensaje-error">El SKU es obligatorio.</p>
+              <p class="mensaje-error" role="alert">El SKU es obligatorio.</p>
             }
           </div>
         </div>
@@ -58,14 +61,14 @@
             <label for="precio">Precio</label>
             <input id="precio" type="number" min="0" step="0.01" formControlName="precio" />
             @if (campoInvalido('precio')) {
-              <p class="mensaje-error">El precio no puede ser negativo.</p>
+              <p class="mensaje-error" role="alert">El precio no puede ser negativo.</p>
             }
           </div>
           <div class="campo">
             <label for="stock">Stock</label>
             <input id="stock" type="number" min="0" formControlName="stock" />
             @if (campoInvalido('stock')) {
-              <p class="mensaje-error">El stock no puede ser negativo.</p>
+              <p class="mensaje-error" role="alert">El stock no puede ser negativo.</p>
             }
           </div>
         </div>
@@ -74,25 +77,25 @@
           <label for="stock_minimo">Stock minimo (alerta)</label>
           <input id="stock_minimo" type="number" min="0" formControlName="stock_minimo" />
           @if (campoInvalido('stock_minimo')) {
-            <p class="mensaje-error">No puede ser negativo.</p>
+            <p class="mensaje-error" role="alert">No puede ser negativo.</p>
           }
         </div>
 
         @if (error()) {
-          <div class="aviso aviso-error">{{ error() }}</div>
+          <div class="aviso aviso-error" role="alert">{{ error() }}</div>
         }
 
         <div class="acciones-form">
           <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
-          <button type="submit" class="btn btn-primario">
-            {{ editando() ? 'Guardar cambios' : 'Crear producto' }}
+          <button type="submit" class="btn btn-primario" [disabled]="guardando()">
+            {{ guardando() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Crear producto') }}
           </button>
         </div>
       </form>
     }
 
     <div class="barra-listado">
-      <input type="search" class="buscador" placeholder="Buscar por nombre o SKU..."
+      <input type="search" class="buscador" aria-label="Buscar productos" placeholder="Buscar por nombre o SKU..."
              [value]="busqueda()" (input)="buscar($event)" />
       <div class="filtros">
         <button type="button" class="filtro" [class.activo]="filtroEstado() === 'todos'"

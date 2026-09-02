@@ -1,8 +1,8 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ErrorCatalogo } from '../models/catalogo.model';
+import { capturarErrorDjango } from '../utils/django-error.util';
 import {
   CategoriaFiltro, ClienteFrecuente, DatosReporte, FiltrosAnalitica,
   InventarioDashboard, ResumenDashboard, ResultadoLista, SeriesVentas,
@@ -76,20 +76,7 @@ export class AnalyticsService {
 }
 
 /** Convierte la respuesta de error de Django en un mensaje legible. */
-function capturarError<T>(): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) => throwError(() => traducir(e)));
-}
-
-function traducir(e: HttpErrorResponse): ErrorCatalogo {
-  const cuerpo = (e.error ?? {}) as ErrorCatalogo;
-  if (e.status === 0) return { detalle: 'No hay conexion con el servidor.' };
-  if (e.status === 403) {
-    return { detalle: 'Solo el administrador puede ver esta informacion.' };
-  }
-  if (cuerpo.errores) {
-    const primerCampo = Object.values(cuerpo.errores)[0];
-    const mensaje = Array.isArray(primerCampo) ? String(primerCampo[0]) : cuerpo.detalle;
-    return { codigo: cuerpo.codigo, detalle: mensaje };
-  }
-  return { codigo: cuerpo.codigo, detalle: cuerpo.detalle ?? 'Ocurrio un error inesperado.' };
-}
+const capturarError = <T,>() =>
+  capturarErrorDjango<T>({
+    mensajesPorStatus: { 403: 'Solo el administrador puede ver esta informacion.' },
+  });

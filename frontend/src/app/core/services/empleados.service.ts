@@ -1,7 +1,8 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { capturarErrorDjango, ErrorDjango } from '../utils/django-error.util';
 import {
   DatosEmpleado, Empleado, EmpleadoCreado, EmpleadoDetalle, ErrorEmpleado, RolAsignable,
 } from '../models/empleado.model';
@@ -62,21 +63,17 @@ export class EmpleadosService {
   }
 }
 
-function capturarError<T>(): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) => throwError(() => traducir(e)));
-}
-
-function traducir(e: HttpErrorResponse): ErrorEmpleado {
-  const cuerpo = (e.error ?? {}) as ErrorEmpleado;
-  if (e.status === 0) return { detalle: 'No hay conexion con el servidor.' };
-  if (e.status === 403) return { detalle: 'No tienes permiso para hacer esto.' };
-  if (cuerpo.errores) {
-    const primerCampo = Object.values(cuerpo.errores)[0];
-    const mensaje = Array.isArray(primerCampo) ? String(primerCampo[0]) : cuerpo.detalle;
-    return { codigo: cuerpo.codigo, detalle: mensaje, empleado_inactivo_id: cuerpo.empleado_inactivo_id };
-  }
-  return {
-    codigo: cuerpo.codigo, detalle: cuerpo.detalle ?? 'Ocurrio un error inesperado.',
-    empleado_inactivo_id: cuerpo.empleado_inactivo_id,
-  };
-}
+/** Convierte la respuesta de error de Django en un mensaje legible,
+ * conservando el campo extra empleado_inactivo_id cuando viene. */
+const capturarError = <T,>() =>
+  capturarErrorDjango<T, ErrorEmpleado>({
+    mensajesPorStatus: { 403: 'No tienes permiso para hacer esto.' },
+    enriquecer: (e, cuerpo, base) =>
+      ({
+        ...base,
+        empleado_inactivo_id:
+          typeof cuerpo['empleado_inactivo_id'] === 'string'
+            ? cuerpo['empleado_inactivo_id']
+            : undefined,
+      }) as ErrorEmpleado & ErrorDjango,
+  });
