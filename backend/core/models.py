@@ -107,6 +107,32 @@ class Producto(TimeStampedModel):
         return self.stock <= self.stock_minimo
 
 
+class ComentarioProducto(TimeStampedModel):
+    """Reseña/comentario de un comprador sobre un producto del marketplace.
+
+    Un usuario autenticado deja como maximo un comentario por producto
+    (unique_together); si vuelve a comentar, se actualiza el existente
+    (ver ComentarioProductoSerializer)."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='comentarios')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='comentarios_productos')
+    calificacion = models.PositiveSmallIntegerField()
+    comentario = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'comentario_producto'
+        unique_together = ('producto', 'usuario')
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(calificacion__gte=1) & models.Q(calificacion__lte=5),
+                name='comentario_calificacion_entre_1_y_5'),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto} ({self.calificacion}/5)"
+
+
 class Cliente(TimeStampedModel):
     TIPO_DOC_CHOICES = [('CC', 'Cedula de Ciudadania'), ('NIT', 'NIT'),
                         ('CE', 'Cedula de Extranjeria'), ('PAS', 'Pasaporte')]
@@ -135,6 +161,31 @@ class Cliente(TimeStampedModel):
 
     def __str__(self):
         return f"{self.nombre} ({self.tipo_documento} {self.numero_documento})"
+
+    # Documento fijo del cliente generico (RN: venta rapida en tienda fisica
+    # sin registrar datos de cada comprador, ej. mostrador de supermercado).
+    DOCUMENTO_GENERICO = '0000000000'
+
+    @classmethod
+    def generico(cls, empresa):
+        """Devuelve (creandolo si hace falta) el Cliente "Consumidor final"
+        de una empresa, para ventas de mostrador donde pedir documento y
+        datos completos no es practico (fila, ticket de bajo valor, etc.).
+        Idempotente: usa get_or_create sobre el documento fijo reservado."""
+        cliente, creado = cls.objects.get_or_create(
+            empresa=empresa, tipo_documento='NIT', numero_documento=cls.DOCUMENTO_GENERICO,
+            defaults={'nombre': 'Consumidor final'},
+        )
+        # Si alguien lo desactivo por error, se reactiva: es un cliente
+        # de sistema, siempre debe estar disponible para venta rapida.
+        if not creado and cliente.deleted_at is not None:
+            cliente.deleted_at = None
+            cliente.save(update_fields=['deleted_at'])
+        return cliente
+
+    @property
+    def es_generico(self):
+        return self.numero_documento == self.DOCUMENTO_GENERICO
 
     @property
     def total_compras(self):

@@ -6,6 +6,7 @@ import { ErrorAuth } from '../../core/models/auth.model';
 import { AuthService } from '../../core/services/auth.service';
 import { emailUnicoValidator } from '../../core/validators/email.validator';
 import { fuerzaPassword, passwordsIguales } from '../../core/validators/password.validators';
+import { DEPARTAMENTOS_COLOMBIA } from '../../shared/data/colombia-ubicaciones';
 
 const TIPOS_DOCUMENTO = [
   { valor: 'CC', etiqueta: 'Cedula de Ciudadania' },
@@ -26,6 +27,7 @@ export class RegistroCompradorComponent {
   private readonly router = inject(Router);
 
   readonly tiposDocumento = TIPOS_DOCUMENTO;
+  readonly departamentos = DEPARTAMENTOS_COLOMBIA;
 
   readonly formulario = this.fb.nonNullable.group(
     {
@@ -36,10 +38,17 @@ export class RegistroCompradorComponent {
       tipo_documento: ['CC', [Validators.required]],
       numero_documento: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(20)]],
       telefono: ['', []],
+      departamento: ['', []],
       ciudad: ['', []],
     },
     { validators: passwordsIguales('password', 'password2') },
   );
+
+  /** Ciudades del departamento elegido, para el select en cascada. */
+  ciudadesDisponibles(): string[] {
+    const dep = this.c.departamento.value;
+    return this.departamentos.find((d) => d.nombre === dep)?.ciudades ?? [];
+  }
 
   readonly cargando = signal(false);
   readonly error = signal<ErrorAuth | null>(null);

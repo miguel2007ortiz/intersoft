@@ -28,6 +28,10 @@ export class ProductosComponent {
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Producto | null>(null);
   readonly formularioAbierto = signal(false);
+  /** Archivo elegido en el input de imagen (null = sin cambio / sin imagen). */
+  readonly imagenNueva = signal<File | null>(null);
+  /** URL de la imagen actual (al editar) o del preview del archivo elegido. */
+  readonly imagenPreview = signal<string | null>(null);
   readonly busqueda = signal('');
   /** filtro del catalogo: todos | activos | inactivos */
   readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
@@ -84,6 +88,8 @@ export class ProductosComponent {
       nombre: '', sku: '', descripcion: '', categoria_id: '',
       precio: 0, stock: 0, stock_minimo: 10,
     });
+    this.imagenNueva.set(null);
+    this.imagenPreview.set(null);
     this.error.set(null);
     this.formularioAbierto.set(true);
   }
@@ -99,6 +105,8 @@ export class ProductosComponent {
       stock: producto.stock,
       stock_minimo: producto.stock_minimo,
     });
+    this.imagenNueva.set(null);
+    this.imagenPreview.set(producto.imagen);
     this.error.set(null);
     this.formularioAbierto.set(true);
   }
@@ -106,7 +114,15 @@ export class ProductosComponent {
   cerrarFormulario(): void {
     this.formularioAbierto.set(false);
     this.editando.set(null);
+    this.imagenNueva.set(null);
+    this.imagenPreview.set(null);
     this.error.set(null);
+  }
+
+  seleccionarImagen(evento: Event): void {
+    const archivo = (evento.target as HTMLInputElement).files?.[0] ?? null;
+    this.imagenNueva.set(archivo);
+    this.imagenPreview.set(archivo ? URL.createObjectURL(archivo) : this.editando()?.imagen ?? null);
   }
 
   enviar(): void {
@@ -116,7 +132,11 @@ export class ProductosComponent {
       return;
     }
     const valores = this.formulario.getRawValue();
-    const datos = { ...valores, categoria_id: valores.categoria_id || null };
+    const datos = {
+      ...valores,
+      categoria_id: valores.categoria_id || null,
+      ...(this.imagenNueva() ? { imagen: this.imagenNueva() } : {}),
+    };
     const enEdicion = this.editando();
     this.guardando.set(true);
 

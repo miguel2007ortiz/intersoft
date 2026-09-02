@@ -2,9 +2,11 @@
 
 from decimal import Decimal
 
+from django.db import models
 from rest_framework import serializers
 
-from .models import Carrito, CarritoItem, Cupon, Producto, Categoria, Venta
+from .models import (Carrito, CarritoItem, Cliente, ComentarioProducto,
+                     Cupon, Producto, Categoria, Venta)
 from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
@@ -12,18 +14,55 @@ from .serializers_ventas import DetalleVentaLecturaSerializer
 
 class ProductoTiendaSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    empresa_id = serializers.CharField(source='empresa.id', read_only=True)
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
     stock = serializers.SerializerMethodField()
+    promedio_calificacion = serializers.SerializerMethodField()
+    total_comentarios = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
         fields = ["id", "nombre", "sku", "precio", "stock",
-                  "categoria", "categoria_nombre", "imagen", "descripcion"]
+                  "categoria", "categoria_nombre", "imagen", "descripcion",
+                  "empresa_id", "empresa_nombre", "created_at",
+                  "promedio_calificacion", "total_comentarios"]
 
     def get_stock(self, obj):
         # Ocultar el stock real a visitantes anonimos de la tienda publica.
         if self.context.get("anonimo"):
             return None
         return obj.stock
+
+    def get_promedio_calificacion(self, obj):
+        # Usa la anotacion del queryset si esta disponible (evita N+1 en
+        # listados); si no, calcula al vuelo (ej. detalle de un solo producto).
+        if hasattr(obj, '_promedio_calificacion'):
+            promedio = obj._promedio_calificacion
+        else:
+            promedio = obj.comentarios.aggregate(models.Avg('calificacion'))['calificacion__avg']
+        return round(promedio, 1) if promedio is not None else None
+
+    def get_total_comentarios(self, obj):
+        if hasattr(obj, '_total_comentarios'):
+            return obj._total_comentarios
+        return obj.comentarios.count()
+
+
+# --------------------------- Comentarios ----------------------------------
+
+class ComentarioProductoSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.CharField(source='usuario.get_full_name', read_only=True)
+
+    class Meta:
+        model = ComentarioProducto
+        fields = ["id", "usuario_nombre", "calificacion", "comentario", "created_at"]
+        read_only_fields = ["id", "usuario_nombre", "created_at"]
+
+
+class ComentarioProductoEscrituraSerializer(serializers.Serializer):
+    calificacion = serializers.IntegerField(min_value=1, max_value=5)
+    comentario = serializers.CharField(required=False, allow_blank=True,
+                                       max_length=1000, default="")
 
 
 class CategoriaTiendaSerializer(serializers.ModelSerializer):
@@ -111,6 +150,39 @@ class CarritoItemInputSerializer(serializers.Serializer):
 
 class CarritoCuponSerializer(serializers.Serializer):
     cupon_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+# ------------------------------ Comprador ---------------------------------
+
+class CompletarCompradorSerializer(serializers.Serializer):
+    """Datos minimos para vincular al usuario autenticado (admin, empleado o
+    cliente) con un Cliente del marketplace (empresa=None), sin pasar por un
+    registro aparte. Nombre y email se toman de la cuenta ya existente; solo
+    se piden el documento y la direccion de envio."""
+    tipo_documento = serializers.ChoiceField(choices=Cliente.TIPO_DOC_CHOICES, default='CC')
+    numero_documento = serializers.CharField(min_length=3, max_length=20)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
+    direccion = serializers.CharField(required=False, allow_blank=True, default='')
+    ciudad = serializers.CharField(max_length=80, required=False, allow_blank=True, default='')
+
+    def validate(self, datos):
+        tipo = datos.get("tipo_documento", "CC")
+        numero = datos.get("numero_documento")
+        # Documento unico entre los compradores del marketplace (empresa=None).
+        if Cliente.objects.filter(empresa__isnull=True, deleted_at__isnull=True,
+                                  tipo_documento=tipo, numero_documento=numero).exists():
+            raise serializers.ValidationError({
+                "numero_documento": "El documento ya esta registrado para un comprador.",
+            })
+        return datos
+
+    def create(self, validated_data):
+        usuario = self.context["usuario"]
+        nombre = usuario.get_full_name().strip() or usuario.email
+        return Cliente.objects.create(
+            usuario=usuario, empresa=None, nombre=nombre, email=usuario.email,
+            **validated_data,
+        )
 
 
 # ------------------------------ Pedidos del comprador ---------------------

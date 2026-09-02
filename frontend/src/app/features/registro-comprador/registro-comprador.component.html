@@ -82,14 +82,33 @@
         </div>
       </div>
 
+      <div class="campo">
+        <label for="c-telefono">Telefono</label>
+        <input id="c-telefono" type="text" formControlName="telefono" autocomplete="tel"
+               placeholder="300 123 4567" />
+      </div>
+
+      <p class="ayuda ayuda-seccion">¿Desde donde nos visitas? Asi te mostramos y enviamos mejor tus pedidos.</p>
       <div class="fila-documento">
         <div class="campo">
-          <label for="c-telefono">Telefono</label>
-          <input id="c-telefono" type="text" formControlName="telefono" autocomplete="tel" />
+          <label for="c-departamento">Departamento</label>
+          <select id="c-departamento" formControlName="departamento" (change)="c.ciudad.setValue('')">
+            <option value="">Selecciona...</option>
+            @for (d of departamentos; track d.nombre) {
+              <option [value]="d.nombre">{{ d.nombre }}</option>
+            }
+          </select>
         </div>
         <div class="campo">
           <label for="c-ciudad">Ciudad</label>
-          <input id="c-ciudad" type="text" formControlName="ciudad" autocomplete="off" />
+          <select id="c-ciudad" formControlName="ciudad" [disabled]="!c.departamento.value">
+            <option value="">
+              {{ c.departamento.value ? 'Selecciona...' : 'Elige un departamento primero' }}
+            </option>
+            @for (ciu of ciudadesDisponibles(); track ciu) {
+              <option [value]="ciu">{{ ciu }}</option>
+            }
+          </select>
         </div>
       </div>
 

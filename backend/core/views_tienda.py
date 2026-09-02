@@ -12,7 +12,7 @@ import os
 import uuid as uuid_mod
 
 from django.db import models, transaction
-from django.db.models import Q, Sum, Count
+from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -22,13 +22,16 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (Carrito, CarritoItem, Categoria, Cliente, Cupon,
-                     DetalleVenta, Empresa, MovimientoInventario, Notificacion,
+from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
+                     Cupon, DetalleVenta, Empresa, MovimientoInventario, Notificacion,
                      Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
-                                  CuponSerializer, CuponValidarSerializer,
-                                  PedidoCompradorSerializer, ProductoTiendaSerializer)
+                                  ComentarioProductoEscrituraSerializer,
+                                  ComentarioProductoSerializer,
+                                  CompletarCompradorSerializer, CuponSerializer,
+                                  CuponValidarSerializer, PedidoCompradorSerializer,
+                                  ProductoTiendaSerializer)
 
 
 def _obtener_empresa(request):
@@ -74,7 +77,9 @@ class CatalogoPublicoView(APIView):
     def get(self, request):
         productos = Producto.objects.filter(
             activo=True, deleted_at__isnull=True
-        ).select_related('categoria')
+        ).select_related('categoria', 'empresa').annotate(
+            _promedio_calificacion=Avg('comentarios__calificacion'),
+            _total_comentarios=Count('comentarios', distinct=True))
 
         busqueda = request.query_params.get('busqueda', '').strip()
         if busqueda:
@@ -140,7 +145,8 @@ class CatalogoPublicoView(APIView):
         por_pagina = 24
         inicio = (pagina - 1) * por_pagina
         serializer = ProductoTiendaSerializer(
-            productos[inicio:inicio + por_pagina], many=True)
+            productos[inicio:inicio + por_pagina], many=True,
+            context={"request": request})
 
         categorias = Categoria.objects.annotate(
             num_productos=Count('productos', filter=Q(
@@ -164,13 +170,57 @@ class CatalogoProductoDetailView(APIView):
     def get(self, request, id):
         producto = Producto.objects.filter(
             activo=True, deleted_at__isnull=True, id=id
-        ).select_related('categoria').first()
+        ).select_related('categoria', 'empresa').annotate(
+            _promedio_calificacion=Avg('comentarios__calificacion'),
+            _total_comentarios=Count('comentarios', distinct=True)).first()
         if not producto:
             return Response(
                 {"codigo": "NO_ENCONTRADO",
                  "detalle": "Producto no encontrado."},
                 status=status.HTTP_404_NOT_FOUND)
-        return Response(ProductoTiendaSerializer(producto).data)
+        return Response(ProductoTiendaSerializer(producto, context={"request": request}).data)
+
+
+# ---------------------------- Comentarios ----------------------------------
+
+class ComentariosProductoView(APIView):
+    """GET lista comentarios de un producto (publico) / POST deja el propio
+    (autenticado; si ya comento, actualiza su comentario existente)."""
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, id):
+        producto = Producto.objects.filter(
+            activo=True, deleted_at__isnull=True, id=id).first()
+        if not producto:
+            return Response(
+                {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND)
+        comentarios = producto.comentarios.select_related('usuario')
+        return Response({"resultados": ComentarioProductoSerializer(comentarios, many=True).data})
+
+    def post(self, request, id):
+        producto = Producto.objects.filter(
+            activo=True, deleted_at__isnull=True, id=id).first()
+        if not producto:
+            return Response(
+                {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND)
+
+        entrada = ComentarioProductoEscrituraSerializer(data=request.data)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS", "errores": entrada.errors},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        comentario, _creado = ComentarioProducto.objects.update_or_create(
+            producto=producto, usuario=request.user,
+            defaults=entrada.validated_data)
+        return Response(ComentarioProductoSerializer(comentario).data,
+                        status=status.HTTP_201_CREATED)
 
 
 # ------------------------------ Cupones ----------------------------------
@@ -675,3 +725,24 @@ class MisPedidosView(APIView):
         limite = _limite_paginacion(request.query_params.get('limite', 50))
         datos = PedidoCompradorSerializer(pedidos[:limite], many=True).data
         return Response({"resultados": datos, "total": len(datos)})
+
+
+class CompletarCompradorView(APIView):
+    """Vincula al usuario autenticado (admin, empleado o cliente) con un
+    Cliente del marketplace, sin exigirle crear otra cuenta. Se llama cuando
+    el checkout responde SIN_CLIENTE: solo pide documento y direccion de
+    envio, el resto de datos ya existen en su cuenta."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if Cliente.objects.filter(usuario=request.user, deleted_at__isnull=True).exists():
+            return Response(
+                {"codigo": "CLIENTE_EXISTENTE", "detalle": "Ya tienes datos de comprador registrados."},
+                status=status.HTTP_409_CONFLICT)
+
+        entrada = CompletarCompradorSerializer(data=request.data, context={"usuario": request.user})
+        if not entrada.is_valid():
+            return Response({"codigo": "DATOS_INVALIDOS", "detalle": "Revisa los datos del formulario.",
+                             "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
+        entrada.save()
+        return Response(status=status.HTTP_201_CREATED)

@@ -116,6 +116,17 @@ class ClientesView(APIView):
                         status=status.HTTP_201_CREATED)
 
 
+class ClienteGenericoView(APIView):
+    """GET el Cliente "Consumidor final" de la empresa (lo crea si no
+    existe). Pensado para el POS: venta rapida de mostrador sin capturar
+    datos del comprador (RN: fila, ticket de bajo valor, tienda fisica)."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request):
+        cliente = Cliente.generico(request.user.perfil.empresa)
+        return Response(ClienteLecturaSerializer(cliente).data)
+
+
 class ClienteDetalleView(APIView):
     """GET (incluye ultimas 5 ventas) / PUT-PATCH / DELETE (borrado logico).
 

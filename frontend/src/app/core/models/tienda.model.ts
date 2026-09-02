@@ -10,6 +10,24 @@ export interface ProductoTienda {
   categoria_nombre: string | null;
   imagen: string | null;
   descripcion: string;
+  empresa_id: string;
+  empresa_nombre: string;
+  created_at: string;
+  promedio_calificacion: number | null;
+  total_comentarios: number;
+}
+
+export interface ComentarioProducto {
+  id: string;
+  usuario_nombre: string;
+  calificacion: number;
+  comentario: string;
+  created_at: string;
+}
+
+export interface DatosComentario {
+  calificacion: number;
+  comentario?: string;
 }
 
 export interface CategoriaTienda {
@@ -86,6 +104,16 @@ export interface DetallePedido {
   cantidad: number;
   precio_unitario: string;
   subtotal_linea: string;
+}
+
+/** Datos minimos para vincular al usuario autenticado con un Cliente del
+ * marketplace cuando el checkout responde SIN_CLIENTE (RN comprador). */
+export interface DatosComprador {
+  tipo_documento: string;
+  numero_documento: string;
+  telefono?: string;
+  direccion?: string;
+  ciudad?: string;
 }
 
 export interface Pedido {

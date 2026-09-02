@@ -20,6 +20,7 @@
 }
 
 .ayuda.ok { color: var(--ok); }
+.ayuda-seccion { margin: 0 0 var(--e2); }
 
 .fila-documento {
   display: grid;
