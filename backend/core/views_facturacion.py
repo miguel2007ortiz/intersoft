@@ -17,6 +17,7 @@ Flujo:
 import os
 from decimal import Decimal
 
+from django.core.files.base import ContentFile
 from django.db import IntegrityError, models, transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -93,6 +94,20 @@ def _registrar_movimiento(producto, usuario, tipo, cantidad, motivo):
         producto=producto, usuario=usuario, tipo=tipo,
         cantidad=cantidad, motivo=motivo,
     )
+
+
+def _guardar_comprobantes(instancia, numero, respuesta):
+    """Guarda el PDF y XML devueltos por la DIAN en los campos del
+    comprobante (antes se descartaban y quedaban siempre null).
+    No llama a save() del modelo: el caller ya lo hace con update_fields."""
+    if respuesta.comprobante_pdf:
+        instancia.pdf.save(f"{numero}.pdf",
+                           ContentFile(respuesta.comprobante_pdf.encode('utf-8')),
+                           save=False)
+    if respuesta.comprobante_xml:
+        instancia.xml.save(f"{numero}.xml",
+                           ContentFile(respuesta.comprobante_xml.encode('utf-8')),
+                           save=False)
 
 
 # ------------------------------ Facturas ---------------------------------
@@ -189,8 +204,7 @@ class FacturasView(APIView):
             if respuesta.aprobada:
                 factura.estado = 'aprobada'
                 factura.cufe = respuesta.cufe
-                factura.pdf = None
-                factura.xml = None
+                _guardar_comprobantes(factura, numero_f, respuesta)
                 factura.save(update_fields=[
                     'estado', 'cufe', 'pdf', 'xml', 'updated_at'
                 ])
@@ -336,8 +350,9 @@ class FacturaReintentarView(APIView):
                 factura.estado = 'aprobada'
                 factura.cufe = respuesta.cufe
                 factura.motivo_rechazo = ''
+                _guardar_comprobantes(factura, factura.numero, respuesta)
                 factura.save(update_fields=[
-                    'estado', 'cufe', 'motivo_rechazo',
+                    'estado', 'cufe', 'motivo_rechazo', 'pdf', 'xml',
                     'intentos', 'ultimo_intento', 'updated_at'
                 ])
             elif respuesta.codigo_error == 'DATOS_INVALIDOS':
@@ -458,8 +473,9 @@ class NotasCreditoView(APIView):
             if respuesta.aprobada:
                 nota.estado = 'aprobada'
                 nota.cufe_nota = respuesta.cufe
+                _guardar_comprobantes(nota, numero_nc, respuesta)
                 nota.save(update_fields=[
-                    'estado', 'cufe_nota', 'updated_at'
+                    'estado', 'cufe_nota', 'pdf', 'xml', 'updated_at'
                 ])
 
                 detalles = venta.detalles.select_related('producto').all()

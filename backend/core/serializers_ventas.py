@@ -89,6 +89,12 @@ class AjusteInventarioSerializer(serializers.Serializer):
     motivo = serializers.CharField(min_length=3)
 
 
+class AlertaReabastecerSerializer(serializers.Serializer):
+    """Entrada opcional para reabastecer desde una alerta de stock bajo.
+    Sin `cantidad`, la vista calcula cuanto agregar para superar el minimo."""
+    cantidad = serializers.IntegerField(min_value=1, required=False)
+
+
 # ------------------------------ Inventario --------------------------------
 
 class MovimientoInventarioLecturaSerializer(serializers.ModelSerializer):

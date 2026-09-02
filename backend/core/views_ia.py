@@ -49,8 +49,10 @@ class IAConversacionesView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def get(self, request):
+        # Lista acotada (nunca ilimitada): el orden ya es -created_at por
+        # Meta.ordering del modelo.
         conversaciones = (IAConversacion.objects.filter(usuario=request.user)
-                          .annotate(_ultimo_mensaje=_ultimo_mensaje_anotacion()))
+                          .annotate(_ultimo_mensaje=_ultimo_mensaje_anotacion())[:100])
         datos = IAConversacionListaSerializer(
             conversaciones, many=True).data
         return Response({"resultados": datos})

@@ -5,7 +5,7 @@ import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-sh
 import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
-import { programarAviso } from '../../../core/utils/temporizador.util';
+import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import { ErrorCatalogo, Cliente } from '../../../core/models/catalogo.model';
 import { UsuarioAdmin } from '../../../core/models/seguridad.model';
 
@@ -39,6 +39,8 @@ export class ClientesComponent {
   readonly pagina = signal(1);
   readonly totalPaginas = signal(1);
   readonly total = signal(0);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
   /** Solo el ADMINISTRADOR ve la lista de cuentas para vincular
    * (la API de seguridad es exclusiva de ese rol). */
@@ -85,7 +87,7 @@ export class ClientesComponent {
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
     this.pagina.set(1);
-    this.cargar();
+    this.buscarDebounced();
   }
 
   limpiarBusqueda(): void {
