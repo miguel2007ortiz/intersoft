@@ -4,7 +4,12 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 import { EmpleadosService } from '../../core/services/empleados.service';
 import { AuthService } from '../../core/services/auth.service';
 import { programarAviso } from '../../core/utils/temporizador.util';
-import { DatosEmpleado, Empleado, ErrorEmpleado, RolAsignable } from '../../core/models/empleado.model';
+import {
+  DatosEmpleado,
+  Empleado,
+  ErrorEmpleado,
+  RolAsignable,
+} from '../../core/models/empleado.model';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -32,6 +37,9 @@ export class EmpleadosComponent {
   readonly formularioAbierto = signal(false);
   readonly busqueda = signal('');
   readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('activos');
+  /** Paginacion del listado (la API entrega 25 por pagina). */
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
   /** Contrasena temporal a mostrar una sola vez (RN-09), tras crear o
    * regenerar; se pierde al cerrar el aviso. */
   readonly passwordTemporal = signal<string | null>(null);
@@ -55,16 +63,23 @@ export class EmpleadosComponent {
 
   cargar(): void {
     this.cargando.set(true);
-    this.empleados.listar({ busqueda: this.busqueda(), estado: this.filtroEstado() }).subscribe({
-      next: ({ resultados }) => {
-        this.lista.set(resultados);
-        this.cargando.set(false);
-      },
-      error: (e: ErrorEmpleado) => {
-        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
-        this.cargando.set(false);
-      },
-    });
+    this.empleados
+      .listar({
+        busqueda: this.busqueda(),
+        estado: this.filtroEstado(),
+        pagina: this.pagina(),
+      })
+      .subscribe({
+        next: ({ resultados, total_paginas }) => {
+          this.lista.set(resultados);
+          this.totalPaginas.set(total_paginas || 1);
+          this.cargando.set(false);
+        },
+        error: (e: ErrorEmpleado) => {
+          this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+          this.cargando.set(false);
+        },
+      });
   }
 
   cargarRoles(): void {
@@ -73,19 +88,34 @@ export class EmpleadosComponent {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
+    this.pagina.set(1);
     this.cargar();
   }
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {
     this.filtroEstado.set(estado);
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  irPagina(nueva: number): void {
+    if (nueva < 1 || nueva > this.totalPaginas()) return;
+    this.pagina.set(nueva);
     this.cargar();
   }
 
   abrirCreacion(): void {
     this.editando.set(null);
     this.formulario.reset({
-      nombre: '', email: '', password: '', rol: '', tipo_documento: '',
-      numero_documento: '', telefono: '', cargo: '', fecha_ingreso: '',
+      nombre: '',
+      email: '',
+      password: '',
+      rol: '',
+      tipo_documento: '',
+      numero_documento: '',
+      telefono: '',
+      cargo: '',
+      fecha_ingreso: '',
     });
     this.error.set(null);
     this.formularioAbierto.set(true);
@@ -173,8 +203,7 @@ export class EmpleadosComponent {
     const accion = empleado.activo ? 'desactivar' : 'reactivar';
     this.empleados.cambiarEstado(empleado.id, accion).subscribe({
       next: (actualizado) => {
-        this.lista.update((filas) =>
-          filas.map((f) => (f.id === actualizado.id ? actualizado : f)));
+        this.lista.update((filas) => filas.map((f) => (f.id === actualizado.id ? actualizado : f)));
         this.exito.set(actualizado.activo ? 'Empleado reactivado.' : 'Empleado desactivado.');
         this.avisarExito();
       },

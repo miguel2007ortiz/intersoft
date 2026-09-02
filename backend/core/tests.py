@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from cuentas.models import Perfil, Rol
 
 from .models import (Camara, Categoria, Carrito, CarritoItem, Cliente,
-                     ComentarioProducto, DetalleVenta, Empresa,
+                     ComentarioProducto, DetalleVenta, Empresa, Favorito,
                      MovimientoInventario, Notificacion, Producto, Venta)
 
 
@@ -1098,6 +1098,70 @@ class MarketplaceCarritoTest(BaseMarketplaceTest):
                      format="json")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.data["codigo"], "PRODUCTO_NO_ENCONTRADO")
+
+
+class FavoritoProductoTest(BaseMarketplaceTest):
+    """Favoritos de productos del marketplace (por usuario, cualquier rol)."""
+
+    def test_anonimo_no_puede_listar_favoritos(self):
+        resp = APIClient().get("/api/tienda/favoritos/")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_agregar_y_listar_favorito(self):
+        api = self.api_como(self.comprador)
+        r = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r.status_code, 201)
+
+        lista = api.get("/api/tienda/favoritos/")
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 1)
+        self.assertEqual(lista.data[0]["producto"], self.producto_a.id)
+        self.assertEqual(lista.data[0]["producto_obj"]["nombre"], "Camisa Roja")
+
+    def test_agregar_dos_veces_es_idempotente(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r2 = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(
+            Favorito.objects.filter(usuario=self.comprador).count(), 1)
+
+    def test_quitar_favorito(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r = api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(
+            Favorito.objects.filter(usuario=self.comprador).count(), 0)
+
+    def test_favoritos_son_privados_por_usuario(self):
+        otro = User.objects.create_user(username="otro@test.co",
+                                        email="otro@test.co",
+                                        password="Clave12345")
+        Perfil.objects.create(usuario=otro, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        api_a = self.api_como(self.comprador)
+        api_a.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+
+        api_b = self.api_como(otro)
+        lista = api_b.get("/api/tienda/favoritos/")
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 0)
+
+    def test_estado_favorito(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["es_favorito"], True)
+        api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r2 = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertEqual(r2.data["es_favorito"], False)
+
+    def test_favorito_producto_inactivo_rechazado(self):
+        api = self.api_como(self.comprador)
+        r = api.post(f"/api/tienda/favoritos/{self.producto_inactivo.id}/")
+        self.assertEqual(r.status_code, 404)
 
 
 class MarketplaceCheckoutTest(BaseMarketplaceTest):

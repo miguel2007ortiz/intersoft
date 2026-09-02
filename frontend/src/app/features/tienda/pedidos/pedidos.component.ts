@@ -45,16 +45,16 @@ import { Pedido } from '../../../core/models/tienda.model';
                 @for (d of p.detalles; track d.id) {
                   <li>
                     <span>{{ d.cantidad }} x {{ d.producto_nombre }}</span>
-                    <span>\${{ d.subtotal_linea | number }}</span>
+                    <span>{{ d.subtotal_linea | number }} COP</span>
                   </li>
                 }
               </ul>
 
               <footer class="pedido-pie">
                 @if (Number(p.descuento) > 0) {
-                  <span class="pedido-descuento">Descuento: -\${{ p.descuento | number }}</span>
+                  <span class="pedido-descuento">Descuento: -{{ p.descuento | number }} COP</span>
                 }
-                <span class="pedido-total">Total: \${{ p.total | number }}</span>
+                <span class="pedido-total">Total: {{ p.total | number }} COP</span>
               </footer>
             </article>
           }

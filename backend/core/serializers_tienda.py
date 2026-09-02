@@ -6,7 +6,7 @@ from django.db import models
 from rest_framework import serializers
 
 from .models import (Carrito, CarritoItem, Cliente, ComentarioProducto,
-                     Cupon, Producto, Categoria, Venta)
+                     Cupon, Favorito, Producto, Categoria, Venta)
 from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
@@ -63,6 +63,18 @@ class ComentarioProductoEscrituraSerializer(serializers.Serializer):
     calificacion = serializers.IntegerField(min_value=1, max_value=5)
     comentario = serializers.CharField(required=False, allow_blank=True,
                                        max_length=1000, default="")
+
+
+# ------------------------------ Favoritos ----------------------------------
+
+class FavoritoSerializer(serializers.ModelSerializer):
+    """Un favorito con el producto serializado para la ui del marketplace."""
+    producto_obj = ProductoTiendaSerializer(source='producto', read_only=True)
+
+    class Meta:
+        model = Favorito
+        fields = ["id", "producto", "producto_obj", "created_at"]
+        read_only_fields = ["id", "producto_obj", "created_at"]
 
 
 class CategoriaTiendaSerializer(serializers.ModelSerializer):

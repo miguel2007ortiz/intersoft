@@ -42,7 +42,7 @@ import { Carrito, CarritoItem, Cupon } from '../../../core/models/tienda.model';
                   <td>
                     <strong>{{ item.producto_nombre }}</strong>
                   </td>
-                  <td>\${{ item.producto_precio | number }}</td>
+                  <td>{{ item.producto_precio | number }} COP</td>
                   <td>
                     <div class="cantidad-control">
                       <button type="button" class="btn-cant"
@@ -55,7 +55,7 @@ import { Carrito, CarritoItem, Cupon } from '../../../core/models/tienda.model';
                     </div>
                     <span class="stock-label">Stock: {{ item.producto_stock }}</span>
                   </td>
-                  <td class="subtotal">\${{ item.subtotal | number }}</td>
+                  <td class="subtotal">{{ item.subtotal | number }} COP</td>
                   <td>
                     <button type="button" class="btn-eliminar"
                             (click)="eliminarItem(item)">✕</button>
@@ -90,11 +90,11 @@ import { Carrito, CarritoItem, Cupon } from '../../../core/models/tienda.model';
         </section>
 
         <section class="resumen">
-          <div class="fila"><span>Subtotal</span><span>\${{ carrito()!.subtotal | number }}</span></div>
+          <div class="fila"><span>Subtotal</span><span>{{ carrito()!.subtotal | number }} COP</span></div>
           @if (Number(carrito()!.descuento) > 0) {
-            <div class="fila descuento"><span>Descuento</span><span>-\${{ carrito()!.descuento | number }}</span></div>
+            <div class="fila descuento"><span>Descuento</span><span>-{{ carrito()!.descuento | number }} COP</span></div>
           }
-          <div class="fila total"><span>Total</span><span>\${{ carrito()!.total | number }}</span></div>
+          <div class="fila total"><span>Total</span><span>{{ carrito()!.total | number }} COP</span></div>
         </section>
 
         <section class="acciones">

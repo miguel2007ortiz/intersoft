@@ -1,4 +1,5 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
@@ -11,7 +12,7 @@ const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-productos',
-  imports: [ReactiveFormsModule, PanelShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent],
   templateUrl: './productos.component.html',
   styleUrl: './productos.component.css',
 })

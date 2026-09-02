@@ -148,7 +148,7 @@
                   <span class="linea-dato gris">{{ c.telefono }}</span>
                 </td>
                 <td>{{ c.usuario_email || '—' }}</td>
-                <td>${{ c.total_compras }}</td>
+                <td>{{ c.total_compras | number }} COP</td>
                 <td>
                   <span class="badge" [class]="c.activo ? 'activo' : 'inactivo'">
                     {{ c.activo ? 'Activo' : 'Inactivo' }}

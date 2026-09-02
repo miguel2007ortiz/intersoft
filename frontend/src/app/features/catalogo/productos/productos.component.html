@@ -143,7 +143,7 @@
                   </div>
                 </td>
                 <td>{{ p.categoria_nombre || '—' }}</td>
-                <td>${{ p.precio }}</td>
+                <td>{{ p.precio | number }} COP</td>
                 <td>
                   {{ p.stock }}
                   @if (p.stock_bajo) {

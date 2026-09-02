@@ -69,7 +69,7 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                     <td class="monospace">{{ f.numero }}</td>
                     <td>{{ f.venta_numero }}</td>
                     <td>{{ f.cliente_nombre }}</td>
-                    <td>\${{ f.venta_total | number }}</td>
+                    <td>{{ f.venta_total | number }} COP</td>
                     <td>
                       <span class="badge" [attr.data-estado]="f.estado">
                         {{ f.estado_display }}
@@ -123,7 +123,7 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                     <tr>
                       <td>{{ v.numero_factura }}</td>
                       <td>{{ v.cliente_nombre }}</td>
-                      <td>\${{ v.total | number }}</td>
+                      <td>{{ v.total | number }} COP</td>
                       <td>{{ v.fecha | date:'dd/MM/yyyy HH:mm' }}</td>
                       <td>
                         <button class="btn-sm btn-primary"
@@ -173,7 +173,7 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                       <td class="monospace">{{ nc.numero }}</td>
                       <td>{{ nc.venta_numero }}</td>
                       <td>{{ nc.cliente_nombre }}</td>
-                      <td>\${{ nc.venta_total | number }}</td>
+                      <td>{{ nc.venta_total | number }} COP</td>
                       <td>
                         <span class="badge" [attr.data-estado]="nc.estado === 'aprobada' ? 'aprobada' : nc.estado === 'rechazada' ? 'rechazada' : 'pendiente'">
                           {{ nc.estado_display }}
@@ -201,7 +201,7 @@ import { programarAviso } from '../../core/utils/temporizador.util';
                 <select [(ngModel)]="ventaNcSeleccionada" class="input">
                   <option value="">Seleccionar venta...</option>
                   @for (v of ventasFacturadas(); track v.id) {
-                    <option [value]="v.id">{{ v.numero_factura }} — {{ v.cliente_nombre }} — \${{ v.total | number }}</option>
+                    <option [value]="v.id">{{ v.numero_factura }} — {{ v.cliente_nombre }} — {{ v.total | number }} COP</option>
                   }
                 </select>
                 <textarea [(ngModel)]="motivoNc" placeholder="Motivo de la nota credito..."
