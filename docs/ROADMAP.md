@@ -41,14 +41,13 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ---
 
 ## Fase D — Integraciones reales
-- **D1. Facturación electrónica DIAN real**: el adaptador (`services/dian_adapter.py`) es solo mock
-  (`DIAN_MOCK=True`). Integrar web service real: certificado/habilitación, PDF/XML reales con firma,
-  persistir CUDE/certificación; mantener mock detrás de flag. **Estado: preparada** — el mock se
-  endureció (validación de `nit_empresa`, `detalles` y nota `motivo`) y el docstring del adaptador
-  documenta la hoja de ruta completa de la integración (habilitación oficial, endpoint SOAP/EIP 2.0,
-  CUFE SHA-384 real, firma XAdES-EPES, variables `.env` y las reglas de negocio a conservar).
-  Requiere credenciales oficiales (usuario/clave de habilitación + certificado) para poder probarse;
-  sin ellas no es verificable localmente.
+- **D1. Facturación electrónica DIAN real**: el adaptador (`services/dian_adapter.py`) genera
+  comprobantes reales (PDF con `reportlab`, XML con `lxml`) y CUFE SHA-384, y hay un cliente SOAP
+  1.2 (`zeep`) detrás de `DIAN_MOCK=False`. Con `DIAN_MOCK=True` (default) aprueba localmente.
+  **Hecho**: el mock/simulación produce PDF/XML y CUFE reales; la llamada al Web Service real queda
+  implementada y configurable (`DIAN_WSDL`/`DIAN_USUARIO`/`DIAN_CLAVE`), pero solo es verificable
+  con la habilitación oficial + certificado (firma XAdES-EPES pendiente de credenciales). Tests en
+  `core/tests_dian.py` (19).
 - **D2. IA con proveedor real**: `ia_engine.py` cae a `_mock` sin `IA_API_KEY`. Definir prompt de
   sistema con contexto de empresa + rate-limit y timeout con fallback.
 
@@ -104,8 +103,9 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 - **E1 design system vivo (resuelta)**: documento `docs/DESIGN_SYSTEM.md` con los tokens reales de
   `frontend/src/styles.css` (colores claro/noche, espaciado, radios, sombras, tipografía),
   componentes reutilizables y referencia a `figma-marketplace/` (tokens + capturas, no versionado).
-- **D1 DIAN real (resuelta como preparada)**: no se escribe la integración SOAP real por falta de
-  credenciales oficiales (no verificable). Se endureció el mock (`nit_empresa` y `detalles`
-  obligatorios en factura; `motivo` y `nit_empresa` en nota crédito) y el docstring del adaptador
-  quedó como hoja de ruta: habilitación oficial, endpoint, CUFE SHA-384, firma XAdES-EPES,
-  variables `.env` y reglas de negocio a conservar.
+- **D1 DIAN real (resuelta)**: el adaptador quedó con comprobantes reales (PDF con `reportlab`,
+  XML con `lxml`, CUFE SHA-384 determinista) y un cliente SOAP 1.2 con `zeep` activable con
+  `DIAN_MOCK=False` y credenciales `DIAN_WSDL`/`DIAN_USUARIO`/`DIAN_CLAVE`. `_guardar_comprobantes`
+  ahora acepta PDF en `bytes`. Se añadieron 19 tests (`core/tests_dian.py`) y librerías a
+  `requirements.txt`. La firma XAdES y la transmisión asíncrona "EN PROCESO" quedan documentadas
+  como pendientes de la habilitación oficial.

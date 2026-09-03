@@ -21,3 +21,10 @@ PyMySQL==1.1.0
 
 # Servidor WSGI de produccion (usado por el contenedor Docker / docker-compose).
 gunicorn==23.0.0
+
+# Facturacion electronica DIAN (adaptador real): generacion de PDF, XML y
+# cliente SOAP 1.2. reportlab/lxml son puros; zeep usa lxml + requests.
+reportlab==5.0.1
+lxml==6.1.3
+zeep==4.3.3
+requests==2.33.0
