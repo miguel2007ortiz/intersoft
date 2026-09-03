@@ -8,6 +8,8 @@ from django.dispatch import receiver
 
 from .models import DetalleVenta, Producto, Venta
 
+from .analytics import invalidar_analitica
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +21,16 @@ def alertar_stock_bajo(sender, instance, created, **kwargs):
             instance.nombre, instance.empresa.nombre,
             instance.stock, instance.stock_minimo,
         )
+
+
+@receiver(post_save, sender=Producto)
+def invalidar_cache_al_guardar_producto(sender, instance, created, **kwargs):
+    invalidar_analitica()
+
+
+@receiver([post_save, post_delete], sender=Venta)
+def invalidar_cache_al_guardar_venta(sender, instance, **kwargs):
+    invalidar_analitica()
 
 
 def recalcular_totales_venta(venta: Venta) -> None:

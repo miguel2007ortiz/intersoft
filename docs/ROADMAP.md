@@ -73,8 +73,11 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 
 ---
 
-## Decisiones abiertas
-- **Redis vs cache de DB** para B1 (depende de si se adopta Docker en Fase C).
-- **Paginación de catálogo**: infinite scroll vs paginador clásico.
-- **Proveedor de IA**: `openai` vs `groq`.
+## Decisiones abiertas / resueltas
+- **cache de DB (resuelta)**: B1 usa `DatabaseCache` (tabla `intersoft_cache`) por defecto, sin
+  infraestructura extra; se puede apuntar a Redis con `CACHE_BACKEND`/`CACHE_LOCATION`. En tests se
+  usa `LocMemCache`.
+- **Paginación de catálogo (resuelta)**: B2 mantiene paginador clásico (Anterior/Siguiente); el
+  backend ya devuelve `pagina/por_pagina/total_paginas`.
+- **Proveedor de IA**: `openai` vs `groq` (configurable por `IA_PROVIDER`).
 - **Alcance de Docker**: solo dev vs incluir producción/nginx.

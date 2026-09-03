@@ -130,6 +130,34 @@ class FiltrosConsultaTest(BaseFase5Test):
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "PRECIO_INVALIDO")
 
+    def test_catalogo_paginacion_corta_y_reporta_total_real(self):
+        for i in range(30):
+            Producto.objects.create(
+                empresa=self.empresa, nombre=f"Prod pag {i}", sku=f"PG-{i}",
+                precio=1000 + i, stock=5, stock_minimo=1, activo=True,
+                categoria=self.categoria)
+        # Mas el "Producto F5" del setUpTestData: 31 activos en total.
+        total_esperado = 31
+        # Pagina 1: se corta a 24 por pagina y reporta el total real.
+        p1 = APIClient().get("/api/tienda/catalogo/", {"pagina": 1}).json()
+        self.assertEqual(p1["pagina"], 1)
+        self.assertEqual(p1["por_pagina"], 24)
+        self.assertEqual(p1["total"], total_esperado)
+        self.assertEqual(p1["total_paginas"], 2)
+        self.assertEqual(len(p1["resultados"]), 24)
+        # Pagina 2: solo salen los restantes.
+        p2 = APIClient().get("/api/tienda/catalogo/", {"pagina": 2}).json()
+        self.assertEqual(len(p2["resultados"]), total_esperado - 24)
+        # No se repiten productos entre paginas.
+        ids_p1 = {p["id"] for p in p1["resultados"]}
+        ids_p2 = {p["id"] for p in p2["resultados"]}
+        self.assertTrue(ids_p1.isdisjoint(ids_p2))
+
+    def test_catalogo_pagina_invalida_cae_a_1(self):
+        respuesta = APIClient().get("/api/tienda/catalogo/", {"pagina": "abc"})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["pagina"], 1)
+
     def test_catalogo_categoria_invalida_devuelve_400(self):
         respuesta = APIClient().get("/api/tienda/catalogo/",
                                     {"categoria": "no-es-uuid"})

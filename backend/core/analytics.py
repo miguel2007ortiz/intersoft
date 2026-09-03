@@ -9,11 +9,15 @@ listas para graficar o exportar.
 """
 
 import csv
+import functools
+import hashlib
 import io
 import numbers
+import pickle
 import uuid as uuid_mod
 from datetime import datetime
 
+from django.core.cache import cache as dj_cache
 from django.db import connection
 from django.utils import timezone
 
@@ -102,6 +106,42 @@ def ejecutar(sql, params):
 
 # ----------------------------- Dashboard ----------------------------------
 
+def cache_analitica(ttl=60):
+    """Cachea el resultado de una agregacion del dashboard por el valor de
+    sus argumentos (empresa y filtros). TTL corto (60s) para que el panel se
+    sienta instantaneo al recargar sin quedar con datos obsoletos por mucho
+    tiempo. Se invalida globalmente al crear/modificar ventas o productos."""
+    def decorador(fn):
+        @functools.wraps(fn)
+        def envuelto(*args, **kwargs):
+            material = pickle.dumps((fn.__name__, args, tuple(sorted(kwargs.items()))))
+            clave = 'analitica:' + hashlib.md5(material).hexdigest()
+            valor = dj_cache.get(clave)
+            if valor is not None:
+                return valor
+            resultado = fn(*args, **kwargs)
+            dj_cache.set(clave, resultado, ttl)
+            return resultado
+        return envuelto
+    return decorador
+
+
+def invalidar_analitica():
+    """Limpia todo el cache de analitica del dashboard.
+
+    Se invoca al crear/modificar ventas o productos para que el panel no
+    muestre datos viejos. El volumen de claves es bajo (unas decenas por
+    empresa y filtro) y el TTL es corto, asi que una invalidacion amplia
+    del cache (prefijo de analitica, o el cache completo cuando el backend
+    no soporta delete_pattern, p. ej. LocMemCache en tests) es aceptable.
+    """
+    borrar = getattr(dj_cache, 'delete_pattern', None)
+    if borrar is not None:
+        borrar('analitica:*')
+    else:
+        dj_cache.clear()
+
+@cache_analitica(60)
 def resumen(f):
     """KPIs del panel de control para el rango de fechas seleccionado."""
     where, params = f.ventas_where()
@@ -145,6 +185,7 @@ def resumen(f):
     }
 
 
+@cache_analitica(60)
 def ventas_por_dia(f):
     """Series para la grafica de barras: ingresos y ventas por dia."""
     where, params = f.ventas_where()
@@ -159,6 +200,7 @@ def ventas_por_dia(f):
     return filas
 
 
+@cache_analitica(60)
 def ventas_por_mes(f):
     where, params = f.ventas_where('mes')
     filas = ejecutar(
@@ -171,6 +213,7 @@ def ventas_por_mes(f):
     return filas
 
 
+@cache_analitica(60)
 def top_productos(f):
     where, params = f.ventas_where(alias_fecha='dia')
     filas = ejecutar(
@@ -185,6 +228,7 @@ def top_productos(f):
     return filas
 
 
+@cache_analitica(60)
 def clientes_frecuentes(f):
     """Top clientes por total comprado (historia acumulada de la vista)."""
     filas = ejecutar(
@@ -198,6 +242,7 @@ def clientes_frecuentes(f):
     return filas
 
 
+@cache_analitica(60)
 def valor_inventario_por_categoria(empresa_id):
     return ejecutar(
         "SELECT categoria, num_productos, unidades, valor "
@@ -205,6 +250,7 @@ def valor_inventario_por_categoria(empresa_id):
         "ORDER BY valor DESC", [empresa_id])
 
 
+@cache_analitica(60)
 def rotacion_productos(empresa_id, limite=100):
     return ejecutar(
         "SELECT producto, sku, categoria, salidas, stock_actual, rotacion "
@@ -212,6 +258,7 @@ def rotacion_productos(empresa_id, limite=100):
         "ORDER BY rotacion DESC LIMIT %s", [empresa_id, limite])
 
 
+@cache_analitica(60)
 def productos_bajo_minimo(empresa_id):
     return ejecutar(
         "SELECT producto, sku, categoria, stock, stock_minimo "

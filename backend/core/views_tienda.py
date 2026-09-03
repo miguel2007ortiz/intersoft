@@ -8,9 +8,11 @@ Reglas clave:
 - Pasarela de pago: mock configurable por variable de entorno (PASARELA_MOCK=True)."""
 
 from decimal import Decimal
+import hashlib
 import os
 import uuid as uuid_mod
 
+from django.core.cache import cache
 from django.db import models, transaction
 from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
@@ -76,13 +78,27 @@ class CatalogoPublicoView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        # Cache corto (60s): el catalogo publico es el endpoint de mayor
+        # trafico y no cambia a cada peticion. La clave incluye todos los
+        # filtros y la pagina para no servir datos viejos a otros filtros.
+        params = request.query_params
+        material = (
+            params.get('busqueda', '') + '|' + params.get('categoria', '') + '|' +
+            params.get('precio_min', '') + '|' + params.get('precio_max', '') + '|' +
+            params.get('con_stock', '') + '|' + params.get('orden', '') + '|' +
+            params.get('pagina', '1')
+        )
+        clave = 'cat:' + hashlib.md5(material.encode('utf-8')).hexdigest()
+        if cache.get(clave) is not None:
+            return Response(cache.get(clave))
+
         productos = Producto.objects.filter(
             activo=True, deleted_at__isnull=True
         ).select_related('categoria', 'empresa').annotate(
             _promedio_calificacion=Avg('comentarios__calificacion'),
             _total_comentarios=Count('comentarios', distinct=True))
 
-        busqueda = request.query_params.get('busqueda', '').strip()
+        busqueda = params.get('busqueda', '').strip()
         if busqueda:
             productos = productos.filter(
                 Q(nombre__icontains=busqueda)
@@ -154,14 +170,16 @@ class CatalogoPublicoView(APIView):
                 productos__activo=True, productos__deleted_at__isnull=True))
         ).filter(num_productos__gt=0).order_by('nombre')
 
-        return Response({
+        data = {
             "resultados": serializer.data,
             "total": total,
             "pagina": pagina,
             "por_pagina": por_pagina,
             "total_paginas": max((total + por_pagina - 1) // por_pagina, 1),
             "categorias": CategoriaTiendaSerializer(categorias, many=True).data,
-        })
+        }
+        cache.set(clave, data, 60)
+        return Response(data)
 
 
 class CatalogoProductoDetailView(APIView):

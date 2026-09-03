@@ -18,11 +18,13 @@ Reglas de seguridad:
     conserva la conversacion para que el usuario reintente.
 """
 
+import hashlib
 import json
 import logging
 import urllib.request
 
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -86,27 +88,39 @@ def construir_contexto(empresa, request) -> ContextoEmpresa:
 
     `request` se usa solo para construir los filtros del resumen (fecha y
     categoria opcionales). Ningun dato sensible se incluye aquí.
+
+    Se cachea por empresa + filtros (TTL 60s) para que cada turno de chat
+    no golpee las vistas SQL («saldo» son los datos de la empresa).
     """
     # Import perezoso para evitar dependencias circulares.
     from . import analytics  # noqa: F401  (se usa para las vistas)
 
-    # El resumen usa los filtros del request (rango de fechas/categoria).
-    resumen = _resumen_seguro(request)
-    top = _sql_lista(
-        "SELECT producto, sku, categoria, unidades, ingresos "
-        "FROM vw_top_productos WHERE empresa_id = %s "
-        "ORDER BY unidades DESC LIMIT 8", [empresa.id])
-    clientes = _sql_lista(
-        "SELECT cliente, tipo_documento, numero_documento, total_comprado "
-        "FROM vw_clientes_frecuentes WHERE empresa_id = %s "
-        "ORDER BY total_comprado DESC LIMIT 6", [empresa.id])
-    bajo = _sql_lista(
-        "SELECT producto, sku, stock, stock_minimo "
-        "FROM vw_productos_bajo_minimo WHERE empresa_id = %s "
-        "ORDER BY (stock_minimo - stock) DESC LIMIT 8", [empresa.id])
-    return ContextoEmpresa(empresa=empresa, resumen=resumen,
-                           top_productos=top, clientes_frecuentes=clientes,
-                           bajo_minimo=bajo)
+    qp = request.query_params
+    material = (str(empresa.id) + '|' + qp.get('fecha_inicio', '') + '|' +
+                qp.get('fecha_fin', '') + '|' + qp.get('categoria', ''))
+    clave = 'ia-contexto:' + hashlib.md5(material.encode('utf-8')).hexdigest()
+    datos = cache.get(clave)
+    if datos is None:
+        resumen = _resumen_seguro(request)
+        top = _sql_lista(
+            "SELECT producto, sku, categoria, unidades, ingresos "
+            "FROM vw_top_productos WHERE empresa_id = %s "
+            "ORDER BY unidades DESC LIMIT 8", [empresa.id])
+        clientes = _sql_lista(
+            "SELECT cliente, tipo_documento, numero_documento, total_comprado "
+            "FROM vw_clientes_frecuentes WHERE empresa_id = %s "
+            "ORDER BY total_comprado DESC LIMIT 6", [empresa.id])
+        bajo = _sql_lista(
+            "SELECT producto, sku, stock, stock_minimo "
+            "FROM vw_productos_bajo_minimo WHERE empresa_id = %s "
+            "ORDER BY (stock_minimo - stock) DESC LIMIT 8", [empresa.id])
+        datos = {'resumen': resumen, 'top': top,
+                 'clientes': clientes, 'bajo': bajo}
+        cache.set(clave, datos, 60)
+    return ContextoEmpresa(empresa=empresa, resumen=datos['resumen'],
+                           top_productos=datos['top'],
+                           clientes_frecuentes=datos['clientes'],
+                           bajo_minimo=datos['bajo'])
 
 
 def _resumen_seguro(request):

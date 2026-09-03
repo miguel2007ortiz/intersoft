@@ -116,6 +116,18 @@ DATABASES = {
     }
 }
 
+# -- Cache de respuesta (por defecto en la misma BD MySQL; en produccion se
+# puede apuntar a Redis con CACHE_BACKEND=redis cos config(..., cast=...)).
+CACHES = {
+    'default': {
+        'BACKEND': config(
+            'CACHE_BACKEND',
+            default='django.core.cache.backends.db.DatabaseCache'),
+        # Para cache de DB hace falta 'LOCATION' (nombre de la tabla).
+        'LOCATION': config('CACHE_LOCATION', default='intersoft_cache'),
+    }
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -135,6 +147,14 @@ MEDIA_URL = '/media/'
 # directorio temporal evita ensuciar media/ del repo en cada corrida de tests.
 if 'test' in sys.argv:
     MEDIA_ROOT = Path(tempfile.mkdtemp(prefix='intersoft_test_media_'))
+    # Cache en memoria durante tests: evita depender de la tabla de cache en
+    # la BD de prueba y aísla cada corrida (sin contaminación entre tests).
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'test',
+        }
+    }
 else:
     MEDIA_ROOT = BASE_DIR / 'media'
 
