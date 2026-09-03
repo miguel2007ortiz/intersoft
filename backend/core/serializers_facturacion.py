@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .models import FacturaElectronica, NotaCredito, Venta
+from .models import FacturaElectronica, NotaCredito
 
 
 class FacturaElectronicaLecturaSerializer(serializers.ModelSerializer):

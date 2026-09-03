@@ -1,0 +1,15 @@
+# ===== Raiz .dockerignore =====
+# Carpeta externa del cliente, ajena al proyecto; no debe entrar en
+# ningun build de contenedor.
+figma-marketplace/
+
+# Artefactos y entornos locales (cada subcarpeta tiene su propio ignore).
+node_modules/
+dist/
+coverage/
+.angular/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.git/

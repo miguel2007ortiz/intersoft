@@ -1,11 +1,12 @@
 import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { TemaService } from '../../core/services/tema.service';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 
 @Component({
   selector: 'app-configuracion',
-  imports: [PanelShellComponent],
+  imports: [PanelShellComponent, RouterLink],
   template: `
     <app-panel-shell>
       <section class="contenedor seccion">
@@ -49,6 +50,20 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
               <span class="perilla"></span>
             </button>
           </div>
+          @if (auth.usuario()?.empresa === null || auth.usuario()?.empresa === undefined) {
+            <h2>Empresa</h2>
+            <div class="fila empresas">
+              <div>
+                <dt>¿Tienes un negocio?</dt>
+                <p class="ayuda">
+                  Registra tu empresa y administra producto, inventario, ventas y mas desde el
+                  panel.
+                </p>
+              </div>
+              <a routerLink="/registro" class="btn-negocio">Crear negocio</a>
+            </div>
+          }
+
           <p class="nota">Mas opciones de configuracion disponibles proximamente.</p>
         </div>
       </section>
@@ -108,6 +123,27 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
       .apariencia {
         align-items: center;
+      }
+      .empresas {
+        align-items: center;
+      }
+      .btn-negocio {
+        flex: none;
+        padding: 9px 18px;
+        border-radius: 8px;
+        background: var(--primario);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+        transition:
+          opacity 0.15s,
+          transform 0.1s;
+      }
+      .btn-negocio:hover {
+        opacity: 0.92;
+        transform: translateY(-1px);
       }
       .ayuda {
         margin: var(--e1) 0 0;

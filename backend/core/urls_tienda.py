@@ -33,4 +33,9 @@ urlpatterns = [
 
     # Pedidos del comprador
     path("tienda/pedidos/", views_tienda.MisPedidosView.as_view()),
+
+    # Favoritos (requiere auth)
+    path("tienda/favoritos/", views_tienda.MisFavoritosView.as_view()),
+    path("tienda/favoritos/<uuid:producto_id>/", views_tienda.FavoritoToggleView.as_view()),
+    path("tienda/favoritos/<uuid:producto_id>/estado/", views_tienda.FavoritoEstadoView.as_view()),
 ]

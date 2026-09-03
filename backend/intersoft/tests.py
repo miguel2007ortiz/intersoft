@@ -22,8 +22,6 @@ import importlib
 import os
 from unittest import mock
 
-import django
-from django.conf import settings as dj_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 

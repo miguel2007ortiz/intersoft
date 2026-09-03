@@ -5,8 +5,9 @@ from rest_framework.test import APIClient
 
 from cuentas.models import Perfil, Rol
 
-from .models import (Camara, Categoria, Carrito, CarritoItem, Cliente,
+from .models import (Camara, Categoria, Carrito, Cliente,
                      ComentarioProducto, DetalleVenta, Empresa, IAConversacion,
+                     Favorito,
                      MovimientoInventario, Notificacion, Producto, Venta)
 
 
@@ -159,9 +160,8 @@ class VentaFacturaTest(BaseCoreTest):
 
 # ============================ FASE 3: API catalogo ============================
 
-from rest_framework.test import APIClient  # noqa: E402
 
-from cuentas.models import ActividadUsuario, Perfil, Rol  # noqa: E402
+from cuentas.models import ActividadUsuario  # noqa: E402
 
 
 class BaseCatalogoTest(BaseCoreTest):
@@ -639,8 +639,8 @@ class DashboardReportesTest(BaseCatalogoTest):
 
     def test_aislamiento_entre_empresas(self):
         otra = Empresa.objects.create(nombre="Otra", nit="900999991")
-        otro_prod = Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
-                                            precio=100, stock=5, stock_minimo=3)
+        Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
+                                precio=100, stock=5, stock_minimo=3)
         # Un administrador de la empresa 'otra'
         otro_admin = User.objects.create_user(username="otro@test.co",
                                               email="otro@test.co", password="Clave12345")
@@ -786,6 +786,86 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(reint.status_code, 200)
         roles = [m["rol"] for m in reint.json()["conversacion"]["mensajes"]]
         self.assertEqual(roles, ["usuario", "asistente"])
+
+
+# ====================== FASE D (D2): IA con contexto y rate-limit =============
+import json  # noqa: E402
+from django.core.cache import cache  # noqa: E402
+from django.test import override_settings  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+import core.ia_engine as ia_engine_mod  # noqa: E402
+
+
+class IAChatFaseDTest(BaseCatalogoTest):
+    """D2: el prompt incluye el contexto de empresa y hay rate-limit por usuario."""
+
+    def setUp(self):
+        # La cache (LocMemCache en tests) es global al proceso y no se limpia
+        # sola entre tests: vaciarla garantiza un contador de rate-limit limpio.
+        cache.clear()
+
+    def _contexto_fake(self):
+        empresa = MagicMock(nombre="Tienda Test")
+        return ia_engine_mod.ContextoEmpresa(
+            empresa=empresa,
+            resumen={"ingresos_totales": 150000, "num_ventas": 10,
+                     "unidades_vendidas": 22, "ticket_promedio": 15000,
+                     "valor_inventario": 800000, "unidades_inventario": 50,
+                     "productos_bajo_minimo": 2},
+            top_productos=[{"producto": "Café", "sku": "CAF01", "categoria": "Bebidas",
+                            "unidades": 5, "ingresos": 25000}],
+            clientes_frecuentes=[],
+            bajo_minimo=[{"producto": "Leche", "sku": "LEC01", "stock": 1, "stock_minimo": 3}])
+
+    def test_prompt_system_incluye_contexto_de_empresa(self):
+        # El contexto hay que "inyectarlo" en el system prompt del payload envido
+        # al proveedor (antes se construia pero no se pasaba al modelo).
+        contexto = self._contexto_fake()
+        capturado = {}
+
+        def _falso_urlopen(peticion, timeout=None):
+            capturado["cuerpo"] = json.loads(peticion.data.decode("utf-8"))
+            resp = MagicMock()
+            resp.read.return_value = json.dumps(
+                {"choices": [{"message": {"content": "respuesta OK"}}]}).encode("utf-8")
+            resp.__enter__.return_value = resp
+            return resp
+
+        with patch("urllib.request.urlopen", side_effect=_falso_urlopen), \
+             override_settings(IA_API_KEY="clave-test", IA_PROVIDER="openai"):
+            texto = ia_engine_mod._llamar_compatible(contexto, [], "¿cómo vamos?")
+        self.assertEqual(texto, "respuesta OK")
+        system = capturado["cuerpo"]["messages"][0]
+        self.assertEqual(system["role"], "system")
+        self.assertIn("Tienda Test", system["content"])
+        self.assertIn("150000", system["content"])       # ingresos reales en el contexto
+        self.assertIn("Café", system["content"])          # top producto presente
+        self.assertIn("Leche", system["content"])         # bajo minimo presente
+        # El ultimo mensaje es la pregunta del usuario.
+        self.assertEqual(capturado["cuerpo"]["messages"][-1]["content"], "¿cómo vamos?")
+
+    def test_rate_limit_bloquea_al_superar_el_maximo(self):
+        api = self.api_como(self.admin)
+        # El rate-limit es por usuario; con maximo 1, la segunda peticion -> 429.
+        with override_settings(IA_MAX_PETICIONES=1, IA_PETICIONES_VENTANA=60):
+            primero = api.post("/api/ia/chat/", {"mensaje": "uno"}, format="json")
+            self.assertEqual(primero.status_code, 200, primero.content)
+            excedido = api.post("/api/ia/chat/", {"mensaje": "dos"}, format="json")
+        self.assertEqual(excedido.status_code, 429)
+        self.assertEqual(excedido.json()["codigo"], "IA_DEMASIADAS_PETICIONES")
+
+    def test_rate_limit_es_independiente_por_usuario(self):
+        # El limite no castiga a toda la empresa por el uso de un miembro.
+        api_admin = self.api_como(self.admin)
+        api_emp = self.api_como(self.empleado)
+        with override_settings(IA_MAX_PETICIONES=1, IA_PETICIONES_VENTANA=60):
+            self.assertEqual(api_admin.post("/api/ia/chat/", {"mensaje": "a"},
+                                            format="json").status_code, 200)
+            self.assertEqual(api_emp.post("/api/ia/chat/", {"mensaje": "b"},
+                                          format="json").status_code, 200)
+            self.assertEqual(api_admin.post("/api/ia/chat/", {"mensaje": "c"},
+                                            format="json").status_code, 429)
 
 
 # ====================== FASE 9: Camaras y notificaciones =====================
@@ -976,7 +1056,6 @@ class NotificacionesApiTest(BaseCatalogoTest):
 
     def test_entrega_cae_al_canal_email_sin_whatsapp(self):
         # Sin WA_VINCULADO la entrega usa el canal alterno (email a consola).
-        import io
         from django.core import mail
         aviso = crear_notificacion(
             empresa=self.empresa, tipo="sistema", mensaje="Prueba de entrega",
@@ -1127,6 +1206,70 @@ class MarketplaceCarritoTest(BaseMarketplaceTest):
                      format="json")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.data["codigo"], "PRODUCTO_NO_ENCONTRADO")
+
+
+class FavoritoProductoTest(BaseMarketplaceTest):
+    """Favoritos de productos del marketplace (por usuario, cualquier rol)."""
+
+    def test_anonimo_no_puede_listar_favoritos(self):
+        resp = APIClient().get("/api/tienda/favoritos/")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_agregar_y_listar_favorito(self):
+        api = self.api_como(self.comprador)
+        r = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r.status_code, 201)
+
+        lista = api.get("/api/tienda/favoritos/")
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 1)
+        self.assertEqual(lista.data[0]["producto"], self.producto_a.id)
+        self.assertEqual(lista.data[0]["producto_obj"]["nombre"], "Camisa Roja")
+
+    def test_agregar_dos_veces_es_idempotente(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r2 = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(
+            Favorito.objects.filter(usuario=self.comprador).count(), 1)
+
+    def test_quitar_favorito(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r = api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(
+            Favorito.objects.filter(usuario=self.comprador).count(), 0)
+
+    def test_favoritos_son_privados_por_usuario(self):
+        otro = User.objects.create_user(username="otro@test.co",
+                                        email="otro@test.co",
+                                        password="Clave12345")
+        Perfil.objects.create(usuario=otro, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        api_a = self.api_como(self.comprador)
+        api_a.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+
+        api_b = self.api_como(otro)
+        lista = api_b.get("/api/tienda/favoritos/")
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 0)
+
+    def test_estado_favorito(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["es_favorito"], True)
+        api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r2 = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertEqual(r2.data["es_favorito"], False)
+
+    def test_favorito_producto_inactivo_rechazado(self):
+        api = self.api_como(self.comprador)
+        r = api.post(f"/api/tienda/favoritos/{self.producto_inactivo.id}/")
+        self.assertEqual(r.status_code, 404)
 
 
 class MarketplaceCheckoutTest(BaseMarketplaceTest):

@@ -15,7 +15,6 @@ Flujo:
 6. Todo queda auditado en actividad_usuario."""
 
 import os
-from decimal import Decimal
 
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, models, transaction
@@ -29,8 +28,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (DetalleVenta, FacturaElectronica, MovimientoInventario,
-                     NotaCredito, Notificacion, Producto, Venta)
+from .models import (FacturaElectronica, MovimientoInventario,
+                     NotaCredito, Producto, Venta)
 from .serializers_facturacion import (FacturaElectronicaLecturaSerializer,
                                       GenerarFacturaSerializer,
                                       NotaCreditoInputSerializer,
@@ -99,10 +98,13 @@ def _registrar_movimiento(producto, usuario, tipo, cantidad, motivo):
 def _guardar_comprobantes(instancia, numero, respuesta):
     """Guarda el PDF y XML devueltos por la DIAN en los campos del
     comprobante (antes se descartaban y quedaban siempre null).
+    El PDF puede llegar como bytes (real) o str (legacy/mock).
     No llama a save() del modelo: el caller ya lo hace con update_fields."""
     if respuesta.comprobante_pdf:
-        instancia.pdf.save(f"{numero}.pdf",
-                           ContentFile(respuesta.comprobante_pdf.encode('utf-8')),
+        pdf_datos = respuesta.comprobante_pdf
+        if isinstance(pdf_datos, str):
+            pdf_datos = pdf_datos.encode('utf-8')
+        instancia.pdf.save(f"{numero}.pdf", ContentFile(pdf_datos),
                            save=False)
     if respuesta.comprobante_xml:
         instancia.xml.save(f"{numero}.xml",

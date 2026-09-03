@@ -30,6 +30,18 @@ export interface DatosComentario {
   comentario?: string;
 }
 
+export interface Favorito {
+  id: string;
+  producto: string;
+  producto_obj: ProductoTienda;
+  created_at: string;
+}
+
+export interface FavoritoEstado {
+  producto: string;
+  es_favorito: boolean;
+}
+
 export interface CategoriaTienda {
   id: string;
   nombre: string;

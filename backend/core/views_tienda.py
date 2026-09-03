@@ -8,11 +8,13 @@ Reglas clave:
 - Pasarela de pago: mock configurable por variable de entorno (PASARELA_MOCK=True)."""
 
 from decimal import Decimal
+import hashlib
 import os
 import uuid as uuid_mod
 
-from django.db import models, transaction
-from django.db.models import Avg, Count, Q, Sum
+from django.core.cache import cache
+from django.db import transaction
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -23,14 +25,15 @@ from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
-                     Cupon, DetalleVenta, Empresa, MovimientoInventario, Notificacion,
+                     Cupon, DetalleVenta, Empresa, Favorito, MovimientoInventario,
                      Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
                                   ComentarioProductoEscrituraSerializer,
                                   ComentarioProductoSerializer,
                                   CompletarCompradorSerializer, CuponSerializer,
-                                  CuponValidarSerializer, PedidoCompradorSerializer,
+                                  CuponValidarSerializer, FavoritoSerializer,
+                                  PedidoCompradorSerializer,
                                   ProductoTiendaSerializer)
 
 
@@ -75,13 +78,27 @@ class CatalogoPublicoView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        # Cache corto (60s): el catalogo publico es el endpoint de mayor
+        # trafico y no cambia a cada peticion. La clave incluye todos los
+        # filtros y la pagina para no servir datos viejos a otros filtros.
+        params = request.query_params
+        material = (
+            params.get('busqueda', '') + '|' + params.get('categoria', '') + '|' +
+            params.get('precio_min', '') + '|' + params.get('precio_max', '') + '|' +
+            params.get('con_stock', '') + '|' + params.get('orden', '') + '|' +
+            params.get('pagina', '1')
+        )
+        clave = 'cat:' + hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest()
+        if cache.get(clave) is not None:
+            return Response(cache.get(clave))
+
         productos = Producto.objects.filter(
             activo=True, deleted_at__isnull=True
         ).select_related('categoria', 'empresa').annotate(
             _promedio_calificacion=Avg('comentarios__calificacion'),
             _total_comentarios=Count('comentarios', distinct=True))
 
-        busqueda = request.query_params.get('busqueda', '').strip()
+        busqueda = params.get('busqueda', '').strip()
         if busqueda:
             productos = productos.filter(
                 Q(nombre__icontains=busqueda)
@@ -153,14 +170,16 @@ class CatalogoPublicoView(APIView):
                 productos__activo=True, productos__deleted_at__isnull=True))
         ).filter(num_productos__gt=0).order_by('nombre')
 
-        return Response({
+        data = {
             "resultados": serializer.data,
             "total": total,
             "pagina": pagina,
             "por_pagina": por_pagina,
             "total_paginas": max((total + por_pagina - 1) // por_pagina, 1),
             "categorias": CategoriaTiendaSerializer(categorias, many=True).data,
-        })
+        }
+        cache.set(clave, data, 60)
+        return Response(data)
 
 
 class CatalogoProductoDetailView(APIView):
@@ -224,6 +243,68 @@ class ComentariosProductoView(APIView):
             defaults=entrada.validated_data)
         return Response(ComentarioProductoSerializer(comentario).data,
                         status=status.HTTP_201_CREATED)
+
+
+# ------------------------------ Favoritos ----------------------------------
+
+class MisFavoritosView(APIView):
+    """GET lista los favoritos del usuario autenticado (con el producto).
+
+    Derecho de acceso: el usuario solo ve y manipula SUS propios favoritos.
+    No hay aislamiento por empresa porque el marketplace es multi-vendedor:
+    un comprador guarda productos de cualquier empresa vendedora."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        favoritos = (Favorito.objects.filter(usuario=request.user)
+                     .select_related('producto__categoria', 'producto__empresa')
+                     .order_by('-created_at'))
+        return Response(FavoritoSerializer(favoritos, many=True).data)
+
+
+class FavoritoToggleView(APIView):
+    """POST añade un producto a favoritos / DELETE lo quita (idempotente)."""
+    permission_classes = [IsAuthenticated]
+
+    def _producto(self, request, producto_id):
+        producto = Producto.objects.filter(
+            activo=True, deleted_at__isnull=True, id=producto_id).first()
+        if not producto:
+            return None
+        return producto
+
+    def post(self, request, producto_id):
+        producto = self._producto(request, producto_id)
+        if not producto:
+            return Response(
+                {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND)
+
+        favorito, creado = Favorito.objects.get_or_create(
+            usuario=request.user, producto=producto)
+        return Response(
+            FavoritoSerializer(favorito).data,
+            status=status.HTTP_201_CREATED if creado else status.HTTP_200_OK)
+
+    def delete(self, request, producto_id):
+        producto = self._producto(request, producto_id)
+        if not producto:
+            return Response(
+                {"codigo": "NO_ENCONTRADO", "detalle": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND)
+
+        Favorito.objects.filter(usuario=request.user, producto=producto).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class FavoritoEstadoView(APIView):
+    """GET informa si un producto es favorito del usuario autenticado."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, producto_id):
+        es_favorito = Favorito.objects.filter(
+            usuario=request.user, producto_id=producto_id).exists()
+        return Response({"producto": str(producto_id), "es_favorito": es_favorito})
 
 
 # ------------------------------ Cupones ----------------------------------

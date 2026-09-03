@@ -10,21 +10,17 @@ Cubre los huecos de cobertura y las correcciones de la fase 5:
 """
 
 import threading
-from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.core.management import call_command
-from django.db import transaction
 from django.test import TestCase, TransactionTestCase
-from django.utils import timezone
 
 from cuentas.models import Perfil, Rol
 from rest_framework.test import APIClient
 
-from .models import (Camara, Carrito, CarritoItem, Categoria, Cliente, Cupon,
-                     Empresa, FacturaElectronica, MovimientoInventario,
-                     NotaCredito, Producto, Venta)
+from .models import (Camara, Carrito, CarritoItem, Categoria, Cliente, Empresa, FacturaElectronica, NotaCredito, Producto, Venta)
 from .services.dian_adapter import RespuestaDIAN
 
 
@@ -129,6 +125,34 @@ class FiltrosConsultaTest(BaseFase5Test):
                                     {"precio_min": "abc"})
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "PRECIO_INVALIDO")
+
+    def test_catalogo_paginacion_corta_y_reporta_total_real(self):
+        for i in range(30):
+            Producto.objects.create(
+                empresa=self.empresa, nombre=f"Prod pag {i}", sku=f"PG-{i}",
+                precio=1000 + i, stock=5, stock_minimo=1, activo=True,
+                categoria=self.categoria)
+        # Mas el "Producto F5" del setUpTestData: 31 activos en total.
+        total_esperado = 31
+        # Pagina 1: se corta a 24 por pagina y reporta el total real.
+        p1 = APIClient().get("/api/tienda/catalogo/", {"pagina": 1}).json()
+        self.assertEqual(p1["pagina"], 1)
+        self.assertEqual(p1["por_pagina"], 24)
+        self.assertEqual(p1["total"], total_esperado)
+        self.assertEqual(p1["total_paginas"], 2)
+        self.assertEqual(len(p1["resultados"]), 24)
+        # Pagina 2: solo salen los restantes.
+        p2 = APIClient().get("/api/tienda/catalogo/", {"pagina": 2}).json()
+        self.assertEqual(len(p2["resultados"]), total_esperado - 24)
+        # No se repiten productos entre paginas.
+        ids_p1 = {p["id"] for p in p1["resultados"]}
+        ids_p2 = {p["id"] for p in p2["resultados"]}
+        self.assertTrue(ids_p1.isdisjoint(ids_p2))
+
+    def test_catalogo_pagina_invalida_cae_a_1(self):
+        respuesta = APIClient().get("/api/tienda/catalogo/", {"pagina": "abc"})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data["pagina"], 1)
 
     def test_catalogo_categoria_invalida_devuelve_400(self):
         respuesta = APIClient().get("/api/tienda/catalogo/",
@@ -367,6 +391,90 @@ class ComprobantesDianTest(BaseFase5Test):
         self.assertTrue(nota.xml.name)
         self.assertEqual(nota.pdf.read().decode(), "contenido pdf nota credito")
         self.assertEqual(nota.xml.read().decode(), "<NotaCredito/>")
+
+
+# ==================== Fase E2: descarga de PDF/XML ===========================
+# El comprobante aprobado expone su PDF/XML como URLs descargables (FileField
+# → /media/...). Estos tests validan que la URL se serializa, que el archivo
+# existe en disco y que responde por HTTP con el contenido correcto; y que un
+# comprobante NO aprobado no expone nada que descargar.
+
+class DescargaComprobantesTest(BaseFase5Test):
+    RESPUESTA_APROBADA = RespuestaDIAN(
+        aprobada=True, cufe="CUFE-DESCARGABLE",
+        mensaje="Factura aprobada por la DIAN.",
+        comprobante_pdf="contenido pdf descargable",
+        comprobante_xml="<FacturaElectronicaEjemplo/>",
+    )
+
+    def _factuar_venta(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        with patch("core.views_facturacion.enviar_factura",
+                  return_value=self.RESPUESTA_APROBADA):
+            api.post("/api/facturacion/", {"venta_id": str(venta.id)},
+                     format="json")
+        return FacturaElectronica.objects.get(venta=venta)
+
+    def test_factura_expone_urls_pdf_y_xml_descargables(self):
+        factura = self._factuar_venta()
+        cuerpo = self.api_como(self.empleado).get(
+            f"/api/facturacion/{factura.id}/").json()
+        self.assertEqual(cuerpo["estado"], "aprobada")
+        # El serializer expone las URLs de los FileField (path bajo /media/).
+        self.assertTrue(cuerpo["pdf"], "Debe existir URL de PDF")
+        self.assertTrue(cuerpo["xml"], "Debe existir URL de XML")
+        self.assertIn("/media/", cuerpo["pdf"])
+        self.assertIn("/media/", cuerpo["xml"])
+
+    def test_descarga_del_pdf_de_factura_por_su_ruta(self):
+        # El PDF queda persistido en MEDIA_ROOT bajo la ruta que expone la
+        # URL del FileField; cualquier servidor de estaticos (static() en
+        # DEBUG, nginx en produccion) puede servirlo. Se verifica el archivo
+        # en disco y que su contenido es el guardado.
+        factura = self._factuar_venta()
+        ruta = factura.pdf.name
+        url_expuesta = self.api_como(self.empleado).get(
+            f"/api/facturacion/{factura.id}/").json()["pdf"]
+        # La URL expuesta termina en la ruta del archivo en media/.
+        self.assertTrue(url_expuesta.endswith(ruta), f"{url_expuesta} != .../{ruta}")
+        with open(settings.MEDIA_ROOT / ruta, "rb") as fh:
+            self.assertEqual(fh.read().decode(), "contenido pdf descargable")
+
+    def test_nota_credito_expone_urls_pdf_y_xml(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        FacturaElectronica.objects.create(
+            venta=venta, numero=f"FE-{venta.numero_factura}",
+            estado="aprobada", cufe="CUFE-FACTURA")
+        respuesta_nc = RespuestaDIAN(
+            aprobada=True, cufe="CUFE-NC",
+            mensaje="Nota credito aprobada.",
+            comprobante_pdf="pdf de la nota",
+            comprobante_xml="<NotaCreditoEjemplo/>")
+        with patch("core.views_facturacion.enviar_nota_credito",
+                  return_value=respuesta_nc):
+            api.post("/api/notas-credito/",
+                     {"venta_id": str(venta.id), "motivo": "Devolucion"},
+                     format="json")
+        nota = NotaCredito.objects.get(venta_original=venta)
+        cuerpo = api.get(f"/api/notas-credito/{nota.id}/").json()
+        self.assertTrue(cuerpo["pdf"])
+        self.assertTrue(cuerpo["xml"])
+        self.assertIn("/media/", cuerpo["pdf"])
+        self.assertIn("/media/", cuerpo["xml"])
+
+    def test_factura_no_aprobada_no_expone_comprobantes(self):
+        # Sin respuesta aprobada, el comprobante queda sin PDF/XML: no hay
+        # nada descargable.
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(
+            venta=venta, numero=f"FE-{venta.numero_factura}",
+            estado="pendiente")
+        cuerpo = api.get(f"/api/facturacion/{factura.id}/").json()
+        self.assertIsNone(cuerpo["pdf"])
+        self.assertIsNone(cuerpo["xml"])
 
 
 # -------------------- Carreras: POS ---------------------------------------

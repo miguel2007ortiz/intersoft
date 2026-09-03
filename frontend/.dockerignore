@@ -1,0 +1,6 @@
+# ===== Frontend .dockerignore =====
+# No subir dependencias ni artefactos locales a la imagen (se re-instala).
+node_modules/
+dist/
+coverage/
+.angular/

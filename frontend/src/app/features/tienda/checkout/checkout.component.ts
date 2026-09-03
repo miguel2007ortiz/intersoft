@@ -27,11 +27,11 @@ import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicacione
               <li>
                 <strong>{{ v.empresa_nombre }}</strong>
                 <span>Factura {{ v.numero_factura }}</span>
-                <span class="total">\${{ v.total | number }}</span>
+                <span class="total">{{ v.total | number }} COP</span>
               </li>
             }
           </ul>
-          <p class="total-general">Total pagado: <strong>\${{ exito()!.total | number }}</strong></p>
+          <p class="total-general">Total pagado: <strong>{{ exito()!.total | number }} COP</strong></p>
           <p class="transaccion">Transaccion: {{ exito()!.transaccion_id }}</p>
           <div class="exito-acciones">
             <a routerLink="/catalogo" class="btn-seguir">Seguir comprando</a>
@@ -119,16 +119,16 @@ import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicacione
               @for (item of carrito()!.items; track item.id) {
                 <div class="resumen-item">
                   <span>{{ item.producto_nombre }} × {{ item.cantidad }}</span>
-                  <span>\${{ item.subtotal | number }}</span>
+                  <span>{{ item.subtotal | number }} COP</span>
                 </div>
               }
             </div>
             <div class="resumen-totales">
-              <div class="fila"><span>Subtotal</span><span>\${{ carrito()!.subtotal | number }}</span></div>
+              <div class="fila"><span>Subtotal</span><span>{{ carrito()!.subtotal | number }} COP</span></div>
               @if (Number(carrito()!.descuento) > 0) {
-                <div class="fila descuento"><span>Descuento</span><span>-\${{ carrito()!.descuento | number }}</span></div>
+                <div class="fila descuento"><span>Descuento</span><span>-{{ carrito()!.descuento | number }} COP</span></div>
               }
-              <div class="fila total"><span>Total a pagar</span><span>\${{ carrito()!.total | number }}</span></div>
+              <div class="fila total"><span>Total a pagar</span><span>{{ carrito()!.total | number }} COP</span></div>
             </div>
           }
         </section>
@@ -151,7 +151,7 @@ import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicacione
           <button type="button" class="btn-pagar"
                   [disabled]="cargando()"
                   (click)="procesarPago()">
-            @if (cargando()) { Procesando... } @else { Pagar \${{ carrito()?.total | number }}
+            @if (cargando()) { Procesando... } @else { Pagar {{ carrito()?.total | number }} COP
             }
           </button>
         </section>

@@ -237,9 +237,8 @@ class EmailUnicoTest(BaseCuentasTest):
         self.assertFalse(tomado.json()["disponible"])
 
 # ==================== FASE 2: administracion de seguridad ====================
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient  # noqa: E402
 
-from .models import Permiso
 
 
 class BaseSeguridadTest(TestCase):

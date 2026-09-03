@@ -133,6 +133,25 @@ class ComentarioProducto(TimeStampedModel):
         return f"{self.usuario} -> {self.producto} ({self.calificacion}/5)"
 
 
+class Favorito(TimeStampedModel):
+    """Producto marcado como favorito por un usuario del marketplace.
+
+    Es global por `usuario`+`producto` (no depende de la empresa del usuario),
+    de modo que cualquier rol logueado (CLIENTE, EMPLEADO o ADMINISTRADOR)
+    pueda guardar productos que le interesan."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='favoritos')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='favoritos')
+
+    class Meta:
+        db_table = 'producto_favorito'
+        unique_together = ('usuario', 'producto')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto}"
+
+
 class Cliente(TimeStampedModel):
     TIPO_DOC_CHOICES = [('CC', 'Cedula de Ciudadania'), ('NIT', 'NIT'),
                         ('CE', 'Cedula de Extranjeria'), ('PAS', 'Pasaporte')]
