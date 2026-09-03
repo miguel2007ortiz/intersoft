@@ -1,0 +1,43 @@
+.caja-auth { width: min(520px, 100%); }
+.caja-auth h1 { margin: 0 0 var(--e1); font-size: 26px; }
+.subtitulo { margin: 0 0 var(--e5); color: var(--gris); font-size: 15px; }
+
+.campo-password { position: relative; }
+.campo-password input { padding-right: 78px; }
+.ver {
+  position: absolute;
+  right: var(--e2);
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primario-osc);
+  cursor: pointer;
+  padding: var(--e1) var(--e2);
+}
+
+.ayuda.ok { color: var(--ok); }
+.ayuda-seccion { margin: 0 0 var(--e2); }
+
+.fila-documento {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--e3);
+}
+
+.enlaces {
+  margin-top: var(--e5);
+  padding-top: var(--e4);
+  border-top: 1px solid var(--linea);
+  font-size: 14.5px;
+  text-align: center;
+  display: flex;
+  gap: var(--e2);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.enlaces a { color: var(--primario-osc); font-weight: 600; }
+.divisor { color: var(--linea); }

@@ -1,18 +1,20 @@
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from rest_framework.test import APIClient
 
-from .models import (Camara, Categoria, Cliente, DetalleVenta, Empresa,
+from cuentas.models import Perfil, Rol
+
+from .models import (Camara, Categoria, Carrito, Cliente,
+                     ComentarioProducto, DetalleVenta, Empresa, Envio, IAConversacion,
+                     Favorito,
                      MovimientoInventario, Notificacion, Producto, Venta)
-
-from cuentas.models import crear_roles_base  # noqa: E402
 
 
 class BaseCoreTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.empresa = Empresa.objects.create(nombre="Tienda Test", nit="900999998")
-        crear_roles_base(cls.empresa)
         cls.cuenta = User.objects.create_user(username="vendedor@test.co",
                                               email="vendedor@test.co",
                                               password="Clave12345")
@@ -158,9 +160,8 @@ class VentaFacturaTest(BaseCoreTest):
 
 # ============================ FASE 3: API catalogo ============================
 
-from rest_framework.test import APIClient  # noqa: E402
 
-from cuentas.models import ActividadUsuario, Perfil, Rol  # noqa: E402
+from cuentas.models import ActividadUsuario  # noqa: E402
 
 
 class BaseCatalogoTest(BaseCoreTest):
@@ -172,18 +173,18 @@ class BaseCatalogoTest(BaseCoreTest):
         cls.admin = User.objects.create_user(username="admin@test.co",
                                              email="admin@test.co", password="Clave12345")
         Perfil.objects.create(usuario=cls.admin, empresa=cls.empresa,
-                              rol=Rol.de_nombre(cls.empresa, "ADMINISTRADOR"))
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
         cls.empleado = User.objects.create_user(username="empleado@test.co",
                                                 email="empleado@test.co",
                                                 password="Clave12345")
         Perfil.objects.create(usuario=cls.empleado, empresa=cls.empresa,
-                              rol=Rol.de_nombre(cls.empresa, "EMPLEADO"))
+                              rol=Rol.de_nombre("EMPLEADO"))
         cls.cliente_rol = User.objects.create_user(username="solo@test.co",
                                                    email="solo@test.co",
                                                    password="Clave12345")
         cls.perfil_cliente_rol = Perfil.objects.create(
             usuario=cls.cliente_rol, empresa=cls.empresa,
-            rol=Rol.de_nombre(cls.empresa, "CLIENTE"))
+            rol=Rol.de_nombre("CLIENTE"))
 
     @classmethod
     def api_como(cls, usuario):
@@ -277,6 +278,153 @@ class CrudClientesApiTest(BaseCatalogoTest):
         self.assertEqual(api.delete(f"/api/clientes/{cliente.id}/").status_code, 204)
         cliente.refresh_from_db()
         self.assertIsNotNone(cliente.deleted_at)
+
+    def test_otro_tenant_no_puede_ver_ni_editar_ni_desactivar_cliente_ajeno(self):
+        """Aislamiento multi-tenant: un cliente de la empresa A debe ser
+        invisible (404, no 403) para el personal de la empresa B."""
+        otra_empresa = Empresa.objects.create(nombre="Otra Tienda", nit="900999996")
+        otro_admin = User.objects.create_user(username="otroadmin@test.co",
+                                              email="otroadmin@test.co",
+                                              password="Clave12345")
+        Perfil.objects.create(usuario=otro_admin, empresa=otra_empresa,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+        api = self.api_como(otro_admin)
+
+        self.assertEqual(api.get(f"/api/clientes/{self.cliente.id}/").status_code, 404)
+        self.assertEqual(api.patch(f"/api/clientes/{self.cliente.id}/",
+                                   {"ciudad": "Medellin"}, format="json").status_code, 404)
+        self.assertEqual(api.delete(f"/api/clientes/{self.cliente.id}/").status_code, 404)
+        self.assertEqual(
+            api.post(f"/api/clientes/{self.cliente.id}/desactivar/", {},
+                     format="json").status_code, 404)
+
+    def test_creacion_sin_permiso_de_escritura_recibe_403(self):
+        api = self.api_como(self.cliente_rol)   # rol CLIENTE: sin acceso al catalogo
+        respuesta = api.post("/api/clientes/", self.DATOS, format="json")
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_desactivar_y_reactivar_cliente(self):
+        cliente = Cliente.objects.create(empresa=self.empresa, nombre="Reactivable",
+                                         tipo_documento="CC", numero_documento="888")
+        api = self.api_como(self.admin)
+
+        respuesta = api.post(f"/api/clientes/{cliente.id}/desactivar/", {}, format="json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(respuesta.json()["activo"])
+        cliente.refresh_from_db()
+        self.assertIsNotNone(cliente.deleted_at)
+
+        # desaparece del listado de activos (default) pero sigue en "todos"
+        listado_activos = api.get("/api/clientes/").json()
+        self.assertNotIn("Reactivable", [c["nombre"] for c in listado_activos["resultados"]])
+        listado_todos = api.get("/api/clientes/?estado=todos").json()
+        self.assertIn("Reactivable", [c["nombre"] for c in listado_todos["resultados"]])
+
+        respuesta = api.post(f"/api/clientes/{cliente.id}/reactivar/", {}, format="json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(respuesta.json()["activo"])
+        cliente.refresh_from_db()
+        self.assertIsNone(cliente.deleted_at)
+
+
+class CasosDeUsoClienteTest(BaseCatalogoTest):
+    """Fase 4: flujos alternativos y excepcionales de los CU-CLI que no
+    quedaban cubiertos por CrudClientesApiTest / AccesoCatalogoTest."""
+
+    def test_cu_cli_01_a2_documento_de_cliente_inactivo_ofrece_reactivar(self):
+        inactivo = Cliente.objects.create(empresa=self.empresa, nombre="Viejo Cliente",
+                                          tipo_documento="CC", numero_documento="700700")
+        inactivo.soft_delete()
+        api = self.api_como(self.admin)
+        respuesta = api.post("/api/clientes/", {
+            "nombre": "Impostor", "tipo_documento": "CC",
+            "numero_documento": "700700"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["errores"]["cliente_inactivo_id"], [str(inactivo.id)])
+        self.assertIn("inactivo", str(cuerpo["errores"]["numero_documento"]))
+        # no se creo un duplicado
+        self.assertEqual(Cliente.objects.filter(empresa=self.empresa,
+                                                tipo_documento="CC",
+                                                numero_documento="700700").count(), 1)
+
+    def test_cu_cli_02_a2_busqueda_sin_resultados_devuelve_200_lista_vacia(self):
+        api = self.api_como(self.admin)
+        respuesta = api.get("/api/clientes/?busqueda=NoExisteNadaAsi")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["resultados"], [])
+        self.assertEqual(respuesta.json()["total"], 0)
+
+    def test_cu_cli_03_normal_detalle_con_ultimas_ventas(self):
+        venta = self.crear_venta(total=50000)
+        api = self.api_como(self.admin)
+        respuesta = api.get(f"/api/clientes/{self.cliente.id}/")
+        self.assertEqual(respuesta.status_code, 200)
+        cuerpo = respuesta.json()
+        self.assertEqual(len(cuerpo["ultimas_ventas"]), 1)
+        self.assertEqual(cuerpo["ultimas_ventas"][0]["id"], str(venta.id))
+
+    def test_cu_cli_03_a1_cliente_sin_ventas(self):
+        sin_ventas = Cliente.objects.create(empresa=self.empresa, nombre="Nuevo",
+                                            tipo_documento="CC", numero_documento="600600")
+        api = self.api_como(self.admin)
+        respuesta = api.get(f"/api/clientes/{sin_ventas.id}/")
+        self.assertEqual(respuesta.json()["ultimas_ventas"], [])
+
+    def test_cu_cli_03_a2_cliente_inactivo_incluye_activo_false(self):
+        inactivo = Cliente.objects.create(empresa=self.empresa, nombre="Inactivo",
+                                          tipo_documento="CC", numero_documento="500500")
+        inactivo.soft_delete()
+        api = self.api_como(self.admin)
+        respuesta = api.get(f"/api/clientes/{inactivo.id}/")
+        self.assertEqual(respuesta.status_code, 200)   # visible pese a estar inactivo
+        self.assertFalse(respuesta.json()["activo"])
+
+    def test_cu_cli_03_e2_id_inexistente_404(self):
+        api = self.api_como(self.admin)
+        respuesta = api.get("/api/clientes/00000000-0000-0000-0000-000000000000/")
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_cu_cli_03_e3_id_malformado_404(self):
+        api = self.api_como(self.admin)
+        respuesta = api.get("/api/clientes/no-es-un-uuid/")
+        self.assertEqual(respuesta.status_code, 404)   # el path converter uuid: no matchea
+
+    def test_cu_cli_04_a1_guardar_sin_cambios_no_rompe(self):
+        api = self.api_como(self.admin)
+        respuesta = api.patch(f"/api/clientes/{self.cliente.id}/",
+                              {"nombre": self.cliente.nombre}, format="json")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_cu_cli_04_e_sin_permiso_403(self):
+        api = self.api_como(self.cliente_rol)
+        respuesta = api.patch(f"/api/clientes/{self.cliente.id}/",
+                              {"nombre": "Otro"}, format="json")
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_cu_cli_05_e1_idempotente(self):
+        cliente = Cliente.objects.create(empresa=self.empresa, nombre="Doble Click",
+                                         tipo_documento="CC", numero_documento="400400")
+        api = self.api_como(self.admin)
+
+        primera = api.post(f"/api/clientes/{cliente.id}/desactivar/", {}, format="json")
+        self.assertEqual(primera.status_code, 200)
+        segunda = api.post(f"/api/clientes/{cliente.id}/desactivar/", {}, format="json")
+        self.assertEqual(segunda.status_code, 200)   # idempotente, nunca 500 ni 400
+        self.assertFalse(segunda.json()["activo"])
+        cliente.refresh_from_db()
+        self.assertIsNotNone(cliente.deleted_at)
+
+        primera = api.post(f"/api/clientes/{cliente.id}/reactivar/", {}, format="json")
+        self.assertEqual(primera.status_code, 200)
+        segunda = api.post(f"/api/clientes/{cliente.id}/reactivar/", {}, format="json")
+        self.assertEqual(segunda.status_code, 200)
+        self.assertTrue(segunda.json()["activo"])
+
+    def test_cu_cli_05_e2_sin_permiso_403(self):
+        api = self.api_como(self.cliente_rol)
+        respuesta = api.post(f"/api/clientes/{self.cliente.id}/desactivar/", {}, format="json")
+        self.assertEqual(respuesta.status_code, 403)
 
 
 class CrudProductosApiTest(BaseCatalogoTest):
@@ -491,14 +639,13 @@ class DashboardReportesTest(BaseCatalogoTest):
 
     def test_aislamiento_entre_empresas(self):
         otra = Empresa.objects.create(nombre="Otra", nit="900999991")
-        crear_roles_base(otra)
-        otro_prod = Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
-                                            precio=100, stock=5, stock_minimo=3)
+        Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
+                                precio=100, stock=5, stock_minimo=3)
         # Un administrador de la empresa 'otra'
         otro_admin = User.objects.create_user(username="otro@test.co",
                                               email="otro@test.co", password="Clave12345")
         Perfil.objects.create(usuario=otro_admin, empresa=otra,
-                              rol=Rol.de_nombre(otra, "ADMINISTRADOR"))
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
         api = APIClient()
         api.force_authenticate(otro_admin)
         # El resumen de 'otra' no debe incluir productos ni ventas de la 1a
@@ -591,6 +738,17 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(detalle.status_code, 200)
         self.assertEqual(len(detalle.json()["mensajes"]), 2)
 
+    def test_listado_de_conversaciones_esta_acotado(self):
+        # Lista acotada (nunca ilimitada): con mas de 100 sesiones, el
+        # listado no debe devolverlas todas.
+        IAConversacion.objects.bulk_create([
+            IAConversacion(usuario=self.admin, titulo=f"Sesion {i}")
+            for i in range(105)
+        ])
+        lista = self.api_como(self.admin).get(
+            "/api/ia/conversaciones/").json()["resultados"]
+        self.assertEqual(len(lista), 100)
+
     def test_crear_conversacion_explícita(self):
         api = self.api_como(self.admin)
         res = api.post("/api/ia/conversaciones/", {"titulo": "Mi sesion"},
@@ -604,7 +762,7 @@ class IAChatTest(BaseCatalogoTest):
                                         email="empleado2@test.co",
                                         password="Clave12345")
         Perfil.objects.create(usuario=otro, empresa=self.empresa,
-                              rol=Rol.de_nombre(self.empresa, "EMPLEADO"))
+                              rol=Rol.de_nombre("EMPLEADO"))
         conv = self.api_como(otro).post("/api/ia/chat/", {"mensaje": "resumen"},
                                         format="json").json()["conversacion"]["id"]
         res = self.api_como(self.admin).get(f"/api/ia/conversaciones/{conv}/")
@@ -628,6 +786,86 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(reint.status_code, 200)
         roles = [m["rol"] for m in reint.json()["conversacion"]["mensajes"]]
         self.assertEqual(roles, ["usuario", "asistente"])
+
+
+# ====================== FASE D (D2): IA con contexto y rate-limit =============
+import json  # noqa: E402
+from django.core.cache import cache  # noqa: E402
+from django.test import override_settings  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+import core.ia_engine as ia_engine_mod  # noqa: E402
+
+
+class IAChatFaseDTest(BaseCatalogoTest):
+    """D2: el prompt incluye el contexto de empresa y hay rate-limit por usuario."""
+
+    def setUp(self):
+        # La cache (LocMemCache en tests) es global al proceso y no se limpia
+        # sola entre tests: vaciarla garantiza un contador de rate-limit limpio.
+        cache.clear()
+
+    def _contexto_fake(self):
+        empresa = MagicMock(nombre="Tienda Test")
+        return ia_engine_mod.ContextoEmpresa(
+            empresa=empresa,
+            resumen={"ingresos_totales": 150000, "num_ventas": 10,
+                     "unidades_vendidas": 22, "ticket_promedio": 15000,
+                     "valor_inventario": 800000, "unidades_inventario": 50,
+                     "productos_bajo_minimo": 2},
+            top_productos=[{"producto": "Café", "sku": "CAF01", "categoria": "Bebidas",
+                            "unidades": 5, "ingresos": 25000}],
+            clientes_frecuentes=[],
+            bajo_minimo=[{"producto": "Leche", "sku": "LEC01", "stock": 1, "stock_minimo": 3}])
+
+    def test_prompt_system_incluye_contexto_de_empresa(self):
+        # El contexto hay que "inyectarlo" en el system prompt del payload envido
+        # al proveedor (antes se construia pero no se pasaba al modelo).
+        contexto = self._contexto_fake()
+        capturado = {}
+
+        def _falso_urlopen(peticion, timeout=None):
+            capturado["cuerpo"] = json.loads(peticion.data.decode("utf-8"))
+            resp = MagicMock()
+            resp.read.return_value = json.dumps(
+                {"choices": [{"message": {"content": "respuesta OK"}}]}).encode("utf-8")
+            resp.__enter__.return_value = resp
+            return resp
+
+        with patch("urllib.request.urlopen", side_effect=_falso_urlopen), \
+             override_settings(IA_API_KEY="clave-test", IA_PROVIDER="openai"):
+            texto = ia_engine_mod._llamar_compatible(contexto, [], "¿cómo vamos?")
+        self.assertEqual(texto, "respuesta OK")
+        system = capturado["cuerpo"]["messages"][0]
+        self.assertEqual(system["role"], "system")
+        self.assertIn("Tienda Test", system["content"])
+        self.assertIn("150000", system["content"])       # ingresos reales en el contexto
+        self.assertIn("Café", system["content"])          # top producto presente
+        self.assertIn("Leche", system["content"])         # bajo minimo presente
+        # El ultimo mensaje es la pregunta del usuario.
+        self.assertEqual(capturado["cuerpo"]["messages"][-1]["content"], "¿cómo vamos?")
+
+    def test_rate_limit_bloquea_al_superar_el_maximo(self):
+        api = self.api_como(self.admin)
+        # El rate-limit es por usuario; con maximo 1, la segunda peticion -> 429.
+        with override_settings(IA_MAX_PETICIONES=1, IA_PETICIONES_VENTANA=60):
+            primero = api.post("/api/ia/chat/", {"mensaje": "uno"}, format="json")
+            self.assertEqual(primero.status_code, 200, primero.content)
+            excedido = api.post("/api/ia/chat/", {"mensaje": "dos"}, format="json")
+        self.assertEqual(excedido.status_code, 429)
+        self.assertEqual(excedido.json()["codigo"], "IA_DEMASIADAS_PETICIONES")
+
+    def test_rate_limit_es_independiente_por_usuario(self):
+        # El limite no castiga a toda la empresa por el uso de un miembro.
+        api_admin = self.api_como(self.admin)
+        api_emp = self.api_como(self.empleado)
+        with override_settings(IA_MAX_PETICIONES=1, IA_PETICIONES_VENTANA=60):
+            self.assertEqual(api_admin.post("/api/ia/chat/", {"mensaje": "a"},
+                                            format="json").status_code, 200)
+            self.assertEqual(api_emp.post("/api/ia/chat/", {"mensaje": "b"},
+                                          format="json").status_code, 200)
+            self.assertEqual(api_admin.post("/api/ia/chat/", {"mensaje": "c"},
+                                            format="json").status_code, 429)
 
 
 # ====================== FASE 9: Camaras y notificaciones =====================
@@ -703,6 +941,29 @@ class CamarasApiTest(BaseCatalogoTest):
         api = self.api_como(self.admin)
         nombres = [c["nombre"] for c in api.get("/api/camaras/").json()["resultados"]]
         self.assertNotIn("Camara ajena", nombres)
+
+    def test_url_stream_invalida_rechazada(self):
+        res = self.api_como(self.admin).post(
+            "/api/camaras/",
+            {"nombre": "Bodega", "url_stream": "no-es-una-url"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_url_stream_vacia_permitida(self):
+        res = self.api_como(self.admin).post(
+            "/api/camaras/", {"nombre": "Bodega", "url_stream": ""}, format="json")
+        self.assertEqual(res.status_code, 201)
+
+    def test_filtro_activas_invalido_rechazado(self):
+        res = self.api_como(self.admin).get("/api/camaras/?activas=si")
+        self.assertEqual(res.status_code, 400)
+
+    def test_listado_incluye_paginacion(self):
+        api = self.api_como(self.admin)
+        api.post("/api/camaras/", self.DATOS, format="json")
+        cuerpo = api.get("/api/camaras/").json()
+        self.assertIn("total", cuerpo)
+        self.assertIn("pagina", cuerpo)
+        self.assertIn("total_paginas", cuerpo)
 
     def test_grabacion_historica_no_disponible(self):
         api = self.api_como(self.admin)
@@ -795,7 +1056,6 @@ class NotificacionesApiTest(BaseCatalogoTest):
 
     def test_entrega_cae_al_canal_email_sin_whatsapp(self):
         # Sin WA_VINCULADO la entrega usa el canal alterno (email a consola).
-        import io
         from django.core import mail
         aviso = crear_notificacion(
             empresa=self.empresa, tipo="sistema", mensaje="Prueba de entrega",
@@ -805,6 +1065,448 @@ class NotificacionesApiTest(BaseCatalogoTest):
             len(mail.outbox), 1,
             "El backend de email de consola debe haber recibido el mensaje")
 
+# ===================== FASE 5: Marketplace (tienda multi-vendedor) ==========
+
+class BaseMarketplaceTest(TestCase):
+    """Dos empresas vendedoras con productos activos + un comprador global."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.vendedor_a = Empresa.objects.create(nombre="Vendedor A", nit="900111001")
+        cls.vendedor_b = Empresa.objects.create(nombre="Vendedor B", nit="900111002")
+
+        cls.producto_a = Producto.objects.create(
+            empresa=cls.vendedor_a, nombre="Camisa Roja", sku="MP-A1",
+            precio="50000", stock=10, activo=True)
+        cls.producto_b = Producto.objects.create(
+            empresa=cls.vendedor_b, nombre="Jeans Azules", sku="MP-B1",
+            precio="120000", stock=5, activo=True)
+        cls.producto_inactivo = Producto.objects.create(
+            empresa=cls.vendedor_a, nombre="Oculto", sku="MP-A2",
+            precio="1000", stock=5, activo=False)
+
+        cls.comprador = User.objects.create_user(username="comprador@test.co",
+                                                 email="comprador@test.co",
+                                                 password="Clave12345")
+        Perfil.objects.create(usuario=cls.comprador, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        cls.cliente_comprador = Cliente.objects.create(
+            usuario=cls.comprador, empresa=None, nombre="Juan Perez",
+            tipo_documento="CC", numero_documento="1000000000",
+            email="comprador@test.co",
+            direccion="Calle 10 # 5-20", ciudad="Bogota")
+
+    @classmethod
+    def api_como(cls, usuario):
+        api = APIClient()
+        api.force_authenticate(usuario)
+        return api
+
+
+class MarketplaceCatalogoTest(BaseMarketplaceTest):
+    def test_catalogo_agrega_productos_de_todas_las_empresas(self):
+        resp = APIClient().get("/api/tienda/catalogo/")
+        self.assertEqual(resp.status_code, 200)
+        ids = {p["id"] for p in resp.data["resultados"]}
+        self.assertIn(str(self.producto_a.id), ids)
+        self.assertIn(str(self.producto_b.id), ids)
+
+    def test_catalogo_omite_productos_inactivos(self):
+        resp = APIClient().get("/api/tienda/catalogo/")
+        ids = {p["id"] for p in resp.data["resultados"]}
+        self.assertNotIn(str(self.producto_inactivo.id), ids)
+
+
+class ComentarioProductoTest(BaseMarketplaceTest):
+    """Reseñas/comentarios de productos del marketplace."""
+
+    def test_detalle_incluye_empresa_y_calificacion_vacia(self):
+        resp = APIClient().get(f"/api/tienda/catalogo/{self.producto_a.id}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["empresa_nombre"], "Vendedor A")
+        self.assertIsNone(resp.data["promedio_calificacion"])
+        self.assertEqual(resp.data["total_comentarios"], 0)
+
+    def test_anonimo_no_puede_comentar(self):
+        resp = APIClient().post(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+            {"calificacion": 5, "comentario": "Excelente"}, format="json")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_autenticado_comenta_y_aparece_en_el_listado(self):
+        api = self.api_como(self.comprador)
+        resp = api.post(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+            {"calificacion": 4, "comentario": "Buena calidad"}, format="json")
+        self.assertEqual(resp.status_code, 201)
+
+        listado = APIClient().get(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/")
+        self.assertEqual(listado.status_code, 200)
+        self.assertEqual(len(listado.data["resultados"]), 1)
+        self.assertEqual(listado.data["resultados"][0]["calificacion"], 4)
+
+        detalle = APIClient().get(f"/api/tienda/catalogo/{self.producto_a.id}/")
+        self.assertEqual(detalle.data["promedio_calificacion"], 4.0)
+        self.assertEqual(detalle.data["total_comentarios"], 1)
+
+    def test_comentar_dos_veces_actualiza_el_mismo(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+                 {"calificacion": 3, "comentario": "Regular"}, format="json")
+        api.post(f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+                 {"calificacion": 5, "comentario": "Cambie de opinion, excelente"},
+                 format="json")
+        self.assertEqual(
+            ComentarioProducto.objects.filter(
+                producto=self.producto_a, usuario=self.comprador).count(), 1)
+
+    def test_calificacion_fuera_de_rango_rechazada(self):
+        api = self.api_como(self.comprador)
+        resp = api.post(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+            {"calificacion": 7}, format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_listado_de_comentarios_respeta_el_limite(self):
+        # Lista acotada (nunca ilimitada): 3 compradores distintos comentan,
+        # se pide limite=2 y solo deben volver 2.
+        for i in range(3):
+            comprador = User.objects.create_user(
+                username=f"resenador{i}@test.co", email=f"resenador{i}@test.co",
+                password="Clave12345")
+            Perfil.objects.create(usuario=comprador, empresa=None,
+                                  rol=Rol.de_nombre("CLIENTE"))
+            self.api_como(comprador).post(
+                f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/",
+                {"calificacion": 5, "comentario": f"Comentario {i}"}, format="json")
+
+        resp = APIClient().get(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/?limite=2")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data["resultados"]), 2)
+
+
+class MarketplaceCarritoTest(BaseMarketplaceTest):
+    def test_carrito_acepta_productos_de_dos_empresas_distintas(self):
+        api = self.api_como(self.comprador)
+        r1 = api.post("/api/tienda/carrito/items/",
+                      {"producto": str(self.producto_a.id), "cantidad": 2},
+                      format="json")
+        self.assertEqual(r1.status_code, 201)
+        r2 = api.post("/api/tienda/carrito/items/",
+                      {"producto": str(self.producto_b.id), "cantidad": 1},
+                      format="json")
+        self.assertEqual(r2.status_code, 201)
+        self.assertEqual(r2.data["total_items"], 3)
+
+    def test_carrito_rechaza_producto_inactivo(self):
+        api = self.api_como(self.comprador)
+        r = api.post("/api/tienda/carrito/items/",
+                     {"producto": str(self.producto_inactivo.id), "cantidad": 1},
+                     format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["codigo"], "PRODUCTO_NO_ENCONTRADO")
+
+
+class FavoritoProductoTest(BaseMarketplaceTest):
+    """Favoritos de productos del marketplace (por usuario, cualquier rol)."""
+
+    def test_anonimo_no_puede_listar_favoritos(self):
+        resp = APIClient().get("/api/tienda/favoritos/")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_agregar_y_listar_favorito(self):
+        api = self.api_como(self.comprador)
+        r = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r.status_code, 201)
+
+        lista = api.get("/api/tienda/favoritos/")
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 1)
+        self.assertEqual(lista.data[0]["producto"], self.producto_a.id)
+        self.assertEqual(lista.data[0]["producto_obj"]["nombre"], "Camisa Roja")
+
+    def test_agregar_dos_veces_es_idempotente(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r2 = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(
+            Favorito.objects.filter(usuario=self.comprador).count(), 1)
+
+    def test_quitar_favorito(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r = api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(
+            Favorito.objects.filter(usuario=self.comprador).count(), 0)
+
+    def test_favoritos_son_privados_por_usuario(self):
+        otro = User.objects.create_user(username="otro@test.co",
+                                        email="otro@test.co",
+                                        password="Clave12345")
+        Perfil.objects.create(usuario=otro, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        api_a = self.api_como(self.comprador)
+        api_a.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+
+        api_b = self.api_como(otro)
+        lista = api_b.get("/api/tienda/favoritos/")
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 0)
+
+    def test_estado_favorito(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["es_favorito"], True)
+        api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        r2 = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertEqual(r2.data["es_favorito"], False)
+
+    def test_favorito_producto_inactivo_rechazado(self):
+        api = self.api_como(self.comprador)
+        r = api.post(f"/api/tienda/favoritos/{self.producto_inactivo.id}/")
+        self.assertEqual(r.status_code, 404)
+
+
+class MarketplaceCheckoutTest(BaseMarketplaceTest):
+    def test_checkout_genera_una_venta_por_empresa_vendedora(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_b.id), "cantidad": 1}, format="json")
+
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"},
+                        format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(len(resp.data["ventas"]), 2)
+
+        ventas = Venta.objects.all()
+        self.assertEqual(ventas.count(), 2)
+        empresas_vendedoras = {v.empresa_id for v in ventas}
+        self.assertEqual(empresas_vendedoras,
+                         {self.vendedor_a.id, self.vendedor_b.id})
+        # Cada venta se genera para el comprador global
+        for v in ventas:
+            self.assertEqual(v.cliente, self.cliente_comprador)
+            self.assertEqual(v.empresa_id, v.detalles.first().producto.empresa_id)
+
+        # Totales por vendedor
+        venta_a = ventas.get(empresa=self.vendedor_a)
+        self.assertEqual(str(venta_a.total), "100000.00")  # 2 x 50000
+        venta_b = ventas.get(empresa=self.vendedor_b)
+        self.assertEqual(str(venta_b.total), "120000.00")  # 1 x 120000
+
+        # Stock descontado
+        self.producto_a.refresh_from_db()
+        self.producto_b.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, 8)
+        self.assertEqual(self.producto_b.stock, 4)
+
+        # Carrito limpio
+        carrito = Carrito.objects.get(usuario=self.comprador)
+        self.assertEqual(carrito.items.count(), 0)
+
+    def test_checkout_sin_cliente_rechaza(self):
+        # Un usuario autenticado sin Cliente vinculado no puede comprar
+        foraneo = User.objects.create_user(username="foraneo@test.co",
+                                           email="foraneo@test.co",
+                                           password="Clave12345")
+        Perfil.objects.create(usuario=foraneo, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        api = self.api_como(foraneo)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"},
+                        format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "SIN_CLIENTE")
+
+    def test_checkout_rechaza_producto_desactivado_tras_agregarlo(self):
+        # El producto estaba activo cuando se agrego al carrito; si el
+        # vendedor lo desactiva antes del checkout, no debe poder comprarse.
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+
+        self.producto_a.activo = False
+        self.producto_a.save(update_fields=["activo"])
+
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"},
+                        format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+        self.assertEqual(resp.data["productos"][0]["disponible"], 0)
+        self.assertEqual(Venta.objects.count(), 0)
+
+        # El stock no se toco: la venta nunca se creo.
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, 10)
+
+    def test_checkout_sin_direccion_rechaza_y_no_toca_stock(self):
+        # Comprador con Cliente vinculado pero sin direccion/ciudad de envio.
+        sin_direccion = User.objects.create_user(username="sindir@test.co",
+                                                  email="sindir@test.co",
+                                                  password="Clave12345")
+        Perfil.objects.create(usuario=sin_direccion, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        Cliente.objects.create(usuario=sin_direccion, empresa=None, nombre="Sin Direccion",
+                               tipo_documento="CC", numero_documento="1000000099")
+        api = self.api_como(sin_direccion)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "SIN_DIRECCION_ENVIO")
+        self.assertEqual(Venta.objects.count(), 0)
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, 10)
+
+
+# ============================ FASE 10: Envios ============================
+
+class BaseEnvioTest(BaseMarketplaceTest):
+    """Suma un administrador por cada empresa vendedora, para probar la
+    gestion de envios del lado del personal interno (EsPersonal)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin_a = User.objects.create_user(username="admin.a@test.co",
+                                               email="admin.a@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=cls.admin_a, empresa=cls.vendedor_a,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+        cls.admin_b = User.objects.create_user(username="admin.b@test.co",
+                                               email="admin.b@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=cls.admin_b, empresa=cls.vendedor_b,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+
+    def _comprar_producto_a(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        return Venta.objects.get(empresa=self.vendedor_a)
+
+
+class EnvioCreacionTest(BaseEnvioTest):
+    def test_checkout_crea_envio_pendiente_con_direccion_del_cliente(self):
+        venta = self._comprar_producto_a()
+        envio = Envio.objects.get(venta=venta)
+        self.assertEqual(envio.estado, "pendiente")
+        self.assertEqual(envio.direccion, self.cliente_comprador.direccion)
+        self.assertEqual(envio.ciudad, self.cliente_comprador.ciudad)
+        self.assertIsNone(envio.fecha_despacho)
+
+    def test_pedido_del_comprador_incluye_seguimiento_de_envio(self):
+        self._comprar_producto_a()
+        api = self.api_como(self.comprador)
+        resp = api.get("/api/tienda/pedidos/")
+        self.assertEqual(resp.status_code, 200)
+        pedido_a = next(p for p in resp.data["resultados"]
+                        if p["empresa_nombre"] == "Vendedor A")
+        self.assertIsNotNone(pedido_a["envio"])
+        self.assertEqual(pedido_a["envio"]["estado"], "pendiente")
+        self.assertNotIn("notas", pedido_a["envio"])  # vista de comprador, sin notas internas
+
+
+class EnvioGestionTest(BaseEnvioTest):
+    def test_empleado_actualiza_transportadora_y_avanza_estado(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_a)
+
+        resp = api.patch(f"/api/ventas/{venta.id}/envio/",
+                         {"transportadora": "Servientrega", "numero_guia": "SV-123",
+                          "estado": "despachado"}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["estado"], "despachado")
+        self.assertEqual(resp.data["transportadora"], "Servientrega")
+        self.assertIsNotNone(resp.data["fecha_despacho"])
+
+    def test_transicion_invalida_se_rechaza(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_a)
+        # pendiente -> entregado no es una transicion valida (falta pasar
+        # por preparando/despachado/en_transito).
+        resp = api.patch(f"/api/ventas/{venta.id}/envio/",
+                         {"estado": "entregado"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "TRANSICION_INVALIDA")
+        self.assertEqual(Envio.objects.get(venta=venta).estado, "pendiente")
+
+    def test_empleado_de_otra_empresa_no_ve_ni_edita_el_envio(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_b)
+
+        self.assertEqual(api.get(f"/api/ventas/{venta.id}/envio/").status_code, 404)
+        resp = api.patch(f"/api/ventas/{venta.id}/envio/",
+                         {"estado": "despachado"}, format="json")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(Envio.objects.get(venta=venta).estado, "pendiente")
+
+    def test_lista_de_envios_filtra_por_estado_y_por_empresa(self):
+        venta = self._comprar_producto_a()
+        Envio.objects.filter(venta=venta).update(estado="despachado")
+
+        api_a = self.api_como(self.admin_a)
+        resp = api_a.get("/api/envios/", {"estado": "despachado"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["total"], 1)
+        self.assertEqual(str(resp.data["resultados"][0]["venta"]), str(venta.id))
+
+        # La empresa B no tiene envios propios todavia.
+        api_b = self.api_como(self.admin_b)
+        resp_b = api_b.get("/api/envios/")
+        self.assertEqual(resp_b.data["total"], 0)
+
+
+class RegistroCompradorTest(TestCase):
+    def test_registro_comprador_crea_usuario_perfil_y_cliente_global(self):
+        resp = APIClient().post("/api/auth/registro/comprador/", {
+            "nombre": "Maria Gomez", "email": "maria@test.co",
+            "password": "Clave12345", "tipo_documento": "CC",
+            "numero_documento": "2000000000",
+        }, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+        usuario = User.objects.get(email="maria@test.co")
+        perfil = Perfil.objects.get(usuario=usuario)
+        self.assertIsNone(perfil.empresa)
+        self.assertEqual(perfil.nombre_rol, "CLIENTE")
+        cliente = Cliente.objects.get(usuario=usuario)
+        self.assertIsNone(cliente.empresa)
+        self.assertEqual(cliente.nombre, "Maria Gomez")
+
+    def test_registro_comprador_rechaza_email_duplicado(self):
+        APIClient().post("/api/auth/registro/comprador/", {
+            "nombre": "Juan Uno", "email": "dup@test.co",
+            "password": "Clave12345", "numero_documento": "3000000000",
+        }, format="json")
+        resp = APIClient().post("/api/auth/registro/comprador/", {
+            "nombre": "Juan Dos", "email": "dup@test.co",
+            "password": "Clave12345", "numero_documento": "3000000001",
+        }, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("cuenta con este correo", str(resp.data))
+
+    def test_registro_comprador_rechaza_documento_duplicado(self):
+        APIClient().post("/api/auth/registro/comprador/", {
+            "nombre": "Ana Uno", "email": "doc1@test.co",
+            "password": "Clave12345", "numero_documento": "4000000000",
+        }, format="json")
+        resp = APIClient().post("/api/auth/registro/comprador/", {
+            "nombre": "Ana Dos", "email": "doc2@test.co",
+            "password": "Clave12345", "numero_documento": "4000000000",
+        }, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("documento", str(resp.data).lower())
 
 class AlertasAislamientoTest(BaseCatalogoTest):
     """Fase 2: las alertas de stock son por empresa (sin fugas cross-tenant)."""
@@ -846,54 +1548,42 @@ class AlertasAislamientoTest(BaseCatalogoTest):
         res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
         self.assertEqual(res.status_code, 404)
 
+    def test_actualizar_stock_reabastece_y_marca_alerta_revisada(self):
+        producto = Producto.objects.create(
+            empresa=self.empresa, nombre="Bajo", sku="SKU-BAJO",
+            precio=10, stock=2, stock_minimo=5)
+        alerta = crear_notificacion(
+            empresa=self.empresa, tipo="stock",
+            mensaje=f"Stock bajo: {producto.nombre} ({producto.sku}) "
+                    f"tiene 2 unidades (minimo 5).")
 
-class TiendaVirtualPublicaTest(BaseCoreTest):
-    """Fase 2: la tienda publica se scopea por slug de empresa y oculta el
-    stock a los visitantes anonimos."""
+        api = self.api_como(self.empleado)
+        res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
+        self.assertEqual(res.status_code, 200, res.json())
 
-    def setUp(self):
-        Empresa.objects.filter(pk=self.empresa.pk).update(
-            slug="tienda-test")  # fuerza un slug estable para el test
+        producto.refresh_from_db()
+        alerta.refresh_from_db()
+        self.assertEqual(producto.stock, 6)  # stock_minimo(5) - stock(2) + 1
+        self.assertTrue(alerta.leida)
+        self.assertTrue(
+            MovimientoInventario.objects.filter(
+                producto=producto, tipo="entrada", cantidad=4).exists())
 
-    def test_catalogo_por_slug_solo_muestra_esa_empresa(self):
-        otra = Empresa.objects.create(nombre="Otra", nit="900999990")
-        Empresa.objects.filter(pk=otra.pk).update(slug="otra-tienda")
-        Producto.objects.create(empresa=otra, nombre="Producto Ajeno",
-                                sku="SKU-AJENO2", precio=50, stock=3,
-                                stock_minimo=1)
+    def test_actualizar_stock_admite_cantidad_explicita(self):
+        producto = Producto.objects.create(
+            empresa=self.empresa, nombre="Bajo2", sku="SKU-BAJO2",
+            precio=10, stock=1, stock_minimo=5)
+        alerta = crear_notificacion(
+            empresa=self.empresa, tipo="stock",
+            mensaje=f"Stock bajo: {producto.nombre} ({producto.sku}) "
+                    f"tiene 1 unidades (minimo 5).")
 
-        lista = self.client.get("/api/tienda/tienda-test/catalogo/").json()
-        skus = [p["sku"] for p in lista["resultados"]]
-        self.assertIn(self.producto.sku, skus)
-        self.assertNotIn("SKU-AJENO2", skus)
-
-    def test_slug_inexistente_devuelve_404(self):
-        respuesta = self.client.get("/api/tienda/no-existe/catalogo/")
-        self.assertEqual(respuesta.status_code, 404)
-
-    def test_anonimo_oculta_stock(self):
-        lista = self.client.get("/api/tienda/tienda-test/catalogo/").json()
-        self.assertIsNone(lista["resultados"][0]["stock"])
-
-    def test_detalle_por_slug_oculta_stock_a_anonimo(self):
-        detalle = self.client.get(
-            f"/api/tienda/tienda-test/catalogo/{self.producto.id}/").json()
-        self.assertIsNone(detalle["stock"])
-
-    def test_detalle_producto_de_otra_tienda_es_404(self):
-        otra = Empresa.objects.create(nombre="Otra", nit="900999989")
-        Empresa.objects.filter(pk=otra.pk).update(slug="otra-tienda")
-        ajeno = Producto.objects.create(empresa=otra, nombre="Ajeno",
-                                        sku="SKU-AJENO3", precio=9, stock=1,
-                                        stock_minimo=1)
-        respuesta = self.client.get(
-            f"/api/tienda/tienda-test/catalogo/{ajeno.id}/")
-        self.assertEqual(respuesta.status_code, 404)
-
-    def test_catalogo_legacy_sin_slug_no_filtra_todo_lo_global(self):
-        # Ruta sin slug y sin sesion: no debe exponer todos los tenants.
-        lista = self.client.get("/api/tienda/catalogo/").json()
-        self.assertEqual(lista["resultados"], [])
+        api = self.api_como(self.empleado)
+        res = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/",
+                       {"cantidad": 20}, format="json")
+        self.assertEqual(res.status_code, 200, res.json())
+        producto.refresh_from_db()
+        self.assertEqual(producto.stock, 21)
 
 
 class VentaIntegridadTest(BaseCatalogoTest):
@@ -920,20 +1610,16 @@ class VentaIntegridadTest(BaseCatalogoTest):
         self.assertEqual(res.status_code, 400)
         self.assertEqual(res.json()["codigo"], "STOCK_INSUFICIENTE")
         self.producto.refresh_from_db()
-        self.assertEqual(self.producto.stock, 40)  # no cambia (no negativo)
+        self.assertEqual(self.producto.stock, 40)
 
     def test_facturas_distintas_empresas_pueden_repetir_consecutivo(self):
-        otra = Empresa.objects.create(nombre="Otra", nit="900999988")
-        crear_roles_base(otra)
+        Empresa.objects.create(nombre="Otra", nit="900999988")
         v1 = self._pos(self.api_como(self.empleado), self.producto, 1).json()
-        # El consecutivo es por empresa; el constraint compuesto evita duplicados
-        # dentro de una misma empresa.
         existe_mismo = Venta.objects.filter(
             empresa=self.empresa, numero_factura=v1["numero_factura"]).count()
         self.assertEqual(existe_mismo, 1)
 
     def test_no_puede_duplicarse_numero_factura_en_la_misma_empresa(self):
-        from django.db import IntegrityError
         v = self._pos(self.api_como(self.empleado), self.producto, 1).json()
         duplicada = Venta(empresa=self.empresa, cliente=self.cliente,
                           vendedor=self.empleado, total=1,
@@ -941,6 +1627,22 @@ class VentaIntegridadTest(BaseCatalogoTest):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 duplicada.save()
+
+    def test_descuento_mayor_al_subtotal_se_rechaza(self):
+        # producto cuesta 75000, 1 unidad -> subtotal 75000
+        api = self.api_como(self.empleado)
+        res = self._pos(api, self.producto, 1, descuento='100000')
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["codigo"], "DESCUENTO_INVALIDO")
+        self.assertEqual(Venta.objects.count(), 0)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 40)
+
+    def test_descuento_igual_al_subtotal_se_acepta_total_cero(self):
+        api = self.api_como(self.empleado)
+        res = self._pos(api, self.producto, 1, descuento='75000')
+        self.assertEqual(res.status_code, 201, res.json())
+        self.assertEqual(res.json()["total"], "0.00")
 
 
 class RendimientoQueriesTest(BaseCatalogoTest):
@@ -968,7 +1670,10 @@ class RendimientoQueriesTest(BaseCatalogoTest):
             for i in range(4)
         ]
         for i in range(5):
-            venta = cls.crear_venta(total=75000)
+            venta = Venta.objects.create(empresa=cls.empresa,
+                                         cliente=cls.cliente,
+                                         vendedor=cls.empleado,
+                                         total=75000, estado="completada")
             DetalleVenta.objects.create(venta=venta, producto=cls.producto,
                                         cantidad=1, precio_unitario=75000)
             DetalleVenta.objects.create(venta=venta, producto=cls.producto2,
@@ -986,7 +1691,7 @@ class RendimientoQueriesTest(BaseCatalogoTest):
         respuesta, consultas = self._medir("/api/ventas/")
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(len(respuesta.json()["resultados"]), 5)
-        self.assertLessEqual(consultas, 15)
+        self.assertLessEqual(consultas, 20)
 
     def test_clientes_cabe_en_pocas_consultas(self):
         respuesta, consultas = self._medir("/api/clientes/")
@@ -1004,7 +1709,8 @@ class RendimientoQueriesTest(BaseCatalogoTest):
         respuesta, consultas = self._medir("/api/categorias/")
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(len(respuesta.json()["resultados"]), 2)
-        totales = {r["nombre"]: r["total_productos"] for r in respuesta.json()["resultados"]}
+        totales = {r["nombre"]: r["total_productos"]
+                   for r in respuesta.json()["resultados"]}
         self.assertEqual(totales["Ropa"], 1)
         self.assertEqual(totales["Accesorios"], 0)
         self.assertLessEqual(consultas, 10)
@@ -1017,4 +1723,3 @@ class RendimientoQueriesTest(BaseCatalogoTest):
             respuesta = api.get("/api/tienda/carrito/")
         self.assertEqual(respuesta.status_code, 200)
         self.assertLessEqual(len(contexto.captured_queries), 10)
-

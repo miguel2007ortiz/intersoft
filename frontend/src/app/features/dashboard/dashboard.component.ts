@@ -100,9 +100,7 @@ export class DashboardComponent {
 
   // ----------------------- Helpers de formato ------------------------------
   dinero(valor: number | null | undefined): string {
-    return (valor ?? 0).toLocaleString('es-CO', {
-      style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-    });
+    return `${(valor ?? 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`;
   }
 
   numero(valor: number | null | undefined): string {

@@ -1,21 +1,53 @@
-# Python / Django
+# =====================================================================
+#  InterSoft — .gitignore raiz
+#  Regla de oro: NUNCA se suben secretos, dependencias, builds, media,
+#  logs ni artefactos generados. La excepcion documentada es la plantilla
+#  .env.example (sin secretos reales).
+# =====================================================================
+
+# ---------- Python / Django ----------
 venv/
+.venv/
 __pycache__/
 *.py[cod]
 *.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Entorno: nunca versionar el archivo real de secretos
 .env
+.env.*
+!.env.example
+
+# Artefactos de runtime del backend
 media/
 staticfiles/
-backend/logs/*.log
+logs/
+*.log
 
-# Node / Angular
+# ---------- Node / Angular ----------
 node_modules/
 dist/
 .angular/
+coverage/
 npm-debug.log*
+yarn-error.log*
+package-lock.json.sha256
 
-# Editores / SO
+# ---------- Secretos / credenciales (por si quedan en alguna ruta) ----
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+service-account*.json
+
+# ---------- Editores / SO ----------
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+*.swp
+*~

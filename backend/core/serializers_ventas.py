@@ -10,8 +10,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import (Cliente, DetalleVenta, MovimientoInventario, Producto,
-                     Venta)
+from .models import (DetalleVenta, Envio, MovimientoInventario, Venta)
 
 
 # ------------------------------ Ventas ------------------------------------
@@ -87,6 +86,43 @@ class AjusteInventarioSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
     tipo = serializers.ChoiceField(choices=[('entrada', 'Entrada'), ('salida', 'Salida')])
     motivo = serializers.CharField(min_length=3)
+
+
+class AlertaReabastecerSerializer(serializers.Serializer):
+    """Entrada opcional para reabastecer desde una alerta de stock bajo.
+    Sin `cantidad`, la vista calcula cuanto agregar para superar el minimo."""
+    cantidad = serializers.IntegerField(min_value=1, required=False)
+
+
+# ------------------------------ Envios (fase 10) --------------------------
+
+class EnvioLecturaSerializer(serializers.ModelSerializer):
+    """Vista de envio para el personal interno (empleado/admin de la
+    empresa vendedora): todos los campos, incluye numero_factura de la venta
+    para ubicarlo en listas sin pedir la venta por separado."""
+    numero_factura = serializers.CharField(source='venta.numero_factura', read_only=True)
+    cliente_nombre = serializers.CharField(source='venta.cliente.nombre', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = Envio
+        fields = ["id", "venta", "numero_factura", "cliente_nombre",
+                  "direccion", "ciudad", "departamento", "transportadora",
+                  "numero_guia", "estado", "estado_display",
+                  "fecha_despacho", "fecha_entrega_estimada",
+                  "fecha_entrega_real", "notas", "created_at", "updated_at"]
+        read_only_fields = ["id", "venta", "created_at", "updated_at"]
+
+
+class EnvioEstadoInputSerializer(serializers.Serializer):
+    """Entrada para actualizar un envio. `estado` es opcional: se puede
+    guardar transportadora/numero_guia/notas sin forzar un cambio de estado
+    (la transicion real la valida Envio.cambiar_estado, no este serializer)."""
+    estado = serializers.ChoiceField(choices=Envio.ESTADO_CHOICES, required=False)
+    transportadora = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    numero_guia = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    fecha_entrega_estimada = serializers.DateField(required=False, allow_null=True)
+    notas = serializers.CharField(required=False, allow_blank=True)
 
 
 # ------------------------------ Inventario --------------------------------

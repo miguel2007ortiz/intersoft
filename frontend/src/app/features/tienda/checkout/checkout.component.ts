@@ -3,7 +3,8 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
-import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/models/tienda.model';
+import { Carrito, CheckoutResponse, DatosComprador, StockInsuficiente } from '../../../core/models/tienda.model';
+import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicaciones';
 
 @Component({
   selector: 'app-checkout',
@@ -21,14 +22,83 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
         <div class="exito-box">
           <div class="exito-icono">✓</div>
           <h2>Compra realizada exitosamente</h2>
-          <p>Factura: <strong>{{ exito()!.numero_factura }}</strong></p>
-          <p>Total: <strong>\${{ exito()!.total | number }}</strong></p>
+          <ul class="exito-ventas">
+            @for (v of exito()!.ventas; track v.venta_id) {
+              <li>
+                <strong>{{ v.empresa_nombre }}</strong>
+                <span>Factura {{ v.numero_factura }}</span>
+                <span class="total">{{ v.total | number }} COP</span>
+              </li>
+            }
+          </ul>
+          <p class="total-general">Total pagado: <strong>{{ exito()!.total | number }} COP</strong></p>
           <p class="transaccion">Transaccion: {{ exito()!.transaccion_id }}</p>
           <div class="exito-acciones">
             <a routerLink="/catalogo" class="btn-seguir">Seguir comprando</a>
             <a routerLink="/ventas" class="btn-ventas">Ver historial de ventas</a>
           </div>
         </div>
+      } @else if (mostrarFormComprador()) {
+        <section class="form-comprador">
+          <h2>¡Ya casi esta! Cuentanos donde te enviamos tu pedido</h2>
+          <p class="ayuda">Solo te lo pedimos una vez, sin importar tu rol: lo usamos para tu factura y envio.</p>
+          @if (errorComprador()) {
+            <div class="error-box">{{ errorComprador() }}</div>
+          }
+          <div class="fila-2">
+            <div class="campo">
+              <label>Tipo de documento</label>
+              <select [(ngModel)]="datosComprador.tipo_documento" class="input">
+                <option value="CC">Cedula de ciudadania</option>
+                <option value="CE">Cedula de extranjeria</option>
+                <option value="NIT">NIT</option>
+                <option value="PAS">Pasaporte</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Numero de documento</label>
+              <input type="text" [(ngModel)]="datosComprador.numero_documento" class="input" />
+            </div>
+          </div>
+          <div class="campo">
+            <label>Telefono</label>
+            <input type="text" [(ngModel)]="datosComprador.telefono" class="input" placeholder="300 123 4567" />
+          </div>
+          <div class="campo">
+            <label>Direccion de envio</label>
+            <input type="text" [(ngModel)]="datosComprador.direccion" class="input"
+                   placeholder="Calle 10 # 20-30, Apto 502" />
+          </div>
+          <div class="fila-2">
+            <div class="campo">
+              <label>Departamento</label>
+              <select [(ngModel)]="departamentoSeleccionado" (ngModelChange)="datosComprador.ciudad = ''" class="input">
+                <option value="">Selecciona...</option>
+                @for (d of departamentos; track d.nombre) {
+                  <option [value]="d.nombre">{{ d.nombre }}</option>
+                }
+              </select>
+            </div>
+            <div class="campo">
+              <label>Ciudad</label>
+              <select [(ngModel)]="datosComprador.ciudad" class="input" [disabled]="!departamentoSeleccionado">
+                <option value="">
+                  {{ departamentoSeleccionado ? 'Selecciona...' : 'Elige un departamento primero' }}
+                </option>
+                @for (ciu of ciudadesDisponibles(); track ciu) {
+                  <option [value]="ciu">{{ ciu }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <div class="acciones">
+            <button type="button" class="btn-pagar"
+                    [disabled]="!datosComprador.numero_documento || guardandoComprador()"
+                    (click)="guardarDatosComprador()">
+              @if (guardandoComprador()) { Guardando... } @else { Continuar }
+            </button>
+          </div>
+        </section>
       } @else {
         @if (error()) {
           <div class="error-box">{{ error() }}</div>
@@ -49,16 +119,16 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
               @for (item of carrito()!.items; track item.id) {
                 <div class="resumen-item">
                   <span>{{ item.producto_nombre }} × {{ item.cantidad }}</span>
-                  <span>\${{ item.subtotal | number }}</span>
+                  <span>{{ item.subtotal | number }} COP</span>
                 </div>
               }
             </div>
             <div class="resumen-totales">
-              <div class="fila"><span>Subtotal</span><span>\${{ carrito()!.subtotal | number }}</span></div>
+              <div class="fila"><span>Subtotal</span><span>{{ carrito()!.subtotal | number }} COP</span></div>
               @if (Number(carrito()!.descuento) > 0) {
-                <div class="fila descuento"><span>Descuento</span><span>-\${{ carrito()!.descuento | number }}</span></div>
+                <div class="fila descuento"><span>Descuento</span><span>-{{ carrito()!.descuento | number }} COP</span></div>
               }
-              <div class="fila total"><span>Total a pagar</span><span>\${{ carrito()!.total | number }}</span></div>
+              <div class="fila total"><span>Total a pagar</span><span>{{ carrito()!.total | number }} COP</span></div>
             </div>
           }
         </section>
@@ -81,7 +151,7 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
           <button type="button" class="btn-pagar"
                   [disabled]="cargando()"
                   (click)="procesarPago()">
-            @if (cargando()) { Procesando... } @else { Pagar \${{ carrito()?.total | number }}
+            @if (cargando()) { Procesando... } @else { Pagar {{ carrito()?.total | number }} COP
             }
           </button>
         </section>
@@ -101,6 +171,15 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
       padding: 12px 16px; margin-bottom: var(--e4); color: #b42318; font-size: 14px;
     }
     .error-box strong { display: block; margin-bottom: 4px; }
+
+    .form-comprador { margin-bottom: var(--e5); }
+    .form-comprador h2 { font-size: 18px; margin: 0 0 var(--e2); }
+    .form-comprador .ayuda { color: var(--gris); font-size: 14px; margin: 0 0 var(--e4); }
+    .campo { margin-bottom: var(--e3); }
+    .campo label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+    .campo .input { width: 100%; }
+    .fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e3); }
+    @media (max-width: 480px) { .fila-2 { grid-template-columns: 1fr; } }
 
     .resumen { margin-bottom: var(--e5); }
     .resumen h2 { font-size: 18px; margin: 0 0 var(--e3); }
@@ -139,6 +218,18 @@ import { Carrito, CheckoutResponse, StockInsuficiente } from '../../../core/mode
       background: #ecfdf3; border: 1px solid #d1fadf; border-radius: 12px;
       padding: 32px; text-align: center; color: #067647;
     }
+    .exito-ventas {
+      list-style: none; margin: 0 auto var(--e4); padding: 0;
+      max-width: 360px; text-align: left; font-size: 14px;
+    }
+    .exito-ventas li {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: var(--e2); padding: 10px 0; border-bottom: 1px solid #d1fadf;
+    }
+    .exito-ventas li:last-child { border-bottom: 0; }
+    .exito-ventas span { color: #067647; }
+    .exito-ventas .total { font-weight: 700; }
+    .total-general { font-size: 16px !important; margin-top: var(--e2) !important; }
     .exito-icono {
       width: 60px; height: 60px; border-radius: 50%; background: #067647;
       color: #fff; font-size: 28px; font-weight: 700;
@@ -167,6 +258,19 @@ export class CheckoutComponent implements OnInit {
   readonly exito = signal<CheckoutResponse | null>(null);
   readonly erroresStock = signal<StockInsuficiente[]>([]);
   readonly metodoPago = signal('tarjeta');
+  readonly mostrarFormComprador = signal(false);
+  readonly guardandoComprador = signal(false);
+  readonly errorComprador = signal('');
+  datosComprador: DatosComprador = {
+    tipo_documento: 'CC', numero_documento: '', telefono: '', direccion: '', ciudad: '',
+  };
+  readonly departamentos = DEPARTAMENTOS_COLOMBIA;
+  departamentoSeleccionado = '';
+
+  /** Ciudades del departamento elegido, para el select en cascada. */
+  ciudadesDisponibles(): string[] {
+    return this.departamentos.find((d) => d.nombre === this.departamentoSeleccionado)?.ciudades ?? [];
+  }
 
   readonly metodosPago = [
     { valor: 'efectivo', etiqueta: 'Efectivo' },
@@ -203,12 +307,32 @@ export class CheckoutComponent implements OnInit {
     this.tienda.checkout(this.metodoPago()).subscribe({
       next: (r) => { this.exito.set(r); this.cargando.set(false); },
       error: (e) => {
-        if (e.codigo === 'STOCK_INSUFICIENTE') {
+        if (e.codigo === 'SIN_CLIENTE') {
+          this.mostrarFormComprador.set(true);
+        } else if (e.codigo === 'STOCK_INSUFICIENTE') {
           this.erroresStock.set(e.productos || []);
         } else {
           this.error.set(e.detalle || 'Error al procesar el pago.');
         }
         this.cargando.set(false);
+      },
+    });
+  }
+
+  /** Vincula al usuario (sin importar su rol) con un Cliente del
+   * marketplace y reintenta el pago automaticamente. */
+  guardarDatosComprador(): void {
+    this.guardandoComprador.set(true);
+    this.errorComprador.set('');
+    this.tienda.completarComprador(this.datosComprador).subscribe({
+      next: () => {
+        this.guardandoComprador.set(false);
+        this.mostrarFormComprador.set(false);
+        this.procesarPago();
+      },
+      error: (e) => {
+        this.errorComprador.set(e.detalle || 'No se pudo guardar tus datos.');
+        this.guardandoComprador.set(false);
       },
     });
   }

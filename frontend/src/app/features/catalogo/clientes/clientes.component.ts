@@ -1,17 +1,21 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
+import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
+import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import { ErrorCatalogo, Cliente } from '../../../core/models/catalogo.model';
 import { UsuarioAdmin } from '../../../core/models/seguridad.model';
 
 const TIPOS_DOCUMENTO = ['CC', 'NIT', 'CE', 'PAS'] as const;
+const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-clientes',
-  imports: [ReactiveFormsModule, PanelShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent, EstadoVacioComponent],
   templateUrl: './clientes.component.html',
   styleUrl: './clientes.component.css',
 })
@@ -19,17 +23,25 @@ export class ClientesComponent {
   private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
   private readonly seguridad = inject(SeguridadService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly auth = inject(AuthService);
 
   readonly tiposDocumento = TIPOS_DOCUMENTO;
   readonly clientes = signal<Cliente[]>([]);
   readonly usuarios = signal<UsuarioAdmin[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Cliente | null>(null);
   readonly formularioAbierto = signal(false);
   readonly busqueda = signal('');
+  readonly estado = signal<'activos' | 'inactivos' | 'todos'>('activos');
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
+  readonly total = signal(0);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
   /** Solo el ADMINISTRADOR ve la lista de cuentas para vincular
    * (la API de seguridad es exclusiva de ese rol). */
@@ -57,9 +69,13 @@ export class ClientesComponent {
 
   cargar(): void {
     this.cargando.set(true);
-    this.catalogo.listarClientes(this.busqueda()).subscribe({
-      next: ({ resultados }) => {
-        this.clientes.set(resultados);
+    this.catalogo.listarClientes({
+      busqueda: this.busqueda(), estado: this.estado(), pagina: this.pagina(),
+    }).subscribe({
+      next: (r) => {
+        this.clientes.set(r.resultados);
+        this.total.set(r.total);
+        this.totalPaginas.set(r.total_paginas ?? 1);
         this.cargando.set(false);
       },
       error: (e) => {
@@ -71,6 +87,25 @@ export class ClientesComponent {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
+    this.pagina.set(1);
+    this.buscarDebounced();
+  }
+
+  limpiarBusqueda(): void {
+    this.busqueda.set('');
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  filtrarPorEstado(evento: Event): void {
+    this.estado.set((evento.target as HTMLSelectElement).value as 'activos' | 'inactivos' | 'todos');
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  irPagina(nueva: number): void {
+    if (nueva < 1 || nueva > this.totalPaginas()) return;
+    this.pagina.set(nueva);
     this.cargar();
   }
 
@@ -106,6 +141,7 @@ export class ClientesComponent {
   }
 
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
@@ -116,6 +152,7 @@ export class ClientesComponent {
       usuario_id: valores.usuario_id || null,
     };
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     const peticion = enEdicion
       ? this.catalogo.editarCliente(enEdicion.id, datos)
@@ -123,26 +160,47 @@ export class ClientesComponent {
 
     peticion.subscribe({
       next: (cliente) => {
+        this.guardando.set(false);
         this.exito.set(enEdicion ? 'Cliente actualizado.' : `Cliente ${cliente.nombre} creado.`);
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
-      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorCatalogo) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
   }
 
-  eliminar(cliente: Cliente): void {
-    if (!confirm(`¿Eliminar el cliente "${cliente.nombre}"? Su historial se conserva.`)) {
+  /** Oculta el aviso de "exito" despues de unos segundos. */
+  private avisarExito(): void {
+    programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
+  }
+
+  desactivar(cliente: Cliente): void {
+    if (!confirm(`¿Desactivar a "${cliente.nombre}"? Dejara de aparecer en nuevas ventas, `
+      + 'pero su historial se conserva y puedes reactivarlo cuando quieras.')) {
       return;
     }
-    this.catalogo.eliminarCliente(cliente.id).subscribe({
+    this.catalogo.cambiarEstadoCliente(cliente.id, 'desactivar').subscribe({
       next: () => {
-        this.exito.set('Cliente eliminado.');
+        this.exito.set('Cliente desactivado.');
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
-      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo eliminar.'),
+      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo desactivar.'),
+    });
+  }
+
+  reactivar(cliente: Cliente): void {
+    this.catalogo.cambiarEstadoCliente(cliente.id, 'reactivar').subscribe({
+      next: () => {
+        this.exito.set('Cliente reactivado.');
+        this.cargar();
+        this.avisarExito();
+      },
+      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo reactivar.'),
     });
   }
 

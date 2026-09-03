@@ -1,85 +1,136 @@
-# Intersoft Prueba
+# InterSoft — Plataforma SaaS de gestión empresarial (multi-tenant)
 
-Este es un proyecto que incluye un backend y un frontend.
+Backend **Django REST + MySQL 8** y frontend **Angular** (SPA). Catálogo y
+clientes, ventas/POS, inventario, facturación DIAN, dashboard y reportes,
+asistente IA, notificaciones/cámaras y marketplace con carrito/checkout.
 
-## Tecnologías utilizadas
-- Python para el backend.
-- Angular para el frontend.
+> Cierre de entrega (Fase 7): requisitos exactos, dependencias pinneadas,
+> pipeline CI, checklist de seguridad/despliegue y resumen de riesgos en
+> `docs/`.
 
-## Configuración del entorno
-- Para el backend, asegúrate de tener Python 3.x y las dependencias en `requirements.txt`.
-- Para el frontend, asegúrate de tener Node.js y las dependencias en `package.json`.
+---
 
-## Instrucciones para ejecutar
-- **Backend**: Ejecutar `python manage.py runserver`.
-- **Frontend**: Ejecutar `ng serve`.
+## 1. Requisitos exactos
 
-## Decisiones de arquitectura (fase 7: dashboard y reportes)
-El caso de uso planteaba MongoDB para las agregaciones del dashboard, pero el
-proyecto usa **MySQL**, así que todas las agregaciones (ventas diarias/mensuales,
-top productos, clientes frecuentes, valor y rotación de inventario, stock bajo)
-se resuelven con **vistas SQL** creadas en
-`backend/core/migrations/0006_dashboard_vistas.py` y consultadas por
-`backend/core/analytics.py`, filtrando siempre por `empresa_id` (multi-tenancy).
-Sin dependencias externas: las gráficas del frontend son SVG puras, la exportación
-de Excel es un CSV UTF-8 con BOM y la de PDF es HTML de impresión.
+| Componente | Versión verificada | Instalación sugerida |
+|---|---|---|
+| **Python** | **3.12.x** (3.12.10 usado en desarrollo) | python.org o version manager |
+| **Node.js** | **24.x** (LTS) — 24.15.0 usado | nodejs.org o `nvm install 24` |
+| **npm** | 10.x/11.x | junto con Node |
+| **MySQL** | **8.0** (8.0.36+) | Laragon (Windows) o MySQL Server |
+| **Django** | `==5.2.17` (pinneado) | `pip install -r requirements.txt` |
+| **Angular** | 22.x (CLI `^22.1`) | `npm ci` usa el `package-lock.json` |
 
-## Decisiones de arquitectura (fase 8: asistente IA)
-El asistente IA queda disponible para **ADMINISTRADOR y EMPLEADO** (permiso
-`EsPersonal`). El motor se configura por variables de entorno
-(`IA_PROVIDER`, `IA_API_KEY`, `IA_API_URL`, `IA_MODEL`, `IA_TIMEOUT`,
-`IA_MAX_HISTORIAL`) en `backend/intersoft/settings.py`:
+No se requieren servicios externos para desarrollo: el asistente IA cae a un
+**mock** local si no hay `IA_API_KEY`, el correo a la consola y WhatsApp se
+desactiva con `WA_VINCULADO=False`.
 
-- **Proveedor**: compatible con API tipo OpenAI (`IA_PROVIDER=openai` + `IA_API_KEY`).
-  Sin clave configurada, usa un **mock local** (sin salida a internet) para desarrollo.
-- **Contexto de negocio**: `backend/core/ia_engine.py` arma un resumen de la empresa
-  (ventas, inventario, top productos, clientes frecuentes, stock bajo) reutilizando
-  las vistas SQL de la fase 7 y filtrando por `empresa_id`. Nunca transmite datos
-  sensibles (contraseñas, tokens, API keys).
-- **Contexto de conversación**: cada sesión (`ia_conversacion`) guarda sus mensajes
-  (`ia_mensaje` con rol usuario/asistente), que se reutilizan en cada llamada.
-- **Fallo del motor**: ante timeout/error se devuelve `502` conservando la conversación
-  (el mensaje del usuario queda guardado) para que se reintente sin duplicar.
-- **Auditoría**: cada consulta y respuesta registra `IA_CONSULTA` y `IA_RESPUESTA`
-  en `ActividadUsuario`.
+## 2. Estructura del repositorio
 
-## Decisiones de arquitectura (fase 9: monitoreo y notificaciones)
-La fase 9 se compone de dos bloques: el **centro de notificaciones** (funcionalidad
-viva) y el **módulo de cámaras** (entregado como *lienzo* para futuras actualizaciones).
+```
+.
+├── backend/     Django REST Framework (API /api/*)
+│   ├── core/    dominio (Empresa, Producto, Cliente, Venta, Facturacion…)
+│   ├── cuentas/ autenticacion (/api/auth/*), RBAC, usuarios
+│   └── intersoft/ proyecto (settings.py, urls)
+├── frontend/    Angular SPA (panel admin + marketplace)
+├── docs/        checklist de seguridad, despliegue y riesgos
+└── .github/workflows/ci.yml   pipeline de integracion
+```
 
-### Centro de notificaciones (activo)
-- Modelo `Notificacion` global por empresa: `tipo` (stock/factura/camara/sistema),
-  `empresa`, `estado` (nueva/revisada/resuelta) y `canal` (whatsapp/email/ninguno).
-  Se conserva `leida` por compatibilidad con fases anteriores.
-- Servicio unificado `backend/core/notificaciones.py` (`crear_notificacion`): todas las
-  fases anteriores que creaban avisos (`_notificar_admin`, `_registrar_alerta_stock`)
-  fluyen por el mismo centro.
-- Entrega agnóstica del proveedor en `backend/core/services/notificador.py`: WhatsApp
-  Business API (`WA_*` en `settings.py`) con canal alterno por email.
+## 3. Puesta en marcha — Backend
 
-**Entrega configurable por entorno (`EMAIL_*` y `WA_*` en `settings.py`):**
-- **Correo**: si no se define `EMAIL_BACKEND`, en desarrollo (`DEBUG=True`) se usa el
-  backend de consola y en producción el backend **SMTP** con `EMAIL_HOST/USER/PASSWORD`.
-  `DEFAULT_FROM_EMAIL` es configurable.
-- **WhatsApp**: requiere `WA_VINCULADO=True`, `WA_TOKEN` y el remitente `WA_NUMERO`
-  (se usa como `from` en la petición a la API). Si algo falla, cae al canal email.
+```bash
+cd backend
+python -m venv venv
+# Windows:  venv\Scripts\activate
+# Mac/Linux: source venv/bin/activate
+pip install -r requirements.txt     # versiones EXACTAS (reproducible)
+```
 
-**Reintento (no perder el aviso):** si la entrega falla por todos los canales, la
-`Notificacion` queda con `canal='ninguno'` y `entrega_pendiente=True`. Se puede reintentar:
-- con el comando `python manage.py reintentar_notificaciones` (opcional `--limite N`),
-- o llamando a `core.notificaciones.reintentar_entrega(aviso)` desde código.
+**Entorno:** copia la plantilla y ajusta los valores (nunca se versiona el `.env`):
+```bash
+# Windows:  copy .env.example .env
+# Mac/Linux: cp .env.example .env
+```
+Variables clave (todas documentadas en `backend/.env.example`):
 
-### Módulo de cámaras (lienzo — alcance actual)
-El módulo de cámaras se entrega como **base/esqueleto** para futuras actualizaciones,
-no como funcionalidad terminada. Alcance actual:
+| Variable | Producción |
+|---|---|
+| `SECRET_KEY` | **Obligatoria y aleatoria** (la app no arranca sin ella con `DEBUG=False`) |
+| `DEBUG` | `False` |
+| `ALLOWED_HOSTS` | dominios públicos reales, **sin** `*` |
+| `DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT` | credenciales MySQL 8 |
+| `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` | URL reales del frontend (HTTPS) |
+| `EMAIL_HOST*` / `WA_TOKEN` / `IA_API_KEY` | credenciales reales, **nunca** en el repo |
 
-- CRUD de cámaras por empresa, **solo ADMINISTRADOR** (`backend/core/views_monitoreo.py`,
-  modelo `Camara` en `backend/core/models.py`).
-- Campo `activa` para ocultar/mostrar una cámara del panel.
-- Grabaciones históricas **no** se guardan en BD: se resuelven contra disco por
-  empresa/cámara/fecha/hora en `backend/core/services/camaras.py`.
+**Base de datos, migraciones y demo:**
+```bash
+mysql -uroot -p -e "CREATE DATABASE intersoft1_db CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci;"
+python manage.py migrate              # grafo completo (incluye merge + seed RBAC)
+python manage.py seed_demo            # datos de demostracion (opcional)
+python manage.py runserver            # http://127.0.0.1:8000
+```
 
-**Deudas conocidas (mejoras futuras, NO bugs a corregir en esta iteración):**
-- Validar `Camara.url_stream` como URL válida (hoy es `CharField` libre).
-- Paginar resultados y validar el filtro `activas` en `CamarasView.get`.
-- Definir reproducción/servicio de streaming real del video en vivo.
+**Chequeos (mismos que corre el CI):**
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run   # "No changes detected"
+python manage.py test                               # 241 tests
+```
+
+## 4. Puesta en marcha — Frontend
+
+```bash
+cd frontend
+npm ci                    # dependencias EXACTAS del lockfile
+npm run build             # dist/frontend (budgets: 500 kB initial)
+npm run test:ci           # Vitest (20 tests, cobertura v8)
+npm run start             # http://localhost:4200 (dev, apunta a :8000)
+```
+
+## 5. Pipeline CI (`.github/workflows/ci.yml`)
+
+En cada push/PR a `main`/`develop` se ejecuta:
+
+- **Frontend**: `npm ci` → `npm run lint` → `npm run build` → `npm run test:ci`.
+- **Backend**: Python 3.12 + MySQL 8 (servicio) → `pip install -r requirements.txt`
+  → `python manage.py check` → `python manage.py makemigrations --check --dry-run`
+  → `python manage.py migrate` → `python manage.py test`.
+- El job de backend corre con `DEBUG=False` y `SECRET_KEY`/`ALLOWED_HOSTS`
+  explícitas, ejerciendo las protecciones de producción (fail-fast).
+
+## 6. Documentación
+
+| Documento | Contenido |
+|---|---|
+| `README.md` (raíz) | requisitos, arranque, decisiones de arquitectura (este archivo) |
+| `backend/README.md` | backend en detalle: grafo de migraciones, fase 5 (solidez/errores/concurrencia), endpoints verificados |
+| `frontend/README.md` | frontend: comandos y calidad (fase 6) |
+| `docs/CHECKLIST-SEGURIDAD.md` | checklist de seguridad y despliegue |
+| `docs/DESPLIEGUE.md` | guía de despliegue (gunicorn + nginx + HTTPS) |
+| `docs/RIESGOS.md` | resumen de riesgos resueltos y pendientes |
+| `AUDITORIA.md` | auditoría (solo lectura, fase previa) |
+
+## 7. Decisiones de arquitectura
+
+- **Multi-tenant**: tenancy por FK a `Empresa` + filtrado manual por vista
+  (roles: `ADMINISTRADOR`, `EMPLEADO`, `CLIENTE` + roles personalizados por
+  empresa; permisos finos `permiso.codigo`). Aislamiento verificado por tests.
+- **Dashboard/reportes (fase 7)**: agregaciones vía **vistas SQL** en MySQL
+  (`core/migrations/0006_dashboard_vistas.py` + `core/analytics.py`) en vez de
+  MongoDB; frontend en SVG puro; exportación CSV/PDF sin dependencias extra.
+- **Asistente IA (fase 8)**: `IA_PROVIDER=mock|groq|openai` con mock local sin
+  internet; contexto de negocio desde las vistas; auditoría por consulta;
+  `502` conserva la conversación para reintento sin duplicar.
+- **Notificaciones y cámaras (fase 9)**: centro de notificaciones unificado
+  con canal WhatsApp/email y reintento (`reintentar_notificaciones`); módulo de
+  cámaras entregado como lienzo (sin streaming, ver `docs/RIESGOS.md`).
+- **Seguridad de configuración**: con `DEBUG=False` la app **falla al arrancar**
+  si `SECRET_KEY` es placeholder/ausente o `ALLOWED_HOSTS` incluye `*`;
+  se activan solas `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, redirección
+  HTTPS, HSTS y `X_FRAME_OPTIONS=DENY`.
+- **Calidad (fases 5-6)**: errores de API uniformes `{codigo, detalle, errores}`,
+  validación de entrada, paginación acotada, `select_for_update` en operaciones
+  de dinero/stock, guards + permisos en frontend, helpers compartidos de
+  errores y timers.

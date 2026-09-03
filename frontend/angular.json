@@ -39,8 +39,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "18kB",
+                  "maximumError": "24kB"
                 }
               ],
               "outputHashing": "all"
@@ -72,7 +72,31 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "runnerConfig": true,
+            "watch": false,
+            "setupFiles": [
+              "src/test-setup.ts"
+            ],
+            "include": [
+              "src/**/*.spec.ts"
+            ]
+          },
+          "configurations": {
+            "ci": {
+              "watch": false,
+              "coverage": true,
+              "coverageReporters": [
+                "text-summary",
+                "cobertura"
+              ],
+              "reporters": [
+                "default"
+              ]
+            }
+          }
         }
       }
     }

@@ -1,14 +1,22 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, OperatorFunction, catchError, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { capturarErrorDjango } from '../utils/django-error.util';
 import {
-  Categoria, Cliente, DatosCliente, DatosProducto, ErrorCatalogo, Producto,
-  Venta, VentaPOSInput, StockInsuficiente, MovimientoInventario,
+  Categoria, Cliente, ClienteDetalle, DatosCliente, DatosProducto,
+  Producto, Venta, VentaPOSInput, StockInsuficiente, MovimientoInventario,
   Notificacion, InventarioProducto, FacturaElectronica, NotaCredito,
 } from '../models/catalogo.model';
 
-interface Lista<T> { resultados: T[]; total: number; estadisticas?: Record<string, unknown>; }
+interface Lista<T> {
+  resultados: T[];
+  total: number;
+  estadisticas?: Record<string, unknown>;
+  pagina?: number;
+  por_pagina?: number;
+  total_paginas?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class CatalogoService {
@@ -16,10 +24,26 @@ export class CatalogoService {
   private readonly api = `${environment.apiUrl}`;
 
   // ---- Clientes ----
-  listarClientes(busqueda = ''): Observable<Lista<Cliente>> {
-    return this.http
-      .get<Lista<Cliente>>(`${this.api}/clientes/`, { params: busqueda ? { busqueda } : {} })
+  listarClientes(filtros: { busqueda?: string; estado?: string; pagina?: number } = {}):
+    Observable<Lista<Cliente>> {
+    const params: Record<string, string> = {};
+    if (filtros.busqueda) params['busqueda'] = filtros.busqueda;
+    if (filtros.estado) params['estado'] = filtros.estado;
+    if (filtros.pagina) params['pagina'] = String(filtros.pagina);
+    return this.http.get<Lista<Cliente>>(`${this.api}/clientes/`, { params })
       .pipe(capturarError<Lista<Cliente>>());
+  }
+
+  obtenerCliente(id: string): Observable<ClienteDetalle> {
+    return this.http.get<ClienteDetalle>(`${this.api}/clientes/${id}/`)
+      .pipe(capturarError<ClienteDetalle>());
+  }
+
+  /** Cliente "Consumidor final" de la empresa (lo crea si no existe). Para
+   * venta rapida de mostrador en el POS, sin capturar datos del comprador. */
+  obtenerClienteGenerico(): Observable<Cliente> {
+    return this.http.get<Cliente>(`${this.api}/clientes/generico/`)
+      .pipe(capturarError<Cliente>());
   }
 
   crearCliente(datos: DatosCliente): Observable<Cliente> {
@@ -32,9 +56,9 @@ export class CatalogoService {
       .pipe(capturarError<Cliente>());
   }
 
-  eliminarCliente(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.api}/clientes/${id}/`)
-      .pipe(capturarError<void>());
+  cambiarEstadoCliente(id: string, accion: 'desactivar' | 'reactivar'): Observable<ClienteDetalle> {
+    return this.http.post<ClienteDetalle>(`${this.api}/clientes/${id}/${accion}/`, {})
+      .pipe(capturarError<ClienteDetalle>());
   }
 
   // ---- Productos ----
@@ -48,13 +72,28 @@ export class CatalogoService {
   }
 
   crearProducto(datos: DatosProducto): Observable<Producto> {
-    return this.http.post<Producto>(`${this.api}/productos/`, datos)
+    return this.http.post<Producto>(`${this.api}/productos/`, this.cuerpoProducto(datos))
       .pipe(capturarError<Producto>());
   }
 
   editarProducto(id: string, datos: Partial<DatosProducto>): Observable<Producto> {
-    return this.http.patch<Producto>(`${this.api}/productos/${id}/`, datos)
+    return this.http.patch<Producto>(`${this.api}/productos/${id}/`, this.cuerpoProducto(datos))
       .pipe(capturarError<Producto>());
+  }
+
+  /** Si hay un archivo de imagen nuevo, arma FormData (multipart); si no,
+   * manda JSON normal (mas liviano, y permite mandar categoria_id: null). */
+  private cuerpoProducto(datos: Partial<DatosProducto>): FormData | Partial<DatosProducto> {
+    if (!(datos.imagen instanceof File)) {
+      const { imagen, ...resto } = datos;
+      return resto;
+    }
+    const forma = new FormData();
+    for (const [clave, valor] of Object.entries(datos)) {
+      if (valor === null || valor === undefined) continue;
+      forma.append(clave, valor instanceof File ? valor : String(valor));
+    }
+    return forma;
   }
 
   cambiarEstadoProducto(id: string, accion: 'desactivar' | 'reactivar'): Observable<Producto> {
@@ -187,22 +226,8 @@ export class CatalogoService {
       .pipe(capturarError<NotaCredito>());
   }
 }
-
 /** Convierte la respuesta de error de Django en un mensaje legible. */
-function capturarError<T>(): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) => throwError(() => traducir(e)));
-}
-
-function traducir(e: HttpErrorResponse): ErrorCatalogo {
-  const cuerpo = (e.error ?? {}) as ErrorCatalogo;
-  if (e.status === 0) return { detalle: 'No hay conexion con el servidor.' };
-  if (e.status === 403) {
-    return { detalle: 'Solo el personal de la empresa puede hacer esto.' };
-  }
-  if (cuerpo.errores) {
-    const primerCampo = Object.values(cuerpo.errores)[0];
-    const mensaje = Array.isArray(primerCampo) ? String(primerCampo[0]) : cuerpo.detalle;
-    return { codigo: cuerpo.codigo, detalle: mensaje };
-  }
-  return { codigo: cuerpo.codigo, detalle: cuerpo.detalle ?? 'Ocurrio un error inesperado.' };
-}
+const capturarError = <T,>() =>
+  capturarErrorDjango<T>({
+    mensajesPorStatus: { 403: 'Solo el personal de la empresa puede hacer esto.' },
+  });

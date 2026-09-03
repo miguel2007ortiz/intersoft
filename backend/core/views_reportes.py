@@ -20,6 +20,19 @@ from cuentas.permissions import EsAdministrador
 from . import analytics
 
 
+def _filtros_dashboard(request):
+    """Construye los filtros validados. Si el cliente manda una fecha o
+    categoria malformada devuelve el par (None, respuesta_400)."""
+    try:
+        filtros = analytics.FiltrosDashboard(request)
+    except ValueError as exc:
+        return None, Response(
+            {"codigo": "FILTROS_INVALIDOS",
+             "detalle": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST)
+    return filtros, None
+
+
 class TiposReporteView(APIView):
     """Catalogo de tipos de reporte disponibles (consultan las vistas)."""
     permission_classes = [IsAuthenticated, EsAdministrador]
@@ -48,7 +61,9 @@ class ReporteVistaView(APIView):
                  "tipos": list(analytics.TIPOS_REPORTE.keys())},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        f = analytics.FiltrosDashboard(request)
+        f, error = _filtros_dashboard(request)
+        if error:
+            return error
         datos = analytics.reporte_json(tipo, f)
 
         ActividadUsuario.registrar(
@@ -70,7 +85,9 @@ class ReporteExportarView(APIView):
                  "detalle": "Tipo de reporte no valido."},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        f = analytics.FiltrosDashboard(request)
+        f, error = _filtros_dashboard(request)
+        if error:
+            return error
         empresa = request.user.perfil.empresa
 
         if formato == 'pdf':

@@ -1,9 +1,10 @@
 import { DatePipe, DecimalPipe, SlicePipe } from '@angular/common';
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { FacturaElectronica, NotaCredito, Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { debounce, programarAviso } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-facturacion',
@@ -31,8 +32,8 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         <!-- ===== TAB: Facturas ===== -->
         @if (pestana() === 'facturas') {
           <section class="filtros">
-            <input type="text" placeholder="Buscar por numero, CUFE, cliente..."
-                   [(ngModel)]="busquedaFactura" (input)="cargarFacturas()" class="input" />
+            <input type="text" aria-label="Buscar factura" placeholder="Buscar por numero, CUFE, cliente..."
+                   [(ngModel)]="busquedaFactura" (input)="buscarFacturasDebounced()" class="input" />
             <select [(ngModel)]="filtroEstado" (change)="cargarFacturas()" class="input input-select">
               <option value="">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
@@ -68,7 +69,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                     <td class="monospace">{{ f.numero }}</td>
                     <td>{{ f.venta_numero }}</td>
                     <td>{{ f.cliente_nombre }}</td>
-                    <td>\${{ f.venta_total | number }}</td>
+                    <td>{{ f.venta_total | number }} COP</td>
                     <td>
                       <span class="badge" [attr.data-estado]="f.estado">
                         {{ f.estado_display }}
@@ -78,6 +79,12 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                     <td class="acciones-celda">
                       @if (f.estado === 'aprobada') {
                         <button class="btn-sm btn-primary" (click)="reenviar(f)">Reenviar</button>
+                      }
+                      @if (f.pdf) {
+                        <a class="btn-sm btn-outline" [href]="f.pdf" target="_blank" rel="noopener">PDF</a>
+                      }
+                      @if (f.xml) {
+                        <a class="btn-sm btn-outline" [href]="f.xml" target="_blank" rel="noopener">XML</a>
                       }
                       @if (f.estado === 'fallida' || f.estado === 'rechazada') {
                         <button class="btn-sm btn-warning" (click)="reintentar(f)"
@@ -122,7 +129,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                     <tr>
                       <td>{{ v.numero_factura }}</td>
                       <td>{{ v.cliente_nombre }}</td>
-                      <td>\${{ v.total | number }}</td>
+                      <td>{{ v.total | number }} COP</td>
                       <td>{{ v.fecha | date:'dd/MM/yyyy HH:mm' }}</td>
                       <td>
                         <button class="btn-sm btn-primary"
@@ -164,6 +171,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                     <th>Estado</th>
                     <th>Reverso stock</th>
                     <th>Motivo</th>
+                    <th>Comprobantes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,7 +180,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                       <td class="monospace">{{ nc.numero }}</td>
                       <td>{{ nc.venta_numero }}</td>
                       <td>{{ nc.cliente_nombre }}</td>
-                      <td>\${{ nc.venta_total | number }}</td>
+                      <td>{{ nc.venta_total | number }} COP</td>
                       <td>
                         <span class="badge" [attr.data-estado]="nc.estado === 'aprobada' ? 'aprobada' : nc.estado === 'rechazada' ? 'rechazada' : 'pendiente'">
                           {{ nc.estado_display }}
@@ -180,6 +188,15 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                       </td>
                       <td>{{ nc.reverso_stock ? '✓' : '—' }}</td>
                       <td>{{ nc.motivo }}</td>
+                      <td class="acciones-celda">
+                        @if (nc.pdf) {
+                          <a class="btn-sm btn-outline" [href]="nc.pdf" target="_blank" rel="noopener">PDF</a>
+                        }
+                        @if (nc.xml) {
+                          <a class="btn-sm btn-outline" [href]="nc.xml" target="_blank" rel="noopener">XML</a>
+                        }
+                        @if (!nc.pdf && !nc.xml) { — }
+                      </td>
                     </tr>
                   }
                 </tbody>
@@ -200,7 +217,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                 <select [(ngModel)]="ventaNcSeleccionada" class="input">
                   <option value="">Seleccionar venta...</option>
                   @for (v of ventasFacturadas(); track v.id) {
-                    <option [value]="v.id">{{ v.numero_factura }} — {{ v.cliente_nombre }} — \${{ v.total | number }}</option>
+                    <option [value]="v.id">{{ v.numero_factura }} — {{ v.cliente_nombre }} — {{ v.total | number }} COP</option>
                   }
                 </select>
                 <textarea [(ngModel)]="motivoNc" placeholder="Motivo de la nota credito..."
@@ -233,6 +250,17 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
                   }
                   <p><strong>Intentos:</strong> {{ detalleSeleccion()!.intentos }}</p>
                   <p><strong>Correo enviado:</strong> {{ detalleSeleccion()!.enviado_correo ? 'Si' : 'No' }}</p>
+                  @if (detalleSeleccion()!.pdf || detalleSeleccion()!.xml) {
+                    <p><strong>Comprobantes:</strong></p>
+                    <div class="acciones-celda">
+                      @if (detalleSeleccion()!.pdf) {
+                        <a class="btn-sm btn-outline" [href]="detalleSeleccion()!.pdf!" target="_blank" rel="noopener">PDF</a>
+                      }
+                      @if (detalleSeleccion()!.xml) {
+                        <a class="btn-sm btn-outline" [href]="detalleSeleccion()!.xml!" target="_blank" rel="noopener">XML</a>
+                      }
+                    </div>
+                  }
                 </div>
               }
               <button class="btn-outline" (click)="detalleVisible.set(false)">Cerrar</button>
@@ -378,6 +406,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class FacturacionComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly pestana = signal<'facturas' | 'notas' | 'generar' | 'crear-nc'>('facturas');
   readonly facturas = signal<FacturaElectronica[]>([]);
@@ -391,6 +420,8 @@ export class FacturacionComponent implements OnInit {
   readonly exito = signal('');
   readonly accionId = signal<string | null>(null);
   readonly generandoId = signal<string | null>(null);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  readonly buscarFacturasDebounced = debounce(this.destroyRef, () => this.cargarFacturas(), 300);
 
   readonly detalleVisible = signal(false);
   readonly detalleSeleccion = signal<FacturaElectronica | null>(null);
@@ -466,7 +497,7 @@ export class FacturacionComponent implements OnInit {
       next: (f) => {
         this.generandoId.set(null);
         this.exito.set(`Factura ${f.numero} generada — ${f.estado_display}`);
-        setTimeout(() => this.exito.set(''), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(''), 4000);
         this.cargarFacturas();
         this.cargarVentas();
       },
@@ -483,7 +514,7 @@ export class FacturacionComponent implements OnInit {
       next: () => {
         this.accionId.set(null);
         this.exito.set('Reintento procesado.');
-        setTimeout(() => this.exito.set(''), 3000);
+        programarAviso(this.destroyRef, () => this.exito.set(''), 3000);
         this.cargarFacturas();
       },
       error: (e) => {
@@ -508,7 +539,7 @@ export class FacturacionComponent implements OnInit {
       next: (r) => {
         this.reenviando.set(false);
         this.exitoReenvio.set(r.detalle);
-        setTimeout(() => { this.reenviarVisible.set(false); this.exitoReenvio.set(''); }, 3000);
+        programarAviso(this.destroyRef, () => { this.reenviarVisible.set(false); this.exitoReenvio.set(''); }, 3000);
       },
       error: (e) => {
         this.exitoReenvio.set('');
@@ -531,7 +562,7 @@ export class FacturacionComponent implements OnInit {
       next: (nc) => {
         this.creandoNc.set(false);
         this.exito.set(`Nota credito ${nc.numero} — ${nc.estado_display}`);
-        setTimeout(() => this.exito.set(''), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(''), 4000);
         this.ventaNcSeleccionada = '';
         this.motivoNc = '';
         this.pestana.set('notas');

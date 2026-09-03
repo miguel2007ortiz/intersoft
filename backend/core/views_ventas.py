@@ -12,6 +12,7 @@ Reglas clave:
 - Productos desactivados no generan alerta aunque tengan stock bajo.
 - Todo queda auditado en actividad_usuario."""
 
+import re
 from decimal import Decimal
 
 from django.db import models, transaction
@@ -25,16 +26,36 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (Cliente, DetalleVenta, Empresa, MovimientoInventario,
-                     Notificacion, Producto, Venta)
+from .models import (Cliente, DetalleVenta, Empresa, Envio,
+                     MovimientoInventario, Notificacion, Producto, Venta)
 from .serializers_monitoreo import NotificacionLecturaSerializer
-from .serializers_ventas import (AjusteInventarioSerializer, AnulacionSerializer,
+from .serializers_ventas import (AjusteInventarioSerializer,
+                                 AlertaReabastecerSerializer, AnulacionSerializer,
+                                 EnvioEstadoInputSerializer, EnvioLecturaSerializer,
                                  MovimientoInventarioLecturaSerializer,
                                  VentaLecturaSerializer, VentaPOSInputSerializer)
 
 
 def _obtener_empresa(request):
     return request.user.perfil.empresa
+
+
+def _es_fecha_valida(valor):
+    """True si `valor` es una fecha ISO YYYY-MM-DD real (p. ej. '2026-09-01')."""
+    try:
+        timezone.datetime.strptime(valor, '%Y-%m-%d')
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _limite_paginacion(valor, por_defecto=50, maximo=200):
+    """Limite de filas a devolver: acotado a [1, maximo] para que una
+    lista nunca devuelva resultados ilimitados (uso de memoria/CPU acotado)."""
+    try:
+        return max(1, min(int(valor), maximo))
+    except (TypeError, ValueError):
+        return por_defecto
 
 
 def _registrar_alerta_stock(producto, empresa):
@@ -98,14 +119,13 @@ class VentaPOSView(APIView):
                  "detalle": "El cliente no existe en tu empresa."},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Transaccion unica: lock de empresa + validacion de stock + creacion.
-        # El SELECT FOR UPDATE sobre la empresa serializa el consecutivo y el
-        # descuento de stock para esa empresa (evita carreras y negativos).
+        # Un solo bloque transaction.atomic(): valida stock con
+        # select_for_update, crea la venta, descuenta stock y registra
+        # movimientos manteniendo el lock de producto hasta el commit
+        # (evita oversell entre dos POST simultaneos).
+        lineas_stock_ok = []
+        lineas_stock_fallido = []
         with transaction.atomic():
-            Empresa.objects.select_for_update().filter(pk=empresa.pk).get()
-
-            lineas_stock_ok = []
-            lineas_stock_fallido = []
             for linea in datos['detalles']:
                 producto = Producto.objects.select_for_update().filter(
                     empresa=empresa, deleted_at__isnull=True, id=linea['producto']
@@ -139,12 +159,22 @@ class VentaPOSView(APIView):
                      "productos": lineas_stock_fallido},
                     status=status.HTTP_400_BAD_REQUEST)
 
+            # Lock de la fila de la empresa: serializa el correlativo
+            # numero_factura dentro de la misma empresa.
+            Empresa.objects.select_for_update().filter(pk=empresa.pk).first()
+
             subtotal = sum(
-                Decimal(str(l['precio_unitario'])) * l['cantidad']
-                for l in lineas_stock_ok
+                Decimal(str(linea['precio_unitario'])) * linea['cantidad']
+                for linea in lineas_stock_ok
             )
             descuento = Decimal(str(datos['descuento']))
-            total = max(subtotal - descuento, Decimal('0'))
+            if descuento > subtotal:
+                return Response(
+                    {"codigo": "DESCUENTO_INVALIDO",
+                     "detalle": f"El descuento (${descuento}) no puede superar "
+                                f"el subtotal (${subtotal})."},
+                    status=status.HTTP_400_BAD_REQUEST)
+            total = subtotal - descuento
 
             venta = Venta.objects.create(
                 empresa=empresa,
@@ -166,27 +196,9 @@ class VentaPOSView(APIView):
                     cantidad=linea['cantidad'],
                     precio_unitario=linea['precio_unitario'],
                 )
-                # Descuento atomico de stock (no puede quedar negativo).
-                #
-                # Bajado con F() contra el numero activo con cantidad
-                # garantizando stock >= cantidad.
-                actualizado = Producto.objects.filter(
-                    pk=producto.pk, empresa=empresa,
-                    deleted_at__isnull=True, stock__gte=linea['cantidad'],
-                ).update(stock=models.F('stock') - linea['cantidad'])
-                if not actualizado:
-                    transaction.set_rollback(True)
-                    return Response(
-                        {"codigo": "STOCK_INSUFICIENTE",
-                         "detalle": "El stock del producto cambio durante la venta.",
-                         "productos": [{
-                             'producto': str(producto.id),
-                             'producto_nombre': producto.nombre,
-                             'solicitado': linea['cantidad'],
-                             'disponible': producto.stock,
-                         }]},
-                        status=status.HTTP_400_BAD_REQUEST)
-                producto.stock = max(producto.stock - linea['cantidad'], 0)
+                # Descontar stock
+                producto.stock -= linea['cantidad']
+                producto.save(update_fields=['stock'])
                 # Registrar movimiento
                 _registrar_movimiento(
                     producto, request.user, 'salida', linea['cantidad'],
@@ -197,11 +209,7 @@ class VentaPOSView(APIView):
                 f"Factura {venta.numero_factura} - "
                 f"{cliente.nombre} (${total})")
 
-        # Fase 6: recargar con las relaciones para serializar sin N+1.
-        venta_serializada = (Venta.objects.select_related('cliente', 'vendedor')
-                             .prefetch_related('detalles__producto')
-                             .get(pk=venta.pk))
-        return Response(VentaLecturaSerializer(venta_serializada).data,
+        return Response(VentaLecturaSerializer(venta).data,
                         status=status.HTTP_201_CREATED)
 
 
@@ -213,7 +221,11 @@ class VentasView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        ventas = Venta.objects.filter(empresa=empresa, deleted_at__isnull=True)
+        ventas = Venta.objects.select_related('cliente', 'vendedor').filter(
+            empresa=empresa, deleted_at__isnull=True)
+        if not request.user.perfil.tiene_permiso("venta.leer_todas"):
+            # RN Empleados: sin permiso global, cada quien ve solo lo suyo.
+            ventas = ventas.filter(vendedor=request.user)
 
         # Filtros
         estado = request.query_params.get('estado')
@@ -221,10 +233,20 @@ class VentasView(APIView):
             ventas = ventas.filter(estado=estado)
 
         fecha_inicio = request.query_params.get('fecha_inicio')
+        if fecha_inicio and not _es_fecha_valida(fecha_inicio):
+            return Response(
+                {"codigo": "FECHA_INVALIDA",
+                 "detalle": "fecha_inicio debe usar el formato YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST)
         if fecha_inicio:
             ventas = ventas.filter(fecha__date__gte=fecha_inicio)
 
         fecha_fin = request.query_params.get('fecha_fin')
+        if fecha_fin and not _es_fecha_valida(fecha_fin):
+            return Response(
+                {"codigo": "FECHA_INVALIDA",
+                 "detalle": "fecha_fin debe usar el formato YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST)
         if fecha_fin:
             ventas = ventas.filter(fecha__date__lte=fecha_fin)
 
@@ -240,12 +262,9 @@ class VentasView(APIView):
             total_count=Count('id'),
         )
 
-        # Fase 6: evita N+1 (cliente/vendedor y detalles con su producto).
-        lista = ventas.select_related(
-            'cliente', 'vendedor'
-        ).prefetch_related('detalles__producto')
         datos = VentaLecturaSerializer(
-            lista.order_by('-fecha')[:50], many=True).data
+            ventas.order_by('-fecha')[:50].prefetch_related('detalles__producto'),
+            many=True).data
 
         return Response({
             "resultados": datos,
@@ -275,32 +294,8 @@ class VentaDetalleView(APIView):
 
     def anular(self, request, id):
         empresa = _obtener_empresa(request)
-        venta = Venta.objects.filter(
-            empresa=empresa, deleted_at__isnull=True, id=id).first()
-        if not venta:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-
-        if venta.estado == 'anulada':
-            return Response(
-                {"codigo": "YA_ANULADA",
-                 "detalle": "Esta venta ya fue anulada."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if venta.estado != 'completada':
-            return Response(
-                {"codigo": "ESTADO_INVALIDO",
-                 "detalle": "Solo se pueden anular ventas completadas."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if hasattr(venta, 'factura_electronica') and \
-                venta.factura_electronica.estado == 'aprobada':
-            return Response(
-                {"codigo": "FACTURADA_DIAN",
-                 "detalle": "Esta venta ya fue facturada ante la DIAN. "
-                            "Para reversarla, crea una Nota Credito desde "
-                            "el modulo de Facturacion."},
-                status=status.HTTP_400_BAD_REQUEST)
-
+        # Valida el motivo antes de tomar lock (evita sostener filas
+        # bloqueadas por una peticion malformada).
         entrada = AnulacionSerializer(data=request.data)
         if not entrada.is_valid():
             return Response(
@@ -309,15 +304,48 @@ class VentaDetalleView(APIView):
                  "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
 
+        # Dentro del bloque transaction.atomic() se toma el lock de la fila
+        # de la venta (serializa dobles anulaciones) y el de los productos.
         with transaction.atomic():
-            # Revertir stock (incremento atomico para evitar perdidas)
-            detalles = venta.detalles.select_related('producto').all()
+            venta = Venta.objects.select_for_update().filter(
+                empresa=empresa, deleted_at__isnull=True, id=id).first()
+            if not venta:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+
+            if venta.estado == 'anulada':
+                return Response(
+                    {"codigo": "YA_ANULADA",
+                     "detalle": "Esta venta ya fue anulada."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if venta.estado != 'completada':
+                return Response(
+                    {"codigo": "ESTADO_INVALIDO",
+                     "detalle": "Solo se pueden anular ventas completadas."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if hasattr(venta, 'factura_electronica') and \
+                    venta.factura_electronica.estado == 'aprobada':
+                return Response(
+                    {"codigo": "FACTURADA_DIAN",
+                     "detalle": "Esta venta ya fue facturada ante la DIAN. "
+                                "Para reversarla, crea una Nota Credito desde "
+                                "el modulo de Facturacion."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            # Lock de las filas de producto para revertir stock sin
+            # colisionar con ventas POS o ajustes concurrentes.
+            detalles = list(venta.detalles.select_related('producto').all())
+            Producto.objects.filter(
+                id__in=[d.producto_id for d in detalles],
+                empresa=empresa,
+            ).select_for_update().all()
+
+            # Revertir stock con la fila ya bloqueada
             for detalle in detalles:
                 producto = detalle.producto
-                Producto.objects.filter(
-                    pk=producto.pk, empresa=empresa,
-                ).update(stock=models.F('stock') + detalle.cantidad)
                 producto.stock += detalle.cantidad
+                producto.save(update_fields=['stock'])
                 _registrar_movimiento(
                     producto, request.user, 'entrada', detalle.cantidad,
                     f"Anulacion venta {venta.numero_factura}")
@@ -333,6 +361,89 @@ class VentaDetalleView(APIView):
                 f"Motivo: {venta.motivo_anulacion}")
 
         return Response(VentaLecturaSerializer(venta).data)
+
+
+# ------------------------------ Envios (fase 10) ---------------------------
+
+class EnviosView(APIView):
+    """GET lista los envios de la empresa (personal interno), opcionalmente
+    filtrada por estado. Ordenada por antiguedad (los mas viejos primero):
+    es una cola de trabajo, no un historial."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request):
+        empresa = _obtener_empresa(request)
+        envios = Envio.objects.select_related('venta', 'venta__cliente').filter(
+            venta__empresa=empresa)
+
+        estado = request.query_params.get('estado')
+        if estado:
+            if estado not in dict(Envio.ESTADO_CHOICES):
+                return Response(
+                    {"codigo": "ESTADO_INVALIDO",
+                     "detalle": "Estado de envio no valido.",
+                     "opciones": [c for c, _ in Envio.ESTADO_CHOICES]},
+                    status=status.HTTP_400_BAD_REQUEST)
+            envios = envios.filter(estado=estado)
+
+        envios = envios.order_by('created_at')
+        limite = _limite_paginacion(request.query_params.get('limite', 50))
+        datos = EnvioLecturaSerializer(envios[:limite], many=True).data
+        return Response({"resultados": datos, "total": len(datos)})
+
+
+class EnvioDetalleView(APIView):
+    """GET detalle del envio de una venta / PATCH actualiza transportadora,
+    numero de guia, notas y/o estado (con validacion de transicion)."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request, id):
+        empresa = _obtener_empresa(request)
+        envio = Envio.objects.select_related('venta').filter(
+            venta__empresa=empresa, venta_id=id).first()
+        if not envio:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(EnvioLecturaSerializer(envio).data)
+
+    def patch(self, request, id):
+        empresa = _obtener_empresa(request)
+        entrada = EnvioEstadoInputSerializer(data=request.data)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS", "detalle": "Revisa los datos del envio.",
+                 "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
+        datos = entrada.validated_data
+
+        # select_for_update: serializa cambios de estado concurrentes sobre
+        # el mismo envio (mismo criterio que anular venta / ajustar stock).
+        with transaction.atomic():
+            envio = Envio.objects.select_for_update().select_related('venta').filter(
+                venta__empresa=empresa, venta_id=id).first()
+            if not envio:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+
+            campos_planos = [c for c in
+                             ('transportadora', 'numero_guia', 'fecha_entrega_estimada', 'notas')
+                             if c in datos]
+            for campo in campos_planos:
+                setattr(envio, campo, datos[campo])
+            if campos_planos:
+                envio.save(update_fields=campos_planos + ['updated_at'])
+
+            nuevo_estado = datos.get('estado')
+            if nuevo_estado:
+                try:
+                    envio.cambiar_estado(nuevo_estado)
+                except Envio.TransicionInvalida as exc:
+                    return Response(
+                        {"codigo": "TRANSICION_INVALIDA", "detalle": str(exc)},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+            ActividadUsuario.registrar(
+                request.user, "ENVIO_ACTUALIZADO",
+                f"Envio de {envio.venta.numero_factura} -> {envio.get_estado_display()}")
+
+        return Response(EnvioLecturaSerializer(envio).data)
 
 
 # ------------------------------ Inventario --------------------------------
@@ -361,11 +472,18 @@ class InventarioView(APIView):
 
         return Response({"resultados": datos, "total": len(datos)})
 
-    def post(self, request):
-        return self.ajuste_manual(request)
+    def post(self, request, id=None):
+        return self.ajuste_manual(request, id=id)
 
-    def ajuste_manual(self, request):
-        entrada = AjusteInventarioSerializer(data=request.data)
+    def ajuste_manual(self, request, id=None):
+        # La ruta /inventario/<uuid:id>/ajustar/ identifica el producto por
+        # URL; en ese caso `producto` no se exige en el cuerpo. En el POST
+        # canonico /inventario/ (usado por el frontend) viene en el payload.
+        datos = request.data.copy() if hasattr(request.data, "copy") \
+            else dict(request.data)
+        if id is not None:
+            datos["producto"] = id
+        entrada = AjusteInventarioSerializer(data=datos)
         if not entrada.is_valid():
             return Response(
                 {"codigo": "DATOS_INVALIDOS",
@@ -376,16 +494,18 @@ class InventarioView(APIView):
         datos = entrada.validated_data
         empresa = _obtener_empresa(request)
 
-        producto = Producto.objects.select_for_update().filter(
-            empresa=empresa, deleted_at__isnull=True, id=datos['producto']
-        ).first()
-        if not producto:
-            return Response(
-                {"codigo": "PRODUCTO_NO_ENCONTRADO",
-                 "detalle": "El producto no existe en tu empresa."},
-                status=status.HTTP_400_BAD_REQUEST)
-
         with transaction.atomic():
+            # Lock dentro de la transaccion: el stock se lee y escribe bajo
+            # SELECT FOR UPDATE.
+            producto = Producto.objects.select_for_update().filter(
+                empresa=empresa, deleted_at__isnull=True, id=datos['producto']
+            ).first()
+            if not producto:
+                return Response(
+                    {"codigo": "PRODUCTO_NO_ENCONTRADO",
+                     "detalle": "El producto no existe en tu empresa."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
             tipo = datos['tipo']
             cantidad = datos['cantidad']
             motivo = datos['motivo']
@@ -410,9 +530,11 @@ class InventarioView(APIView):
                 request.user, "AJUSTE_INVENTARIO",
                 f"{tipo.upper()} {cantidad} - {producto.nombre}: {motivo}")
 
-        return Response(MovimientoInventarioLecturaSerializer(
-            MovimientoInventario.objects.latest('created_at')).data,
-            status=status.HTTP_201_CREATED)
+        movimiento = (MovimientoInventario.objects
+                      .filter(producto__empresa=empresa)
+                      .latest('created_at'))
+        return Response(MovimientoInventarioLecturaSerializer(movimiento).data,
+                        status=status.HTTP_201_CREATED)
 
 
 # ------------------------------ Alertas -----------------------------------
@@ -423,14 +545,14 @@ class AlertasView(APIView):
 
     def get(self, request):
         alertas = Notificacion.objects.filter(
-            empresa=request.user.perfil.empresa, leida=False)
+            empresa=_obtener_empresa(request), leida=False)
         datos = NotificacionLecturaSerializer(
             alertas.order_by('-created_at')[:50], many=True).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request, id):
         alerta = Notificacion.objects.filter(
-            empresa=request.user.perfil.empresa, id=id).first()
+            empresa=_obtener_empresa(request), id=id).first()
         if not alerta:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -445,12 +567,17 @@ class AlertasView(APIView):
 
 
 class AlertaActualizarStockView(APIView):
-    """POST reabastece directamente desde la alerta."""
+    """POST reabastece el producto de una alerta de stock bajo: aumenta el
+    stock, registra el movimiento de inventario y marca la alerta como
+    revisada, todo en una sola transaccion.
+
+    Body opcional `{"cantidad": N}`; sin ella, repone lo necesario para
+    superar el minimo (stock_minimo - stock + 1)."""
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def post(self, request, id):
-        alerta = Notificacion.objects.filter(
-            empresa=request.user.perfil.empresa, id=id).first()
+        empresa = _obtener_empresa(request)
+        alerta = Notificacion.objects.filter(empresa=empresa, id=id).first()
         if not alerta:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -464,23 +591,47 @@ class AlertaActualizarStockView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         # Buscar el producto por SKU en el mensaje
-        import re
         match = re.search(r'\(([^)]+)\)', mensaje)
         if not match:
             return Response(
                 {"codigo": "ALERTA_INVALIDA",
                  "detalle": "No se pudo identificar el producto."},
                 status=status.HTTP_400_BAD_REQUEST)
-
         sku = match.group(1)
-        producto = Producto.objects.filter(
-            empresa=request.user.perfil.empresa,
-            sku=sku, deleted_at__isnull=True).first()
-        if not producto:
+
+        entrada = AlertaReabastecerSerializer(data=request.data)
+        if not entrada.is_valid():
             return Response(
-                {"codigo": "PRODUCTO_NO_ENCONTRADO",
-                 "detalle": "El producto ya no existe."},
+                {"codigo": "DATOS_INVALIDOS",
+                 "detalle": "La cantidad debe ser un entero mayor a 0.",
+                 "errores": entrada.errors},
                 status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            producto = Producto.objects.select_for_update().filter(
+                empresa=empresa, sku=sku, deleted_at__isnull=True).first()
+            if not producto:
+                return Response(
+                    {"codigo": "PRODUCTO_NO_ENCONTRADO",
+                     "detalle": "El producto ya no existe."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            cantidad = entrada.validated_data.get('cantidad') or max(
+                producto.stock_minimo - producto.stock + 1, 1)
+
+            producto.stock += cantidad
+            producto.save(update_fields=['stock'])
+            _registrar_movimiento(
+                producto, request.user, 'entrada', cantidad,
+                f"Reabastecimiento desde alerta #{str(alerta.id)[:8]}")
+
+            alerta.leida = True
+            alerta.save(update_fields=['leida'])
+
+            ActividadUsuario.registrar(
+                request.user, "ALERTA_REABASTECIDA",
+                f"{producto.nombre}: +{cantidad} unidades "
+                f"(alerta #{str(alerta.id)[:8]})")
 
         return Response({
             "producto": {
@@ -489,7 +640,8 @@ class AlertaActualizarStockView(APIView):
                 "sku": producto.sku,
                 "stock": producto.stock,
                 "stock_minimo": producto.stock_minimo,
-            }
+            },
+            "cantidad_agregada": cantidad,
         })
 
 
@@ -499,7 +651,7 @@ class InventarioProductosView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        productos = Producto.objects.select_related('categoria').filter(
+        productos = Producto.objects.filter(
             empresa=empresa, deleted_at__isnull=True, activo=True
         ).order_by('nombre')
 
@@ -513,8 +665,11 @@ class InventarioProductosView(APIView):
         if filtro_stock == 'true':
             productos = productos.filter(stock__lte=models.F('stock_minimo'))
 
+        # Lista acotada (nunca ilimitada).
+        limite = _limite_paginacion(
+            request.query_params.get('limite', 50))
         datos = []
-        for p in productos:
+        for p in productos[:limite]:
             datos.append({
                 "id": str(p.id),
                 "nombre": p.nombre,

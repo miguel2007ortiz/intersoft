@@ -9,37 +9,42 @@ from django.utils.crypto import get_random_string
 
 
 class Rol(models.Model):
-    """Rol de una empresa. Cada empresa tiene sus propios roles; los roles
-    base ADMINISTRADOR, EMPLEADO y CLIENTE se crean automaticamente al crear
-    la empresa, y la empresa puede crear los suyos y ajustar permisos."""
+    """Rol de la plataforma.
 
-    ROLES_BASE = ["ADMINISTRADOR", "EMPLEADO", "CLIENTE"]
+    Los roles base (ADMINISTRADOR, EMPLEADO, CLIENTE) son globales y
+    compartidos por todas las empresas: su FK `empresa` queda en None.
+
+    Los roles personalizados creados por un ADMINISTRADOR pertenecen a su
+    propia `empresa`, aislados del resto de tenants.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    empresa = models.ForeignKey(
-        "core.Empresa", on_delete=models.CASCADE, related_name="roles")
     nombre = models.CharField(max_length=30)
     descripcion = models.CharField(max_length=200, blank=True)
+    empresa = models.ForeignKey("core.Empresa", on_delete=models.CASCADE,
+                                null=True, blank=True, related_name="roles")
 
     class Meta:
         db_table = "rol"
         ordering = ["nombre"]
+        # Igual nombre solo dentro de la misma empresa. En MySQL los NULL
+        # se consideran distintos, asi que el nombre de un rol global
+        # (empresa=None) no colisiona con los de una empresa.
         constraints = [
-            models.UniqueConstraint(
-                fields=["empresa", "nombre"], name="rol_empresa_nombre_unico"),
+            models.UniqueConstraint(fields=["empresa", "nombre"],
+                                    name="rol_empresa_nombre_unicos"),
         ]
 
     def __str__(self):
-        return f"{self.nombre} ({self.empresa_id})"
-
-    @property
-    def es_sistema(self) -> bool:
-        return self.nombre in self.ROLES_BASE
+        return self.nombre.title()
 
     @classmethod
-    def de_nombre(cls, empresa, nombre: str) -> "Rol":
-        """Obtiene o crea un rol por nombre dentro de la empresa."""
-        rol, _ = cls.objects.get_or_create(empresa=empresa, nombre=nombre)
+    def de_nombre(cls, nombre: str) -> "Rol":
+        """Obtiene o crea un rol GLOBAL por nombre (empresa=None).
+
+        Los roles base no pertenecen a ninguna empresa; evita fallos si el
+        seed no corrio."""
+        rol, _ = cls.objects.get_or_create(nombre=nombre)
         return rol
 
 
@@ -76,20 +81,46 @@ class RolPermiso(models.Model):
 class Perfil(models.Model):
     ROLES = [("ADMINISTRADOR", "Administrador"), ("EMPLEADO", "Empleado"),
              ("CLIENTE", "Cliente")]
+    TIPO_DOC_CHOICES = [("CC", "Cedula de Ciudadania"), ("NIT", "NIT"),
+                        ("CE", "Cedula de Extranjeria"), ("PAS", "Pasaporte")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                    related_name="perfil")
-    empresa = models.ForeignKey("core.Empresa", on_delete=models.PROTECT, related_name="perfiles")
+    # `empresa` puede ser None para los compradores del marketplace (rol
+    # CLIENTE sin empresa). El personal interno siempre tiene una empresa.
+    empresa = models.ForeignKey("core.Empresa", on_delete=models.PROTECT,
+                                null=True, blank=True, related_name="perfiles")
     rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name="perfiles")
     es_propietario = models.BooleanField(default=False)
     intentos_fallidos = models.PositiveSmallIntegerField(default=0)
     fecha_desbloqueo = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    # Datos laborales (fase Empleados). Nulos/blank para no romper filas
+    # existentes (clientes del marketplace y personal ya creado en fase 2).
+    tipo_documento = models.CharField(max_length=10, choices=TIPO_DOC_CHOICES,
+                                      null=True, blank=True)
+    numero_documento = models.CharField(max_length=20, null=True, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    cargo = models.CharField(max_length=80, blank=True)
+    fecha_ingreso = models.DateField(null=True, blank=True)
+    debe_cambiar_password = models.BooleanField(default=False)
 
     class Meta:
         db_table = "perfil"
         verbose_name_plural = "Perfiles"
+        constraints = [
+            # NULL se considera distinto en MySQL (igual que Cliente): los
+            # perfiles sin documento (clientes del marketplace, personal sin
+            # dato aun) no colisionan entre si.
+            models.UniqueConstraint(
+                fields=["empresa", "tipo_documento", "numero_documento"],
+                name="perfil_empresa_documento_unico",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "rol"], name="perfil_empresa_rol_idx"),
+        ]
 
     def __str__(self):
         return f"{self.usuario.email} ({self.rol.nombre})"
@@ -150,38 +181,6 @@ class ActividadUsuario(models.Model):
     @classmethod
     def registrar(cls, usuario=None, accion: str = "", detalle: str = "") -> None:
         cls.objects.create(usuario=usuario, accion=accion[:120], detalle=detalle[:255])
-
-
-PERMISOS_BASE = [
-    ("usuarios.gestionar", "Crear, editar y desactivar cuentas de la empresa"),
-    ("roles.asignar", "Asignar roles y permisos a los usuarios"),
-    ("productos.gestionar", "Crear, editar y desactivar productos"),
-    ("inventario.movimientos", "Registrar entradas, salidas y ajustes de stock"),
-    ("clientes.gestionar", "Administrar el directorio de clientes"),
-    ("ventas.gestionar", "Registrar, completar y anular ventas"),
-    ("reportes.ver", "Consultar reportes e indicadores"),
-    ("configuracion.gestionar", "Editar los datos de la empresa"),
-]
-
-PERMISOS_POR_ROL = {
-    "ADMINISTRADOR": [codigo for codigo, _ in PERMISOS_BASE],
-    "EMPLEADO": ["productos.gestionar", "inventario.movimientos", "clientes.gestionar",
-                 "ventas.gestionar", "reportes.ver"],
-    "CLIENTE": [],
-}
-
-
-def crear_roles_base(empresa) -> None:
-    """Crea (idempotente) los roles base ADMINISTRADOR, EMPLEADO y CLIENTE
-    para una empresa, con sus permisos por defecto."""
-    permisos = {}
-    for codigo, descripcion in PERMISOS_BASE:
-        permisos[codigo], _ = Permiso.objects.get_or_create(
-            codigo=codigo, defaults={"descripcion": descripcion})
-    for nombre, codigos in PERMISOS_POR_ROL.items():
-        rol, _ = Rol.objects.get_or_create(empresa=empresa, nombre=nombre)
-        for codigo in codigos:
-            RolPermiso.objects.get_or_create(rol=rol, permiso=permisos[codigo])
 
 
 class TokenRecuperacion(models.Model):

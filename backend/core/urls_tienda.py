@@ -14,6 +14,8 @@ urlpatterns = [
     # Catálogo público (sin auth) - compatibilidad (scoped a la empresa del usuario)
     path("tienda/catalogo/", views_tienda.CatalogoPublicoView.as_view()),
     path("tienda/catalogo/<uuid:id>/", views_tienda.CatalogoProductoDetailView.as_view()),
+    path("tienda/catalogo/<uuid:id>/comentarios/",
+         views_tienda.ComentariosProductoView.as_view()),
 
     # Cupones
     path("tienda/cupones/", views_tienda.CuponesView.as_view()),
@@ -27,4 +29,13 @@ urlpatterns = [
 
     # Checkout
     path("tienda/checkout/", views_tienda.CheckoutView.as_view()),
+    path("tienda/completar-comprador/", views_tienda.CompletarCompradorView.as_view()),
+
+    # Pedidos del comprador
+    path("tienda/pedidos/", views_tienda.MisPedidosView.as_view()),
+
+    # Favoritos (requiere auth)
+    path("tienda/favoritos/", views_tienda.MisFavoritosView.as_view()),
+    path("tienda/favoritos/<uuid:producto_id>/", views_tienda.FavoritoToggleView.as_view()),
+    path("tienda/favoritos/<uuid:producto_id>/estado/", views_tienda.FavoritoEstadoView.as_view()),
 ]

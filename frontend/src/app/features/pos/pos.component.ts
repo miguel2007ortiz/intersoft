@@ -1,10 +1,11 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { Cliente, Producto, LineaPOS, VentaPOSInput, StockInsuficiente } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-pos',
@@ -24,11 +25,21 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
             <select [(ngModel)]="clienteSeleccionado" class="input">
               <option value="">Seleccionar cliente...</option>
               @for (c of clientes(); track c.id) {
-                <option [value]="c.id">{{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})</option>
+                @if (c.id === clienteGenericoId()) {
+                  <option [value]="c.id">⚡ {{ c.nombre }} (venta rapida)</option>
+                } @else {
+                  <option [value]="c.id">{{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})</option>
+                }
               }
             </select>
-            @if (!clientes().length && !cargandoClientes()) {
+@if (errorClientes()) {
+              <span class="hint error">{{ errorClientes() }}
+                <button type="button" class="btn-reintentar" (click)="cargarClientes()">Reintentar</button>
+              </span>
+            } @else if (!clientes().length && !cargandoClientes()) {
               <span class="hint">No hay clientes. <a routerLink="/clientes">Crear uno</a></span>
+            } @else {
+              <span class="hint">¿Compra a nombre de alguien? <a routerLink="/clientes">Registrar cliente</a></span>
             }
           </div>
         </section>
@@ -183,7 +194,13 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
     .cliente-select { position: relative; }
     .hint { display: block; margin-top: var(--e1); font-size: 13px; color: var(--gris); }
+    .hint.error { color: #b42318; }
     .hint a { color: var(--primario); }
+    .btn-reintentar {
+      margin-left: 8px; padding: 4px 12px; border: 1px solid var(--linea); background: #fff;
+      border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+    }
+    .btn-reintentar:hover { border-color: #b42318; color: #b42318; }
 
     .producto-add { position: relative; display: flex; gap: var(--e3); }
     .resultados-busqueda {
@@ -252,9 +269,17 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class PosComponent {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarProductosDebounced = debounce(
+    this.destroyRef, () => this.buscarProductosInmediato(), 300);
 
   readonly clientes = signal<Cliente[]>([]);
   readonly cargandoClientes = signal(true);
+  readonly errorClientes = signal('');
+  /** Id del cliente "Consumidor final": se preselecciona para venta rapida
+   * de mostrador (RN: fila, tienda fisica), sin bloquear elegir uno real. */
+  readonly clienteGenericoId = signal<string | null>(null);
   busquedaProducto = '';
   readonly resultadosBusqueda = signal<Producto[]>([]);
   readonly lineas = signal<LineaPOS[]>([]);
@@ -285,12 +310,36 @@ export class PosComponent {
 
   constructor() {
     this.cargarClientes();
+    this.cargarClienteGenerico();
   }
 
   cargarClientes(): void {
+    this.cargandoClientes.set(true);
     this.catalogo.listarClientes().subscribe({
-      next: (r) => { this.clientes.set(r.resultados); this.cargandoClientes.set(false); },
-      error: () => this.cargandoClientes.set(false),
+      next: (r) => {
+        this.clientes.set(r.resultados);
+        this.errorClientes.set('');
+        this.cargandoClientes.set(false);
+      },
+      error: (e) => {
+        this.errorClientes.set(e.detalle ?? 'No se pudieron cargar los clientes.');
+        this.cargandoClientes.set(false);
+      },
+    });
+  }
+
+  /** Trae (o crea) el cliente generico y lo deja preseleccionado, sin
+   * esperar a que cargarClientes() termine ni pisar una eleccion previa. */
+  cargarClienteGenerico(): void {
+    this.catalogo.obtenerClienteGenerico().subscribe({
+      next: (c) => {
+        this.clienteGenericoId.set(c.id);
+        if (!this.clientes().some((x) => x.id === c.id)) {
+          this.clientes.update((lista) => [c, ...lista]);
+        }
+        if (!this.clienteSeleccionado) this.clienteSeleccionado = c.id;
+      },
+      error: () => {},
     });
   }
 
@@ -299,6 +348,10 @@ export class PosComponent {
       this.resultadosBusqueda.set([]);
       return;
     }
+    this.buscarProductosDebounced();
+  }
+
+  private buscarProductosInmediato(): void {
     this.catalogo.listarProductos({ busqueda: this.busquedaProducto, activo: true })
       .subscribe({
         next: (r) => this.resultadosBusqueda.set(r.resultados),

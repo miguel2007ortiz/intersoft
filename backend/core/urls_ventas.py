@@ -12,6 +12,10 @@ urlpatterns = [
     path("ventas/<uuid:id>/", views_ventas.VentaDetalleView.as_view()),
     path("ventas/<uuid:id>/anular/", views_ventas.VentaDetalleView.as_view()),
 
+    # Envios (fase 10)
+    path("envios/", views_ventas.EnviosView.as_view()),
+    path("ventas/<uuid:id>/envio/", views_ventas.EnvioDetalleView.as_view()),
+
     # Inventario
     path("inventario/", views_ventas.InventarioView.as_view()),
     path("inventario/productos/", views_ventas.InventarioProductosView.as_view()),

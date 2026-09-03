@@ -1,14 +1,16 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { EstadoVacioComponent } from '../../shared/estado-vacio/estado-vacio.component';
+import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-ventas',
-  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, PanelShellComponent],
+  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, PanelShellComponent, EstadoVacioComponent],
   template: `
     <app-panel-shell>
       <div class="ventas">
@@ -20,7 +22,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         <!-- Filtros -->
         <section class="filtros">
           <input type="text" placeholder="Buscar por factura o cliente..."
-                 [(ngModel)]="busqueda" (input)="cargarVentas()" class="input" />
+                 [(ngModel)]="busqueda" (input)="buscarDebounced()" class="input" />
           <select [(ngModel)]="filtroEstado" (ngModelChange)="cargarVentas()" class="input input-estado">
             <option value="">Todos los estados</option>
             <option value="completada">Completadas</option>
@@ -45,8 +47,18 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         <!-- Lista -->
         @if (cargando()) {
           <p class="cargando">Cargando ventas...</p>
+        } @else if (error()) {
+          <app-estado-vacio tipo="error" [titulo]="'No pudimos cargar las ventas'"
+                            [mensaje]="error()" accionTexto="Reintentar"
+                            (accion)="cargarVentas()"></app-estado-vacio>
         } @else if (!ventas().length) {
-          <p class="vacio">No hay ventas registradas.</p>
+          @if (busqueda || filtroEstado) {
+            <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
+                              mensaje="No se encontraron ventas para esa busqueda o filtro."></app-estado-vacio>
+          } @else {
+            <app-estado-vacio tipo="vacio" titulo="Aun no hay ventas"
+                              mensaje="Inicia una venta desde el punto de venta y aparecera aqui."></app-estado-vacio>
+          }
         } @else {
           <div class="tabla-wrap">
             <table class="tabla">
@@ -134,7 +146,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
     .stat-label { display: block; font-size: 12px; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; }
     .stat-valor { font-size: 20px; font-weight: 700; }
 
-    .cargando, .vacio { color: var(--gris); text-align: center; padding: var(--e6); }
+    .cargando { color: var(--gris); text-align: center; padding: var(--e6); }
 
     .tabla-wrap { overflow-x: auto; }
     .tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -186,11 +198,15 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class VentasComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly ventas = signal<Venta[]>([]);
   readonly cargando = signal(true);
+  readonly error = signal<string | null>(null);
   busqueda = '';
   filtroEstado = '';
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  readonly buscarDebounced = debounce(this.destroyRef, () => this.cargarVentas(), 300);
   readonly estadisticas = signal<{ total_ventas: string; total_registros: number } | null>(null);
 
   readonly ventaAnulando = signal<Venta | null>(null);
@@ -212,9 +228,13 @@ export class VentasComponent implements OnInit {
         this.ventas.set(r.resultados);
         const est = r.estadisticas as { total_ventas: string; total_registros: number } | undefined;
         this.estadisticas.set(est ?? null);
+        this.error.set(null);
         this.cargando.set(false);
       },
-      error: () => this.cargando.set(false),
+      error: (e) => {
+        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+        this.cargando.set(false);
+      },
     });
   }
 

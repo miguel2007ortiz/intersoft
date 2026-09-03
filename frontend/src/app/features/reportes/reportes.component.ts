@@ -90,7 +90,7 @@ export class ReportesComponent {
 
   dinero(valor: string | number | null | undefined): string {
     const n = Number(valor ?? 0);
-    return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+    return `${n.toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`;
   }
 
   numero(valor: string | number | null | undefined): string {

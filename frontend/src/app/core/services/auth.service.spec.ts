@@ -41,10 +41,18 @@ describe('AuthService', () => {
     const peticion = http.expectOne(`${api}/auth/login/`);
     peticion.flush({ access: 'tok-access-1', refresh: 'tok-refresh-1', usuario: USUARIO });
 
+    // El login complementa con /auth/me/ (fuente de permisos del frontend).
+    http.expectOne(`${api}/auth/me/`).flush({
+      ...USUARIO,
+      permisos: ['empleado.leer'],
+      debe_cambiar_password: false,
+    });
+
     expect(servicio.token()).toBe('tok-access-1');
     expect(servicio.refresco()).toBe('tok-refresh-1');
     expect(servicio.estaAutenticado()).toBe(true);
     expect(localStorage.getItem('intersoft.refresh')).toBe('tok-refresh-1');
+    expect(servicio.tienePermiso('empleado.leer')).toBe(true);
   });
 
   it('devuelve false y no llama al servidor si no hay refresh token', async () => {

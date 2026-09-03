@@ -1,9 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
+import { programarAviso } from '../../../core/utils/temporizador.util';
 import { ErrorSeguridad, UsuarioAdmin } from '../../../core/models/seguridad.model';
+
+const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-usuarios',
@@ -14,10 +17,12 @@ import { ErrorSeguridad, UsuarioAdmin } from '../../../core/models/seguridad.mod
 export class UsuariosComponent {
   private readonly fb = inject(FormBuilder);
   private readonly seguridad = inject(SeguridadService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly auth = inject(AuthService);
 
   readonly usuarios = signal<UsuarioAdmin[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
 
@@ -81,12 +86,14 @@ export class UsuariosComponent {
   }
 
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
     }
     const datos = this.formulario.getRawValue();
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     const peticion = enEdicion
       ? this.seguridad.editarUsuario(enEdicion.id, datos)
@@ -94,12 +101,16 @@ export class UsuariosComponent {
 
     peticion.subscribe({
       next: () => {
+        this.guardando.set(false);
         this.exito.set(enEdicion ? 'Usuario actualizado.' : 'Usuario creado.');
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
       },
-      error: (e: ErrorSeguridad) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorSeguridad) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
   }
 
@@ -113,7 +124,7 @@ export class UsuariosComponent {
         this.usuarios.update((lista) =>
           lista.map((u) => (u.id === actualizado.id ? actualizado : u)));
         this.exito.set(actualizado.activo ? 'Cuenta reactivada.' : 'Cuenta desactivada.');
-        setTimeout(() => this.exito.set(null), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
       },
       error: (e: ErrorSeguridad) => this.error.set(e.detalle ?? 'No se pudo cambiar el estado.'),
     });

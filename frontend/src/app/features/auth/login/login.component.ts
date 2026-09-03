@@ -90,6 +90,11 @@ export class LoginComponent implements OnDestroy {
   private destinoDespuesDeLogin(): string {
     const crudo = this.ruta.snapshot.queryParamMap.get('redirigir');
     if (crudo && crudo.startsWith('/') && !crudo.startsWith('//')) return crudo;
+    // Los compradores del marketplace (CLIENTE sin empresa) van a la tienda.
+    const usuario = this.auth.usuario();
+    if (usuario && usuario.rol === 'CLIENTE' && !usuario.empresa) {
+      return '/catalogo';
+    }
     return '/dashboard';
   }
 }

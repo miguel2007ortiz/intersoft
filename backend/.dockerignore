@@ -1,0 +1,22 @@
+# ===== Backend .dockerignore =====
+# No subir secretos ni artefactos locales a la imagen.
+.env
+.env.*
+!*.env.example
+
+# Cache y reportes de herramientas.
+.ruff_cache/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Artefactos generados.
+logs/
+media/
+staticfiles/
+__pycache__/
+*.pyc
+
+# Entornos virtuales.
+venv/
+.venv/

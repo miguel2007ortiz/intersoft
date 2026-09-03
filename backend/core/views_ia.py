@@ -49,8 +49,10 @@ class IAConversacionesView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def get(self, request):
+        # Lista acotada (nunca ilimitada): el orden ya es -created_at por
+        # Meta.ordering del modelo.
         conversaciones = (IAConversacion.objects.filter(usuario=request.user)
-                          .annotate(_ultimo_mensaje=_ultimo_mensaje_anotacion()))
+                          .annotate(_ultimo_mensaje=_ultimo_mensaje_anotacion())[:100])
         datos = IAConversacionListaSerializer(
             conversaciones, many=True).data
         return Response({"resultados": datos})
@@ -99,6 +101,14 @@ class IAChatView(APIView):
     permission_classes = [IsAuthenticated, EsPersonal]
 
     def post(self, request):
+        # Rate-limit por usuario antes de tocar la conversacion ni el motor.
+        if not ia_engine.verificar_rate_limit(request.user):
+            return Response(
+                {"codigo": "IA_DEMASIADAS_PETICIONES",
+                 "detalle": "Has superado el numero de consultas permitido. "
+                            "Espera un momento e intenta de nuevo."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         entrada = IAChatInputSerializer(data=request.data)
         if not entrada.is_valid():
             return Response(

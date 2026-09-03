@@ -15,9 +15,9 @@ Flujo:
 6. Todo queda auditado en actividad_usuario."""
 
 import os
-from decimal import Decimal
 
-from django.db import models, transaction
+from django.core.files.base import ContentFile
+from django.db import IntegrityError, models, transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -28,8 +28,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (DetalleVenta, FacturaElectronica, MovimientoInventario,
-                     NotaCredito, Notificacion, Producto, Venta)
+from .models import (FacturaElectronica, MovimientoInventario,
+                     NotaCredito, Producto, Venta)
 from .serializers_facturacion import (FacturaElectronicaLecturaSerializer,
                                       GenerarFacturaSerializer,
                                       NotaCreditoInputSerializer,
@@ -95,6 +95,23 @@ def _registrar_movimiento(producto, usuario, tipo, cantidad, motivo):
     )
 
 
+def _guardar_comprobantes(instancia, numero, respuesta):
+    """Guarda el PDF y XML devueltos por la DIAN en los campos del
+    comprobante (antes se descartaban y quedaban siempre null).
+    El PDF puede llegar como bytes (real) o str (legacy/mock).
+    No llama a save() del modelo: el caller ya lo hace con update_fields."""
+    if respuesta.comprobante_pdf:
+        pdf_datos = respuesta.comprobante_pdf
+        if isinstance(pdf_datos, str):
+            pdf_datos = pdf_datos.encode('utf-8')
+        instancia.pdf.save(f"{numero}.pdf", ContentFile(pdf_datos),
+                           save=False)
+    if respuesta.comprobante_xml:
+        instancia.xml.save(f"{numero}.xml",
+                           ContentFile(respuesta.comprobante_xml.encode('utf-8')),
+                           save=False)
+
+
 # ------------------------------ Facturas ---------------------------------
 
 class FacturasView(APIView):
@@ -137,45 +154,59 @@ class FacturasView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         empresa = _obtener_empresa(request)
-        venta = Venta.objects.filter(
-            empresa=empresa, deleted_at__isnull=True,
-            id=entrada.validated_data['venta_id']
-        ).first()
-        if not venta:
-            return Response(
-                {"codigo": "VENTA_NO_ENCONTRADA",
-                 "detalle": "La venta no existe."},
-                status=status.HTTP_400_BAD_REQUEST)
 
-        if venta.estado != 'completada':
-            return Response(
-                {"codigo": "ESTADO_INVALIDO",
-                 "detalle": "Solo se pueden facturar ventas completadas."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if hasattr(venta, 'factura_electronica'):
-            return Response(
-                {"codigo": "YA_FACTURADA",
-                 "detalle": "Esta venta ya tiene factura electronica.",
-                 "factura_id": str(venta.factura_electronica.id)},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        numero_f = f"FE-{venta.numero_factura}"
-        factura = FacturaElectronica.objects.create(
-            venta=venta,
-            numero=numero_f,
-            estado='pendiente',
-        )
-
-        datos_dian = _datos_venta_para_dian(venta)
-        respuesta = enviar_factura(datos_dian)
-
+        # La venta se bloquea (SELECT FOR UPDATE) para evitar que dos
+        # peticiones concurrentes generen dos FacturaElectronica para la
+        # misma venta; el IntegrityError queda como respaldo defensivo.
         with transaction.atomic():
+            venta = Venta.objects.select_for_update().filter(
+                empresa=empresa, deleted_at__isnull=True,
+                id=entrada.validated_data['venta_id']
+            ).first()
+            if not venta:
+                return Response(
+                    {"codigo": "VENTA_NO_ENCONTRADA",
+                     "detalle": "La venta no existe."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if venta.estado != 'completada':
+                return Response(
+                    {"codigo": "ESTADO_INVALIDO",
+                     "detalle": "Solo se pueden facturar ventas completadas."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if hasattr(venta, 'factura_electronica'):
+                return Response(
+                    {"codigo": "YA_FACTURADA",
+                     "detalle": "Esta venta ya tiene factura electronica.",
+                     "factura_id": str(venta.factura_electronica.id)},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            numero_f = f"FE-{venta.numero_factura}"
+            try:
+                factura = FacturaElectronica.objects.create(
+                    venta=venta,
+                    numero=numero_f,
+                    estado='pendiente',
+                )
+            except IntegrityError:
+                # Respaldo: otra peticion logro crear la factura primero.
+                factura_existente = FacturaElectronica.objects.filter(
+                    venta=venta).first()
+                return Response(
+                    {"codigo": "YA_FACTURADA",
+                     "detalle": "Esta venta ya tiene factura electronica.",
+                     "factura_id": str(factura_existente.id)
+                     if factura_existente else None},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            datos_dian = _datos_venta_para_dian(venta)
+            respuesta = enviar_factura(datos_dian)
+
             if respuesta.aprobada:
                 factura.estado = 'aprobada'
                 factura.cufe = respuesta.cufe
-                factura.pdf = None
-                factura.xml = None
+                _guardar_comprobantes(factura, numero_f, respuesta)
                 factura.save(update_fields=[
                     'estado', 'cufe', 'pdf', 'xml', 'updated_at'
                 ])
@@ -321,8 +352,9 @@ class FacturaReintentarView(APIView):
                 factura.estado = 'aprobada'
                 factura.cufe = respuesta.cufe
                 factura.motivo_rechazo = ''
+                _guardar_comprobantes(factura, factura.numero, respuesta)
                 factura.save(update_fields=[
-                    'estado', 'cufe', 'motivo_rechazo',
+                    'estado', 'cufe', 'motivo_rechazo', 'pdf', 'xml',
                     'intentos', 'ultimo_intento', 'updated_at'
                 ])
             elif respuesta.codigo_error == 'DATOS_INVALIDOS':
@@ -375,72 +407,77 @@ class NotasCreditoView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
 
         empresa = _obtener_empresa(request)
-        venta = Venta.objects.filter(
-            empresa=empresa, deleted_at__isnull=True,
-            id=entrada.validated_data['venta_id']
-        ).first()
-        if not venta:
-            return Response(
-                {"codigo": "VENTA_NO_ENCONTRADA",
-                 "detalle": "La venta no existe."},
-                status=status.HTTP_400_BAD_REQUEST)
 
-        if venta.estado != 'completada':
-            return Response(
-                {"codigo": "ESTADO_INVALIDO",
-                 "detalle": "Solo se pueden crear notas credito "
-                            "para ventas completadas."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if not hasattr(venta, 'factura_electronica'):
-            return Response(
-                {"codigo": "SIN_FACTURA",
-                 "detalle": "La venta no tiene factura electronica. "
-                            "Genera la factura primero."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if venta.factura_electronica.estado != 'aprobada':
-            return Response(
-                {"codigo": "FACTURA_NO_APROBADA",
-                 "detalle": "La factura electronica debe estar "
-                            "aprobada por la DIAN."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        if NotaCredito.objects.filter(
-                venta_original=venta, estado__in=('pendiente', 'aprobada')
-        ).exists():
-            return Response(
-                {"codigo": "YA_TIENE_NOTA",
-                 "detalle": "Esta venta ya tiene una nota credito "
-                            "activa o pendiente."},
-                status=status.HTTP_400_BAD_REQUEST)
-
-        numero_nc = f"NC-{venta.numero_factura}"
-        nota = NotaCredito.objects.create(
-            venta_original=venta,
-            numero=numero_nc,
-            motivo=entrada.validated_data['motivo'],
-            estado='pendiente',
-        )
-
-        cliente = venta.cliente
-        datos_dian_nota = {
-            'numero_nota': numero_nc,
-            'numero_factura_original': venta.numero_factura,
-            'fecha': timezone.now().isoformat(),
-            'nit_empresa': empresa.nit,
-            'cliente_doc': f"{cliente.tipo_documento} {cliente.numero_documento}",
-            'total': str(venta.total),
-            'motivo': nota.motivo,
-        }
-        respuesta = enviar_nota_credito(datos_dian_nota)
-
+        # La venta se bloquea para serializar las notas credito de la misma
+        # venta (evita crear dos notas activas ante peticiones simultaneas);
+        # el flujo completo (crear + enviar + revertir stock) es atomico.
         with transaction.atomic():
+            venta = Venta.objects.select_for_update().filter(
+                empresa=empresa, deleted_at__isnull=True,
+                id=entrada.validated_data['venta_id']
+            ).first()
+            if not venta:
+                return Response(
+                    {"codigo": "VENTA_NO_ENCONTRADA",
+                     "detalle": "La venta no existe."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if venta.estado != 'completada':
+                return Response(
+                    {"codigo": "ESTADO_INVALIDO",
+                     "detalle": "Solo se pueden crear notas credito "
+                                "para ventas completadas."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if not hasattr(venta, 'factura_electronica'):
+                return Response(
+                    {"codigo": "SIN_FACTURA",
+                     "detalle": "La venta no tiene factura electronica. "
+                                "Genera la factura primero."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if venta.factura_electronica.estado != 'aprobada':
+                return Response(
+                    {"codigo": "FACTURA_NO_APROBADA",
+                     "detalle": "La factura electronica debe estar "
+                                "aprobada por la DIAN."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            if NotaCredito.objects.filter(
+                    venta_original=venta, estado__in=('pendiente', 'aprobada')
+            ).exists():
+                return Response(
+                    {"codigo": "YA_TIENE_NOTA",
+                     "detalle": "Esta venta ya tiene una nota credito "
+                                "activa o pendiente."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            numero_nc = f"NC-{venta.numero_factura}"
+            nota = NotaCredito.objects.create(
+                venta_original=venta,
+                numero=numero_nc,
+                motivo=entrada.validated_data['motivo'],
+                estado='pendiente',
+            )
+
+            cliente = venta.cliente
+            datos_dian_nota = {
+                'numero_nota': numero_nc,
+                'numero_factura_original': venta.numero_factura,
+                'fecha': timezone.now().isoformat(),
+                'nit_empresa': empresa.nit,
+                'cliente_doc': f"{cliente.tipo_documento} {cliente.numero_documento}",
+                'total': str(venta.total),
+                'motivo': nota.motivo,
+            }
+            respuesta = enviar_nota_credito(datos_dian_nota)
+
             if respuesta.aprobada:
                 nota.estado = 'aprobada'
                 nota.cufe_nota = respuesta.cufe
+                _guardar_comprobantes(nota, numero_nc, respuesta)
                 nota.save(update_fields=[
-                    'estado', 'cufe_nota', 'updated_at'
+                    'estado', 'cufe_nota', 'pdf', 'xml', 'updated_at'
                 ])
 
                 detalles = venta.detalles.select_related('producto').all()

@@ -2,22 +2,34 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { personalGuard } from './core/guards/personal.guard';
+import { permisoGuard } from './core/guards/permiso.guard';
 
 export const routes: Routes = [
   {
     path: '',
-    title: 'InterSoft',
-    loadComponent: () => import('./features/home/home.component').then((m) => m.HomeComponent),
+    title: 'Marketplace — InterSoft',
+    loadComponent: () =>
+      import('./features/tienda/catalogo/catalogo.component').then((m) => m.CatalogoComponent),
   },
   {
     path: 'login',
     title: 'Iniciar sesion — InterSoft',
-    loadComponent: () => import('./features/auth/login/login.component').then((m) => m.LoginComponent),
+    loadComponent: () =>
+      import('./features/auth/login/login.component').then((m) => m.LoginComponent),
   },
   {
     path: 'registro',
     title: 'Crear cuenta — InterSoft',
-    loadComponent: () => import('./features/registro/registro.component').then((m) => m.RegistroComponent),
+    loadComponent: () =>
+      import('./features/registro/registro.component').then((m) => m.RegistroComponent),
+  },
+  {
+    path: 'registro-comprador',
+    title: 'Crear cuenta de comprador — InterSoft',
+    loadComponent: () =>
+      import('./features/registro-comprador/registro-comprador.component').then(
+        (m) => m.RegistroCompradorComponent,
+      ),
   },
   {
     path: 'recuperar',
@@ -39,14 +51,17 @@ export const routes: Routes = [
     path: 'dashboard',
     title: 'Panel — InterSoft',
     canActivate: [authGuard],
-    loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
+    loadComponent: () =>
+      import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
   },
   {
     path: 'configuracion',
     title: 'Configuracion — InterSoft',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/configuracion/configuracion.component').then((m) => m.ConfiguracionComponent),
+      import('./features/configuracion/configuracion.component').then(
+        (m) => m.ConfiguracionComponent,
+      ),
   },
   {
     path: 'clientes',
@@ -63,11 +78,29 @@ export const routes: Routes = [
       import('./features/catalogo/productos/productos.component').then((m) => m.ProductosComponent),
   },
   {
+    path: 'empleados',
+    title: 'Empleados — InterSoft',
+    canActivate: [authGuard, permisoGuard('empleado.leer')],
+    loadComponent: () =>
+      import('./features/empleados/empleados.component').then((m) => m.EmpleadosComponent),
+  },
+  {
+    path: 'cambiar-password',
+    title: 'Cambiar contraseña — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/cambiar-password/cambiar-password.component').then(
+        (m) => m.CambiarPasswordComponent,
+      ),
+  },
+  {
     path: 'admin/usuarios',
     title: 'Usuarios — InterSoft',
     canActivate: [authGuard, adminGuard],
     loadComponent: () =>
-      import('./features/administracion/usuarios/usuarios.component').then((m) => m.UsuariosComponent),
+      import('./features/administracion/usuarios/usuarios.component').then(
+        (m) => m.UsuariosComponent,
+      ),
   },
   {
     path: 'admin/roles',
@@ -93,7 +126,8 @@ export const routes: Routes = [
     path: 'ventas',
     title: 'Ventas — InterSoft',
     canActivate: [authGuard, personalGuard],
-    loadComponent: () => import('./features/ventas/ventas.component').then((m) => m.VentasComponent),
+    loadComponent: () =>
+      import('./features/ventas/ventas.component').then((m) => m.VentasComponent),
   },
   {
     path: 'inventario',
@@ -106,7 +140,8 @@ export const routes: Routes = [
     path: 'alertas',
     title: 'Alertas — InterSoft',
     canActivate: [authGuard, personalGuard],
-    loadComponent: () => import('./features/alertas/alertas.component').then((m) => m.AlertasComponent),
+    loadComponent: () =>
+      import('./features/alertas/alertas.component').then((m) => m.AlertasComponent),
   },
   {
     path: 'catalogo',
@@ -127,6 +162,20 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/tienda/checkout/checkout.component').then((m) => m.CheckoutComponent),
+  },
+  {
+    path: 'pedidos',
+    title: 'Mis pedidos — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/tienda/pedidos/pedidos.component').then((m) => m.PedidosComponent),
+  },
+  {
+    path: 'favoritos',
+    title: 'Mis favoritos — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/tienda/favoritos/favoritos.component').then((m) => m.FavoritosComponent),
   },
   {
     path: 'facturacion',
@@ -153,7 +202,9 @@ export const routes: Routes = [
     title: 'Notificaciones — InterSoft',
     canActivate: [authGuard, adminGuard],
     loadComponent: () =>
-      import('./features/notificaciones/notificaciones.component').then((m) => m.NotificacionesComponent),
+      import('./features/notificaciones/notificaciones.component').then(
+        (m) => m.NotificacionesComponent,
+      ),
   },
   { path: '**', redirectTo: '' },
 ];

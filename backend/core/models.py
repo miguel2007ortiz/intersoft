@@ -107,10 +107,58 @@ class Producto(TimeStampedModel):
         return self.stock <= self.stock_minimo
 
 
+class ComentarioProducto(TimeStampedModel):
+    """Reseña/comentario de un comprador sobre un producto del marketplace.
+
+    Un usuario autenticado deja como maximo un comentario por producto
+    (unique_together); si vuelve a comentar, se actualiza el existente
+    (ver ComentarioProductoSerializer)."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='comentarios')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='comentarios_productos')
+    calificacion = models.PositiveSmallIntegerField()
+    comentario = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'comentario_producto'
+        unique_together = ('producto', 'usuario')
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(calificacion__gte=1) & models.Q(calificacion__lte=5),
+                name='comentario_calificacion_entre_1_y_5'),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto} ({self.calificacion}/5)"
+
+
+class Favorito(TimeStampedModel):
+    """Producto marcado como favorito por un usuario del marketplace.
+
+    Es global por `usuario`+`producto` (no depende de la empresa del usuario),
+    de modo que cualquier rol logueado (CLIENTE, EMPLEADO o ADMINISTRADOR)
+    pueda guardar productos que le interesan."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='favoritos')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='favoritos')
+
+    class Meta:
+        db_table = 'producto_favorito'
+        unique_together = ('usuario', 'producto')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto}"
+
+
 class Cliente(TimeStampedModel):
     TIPO_DOC_CHOICES = [('CC', 'Cedula de Ciudadania'), ('NIT', 'NIT'),
                         ('CE', 'Cedula de Extranjeria'), ('PAS', 'Pasaporte')]
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='clientes')
+    # `empresa` puede ser None para los compradores del marketplace, que no
+    # pertenecen a ninguna empresa vendedora (su cliente es global).
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='clientes')
     # Cuenta opcional del portal (tabla usuario real: auth_user + Perfil)
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name='perfil_cliente')
@@ -123,12 +171,40 @@ class Cliente(TimeStampedModel):
     ciudad = models.CharField(max_length=80, blank=True)
 
     class Meta:
-        # Documento unico DENTRO de cada empresa (multi-tenant)
+        # Documento unico DENTRO de cada empresa (multi-tenant). En MySQL los
+        # NULL se consideran distintos, asi que los clientes del marketplace
+        # (empresa=None) no colisionan entre si ni con los de las empresas.
         unique_together = ('empresa', 'tipo_documento', 'numero_documento')
+        indexes = [models.Index(fields=['empresa', 'nombre'])]
         ordering = ['nombre']
 
     def __str__(self):
         return f"{self.nombre} ({self.tipo_documento} {self.numero_documento})"
+
+    # Documento fijo del cliente generico (RN: venta rapida en tienda fisica
+    # sin registrar datos de cada comprador, ej. mostrador de supermercado).
+    DOCUMENTO_GENERICO = '0000000000'
+
+    @classmethod
+    def generico(cls, empresa):
+        """Devuelve (creandolo si hace falta) el Cliente "Consumidor final"
+        de una empresa, para ventas de mostrador donde pedir documento y
+        datos completos no es practico (fila, ticket de bajo valor, etc.).
+        Idempotente: usa get_or_create sobre el documento fijo reservado."""
+        cliente, creado = cls.objects.get_or_create(
+            empresa=empresa, tipo_documento='NIT', numero_documento=cls.DOCUMENTO_GENERICO,
+            defaults={'nombre': 'Consumidor final'},
+        )
+        # Si alguien lo desactivo por error, se reactiva: es un cliente
+        # de sistema, siempre debe estar disponible para venta rapida.
+        if not creado and cliente.deleted_at is not None:
+            cliente.deleted_at = None
+            cliente.save(update_fields=['deleted_at'])
+        return cliente
+
+    @property
+    def es_generico(self):
+        return self.numero_documento == self.DOCUMENTO_GENERICO
 
     @property
     def total_compras(self):
@@ -161,7 +237,10 @@ class Venta(TimeStampedModel):
 
     class Meta:
         ordering = ['-fecha']
-        indexes = [models.Index(fields=['empresa', '-fecha']), models.Index(fields=['estado'])]
+        indexes = [models.Index(fields=['empresa', '-fecha']),
+                   models.Index(fields=['estado']),
+                   models.Index(fields=['empresa', 'estado', '-fecha'],
+                                name='venta_empresa_estado_fecha_idx')]
         constraints = [
             models.CheckConstraint(condition=models.Q(total__gte=0),
                                    name='venta_total_no_negativo'),
@@ -212,6 +291,74 @@ class DetalleVenta(TimeStampedModel):
     @property
     def subtotal(self):
         return self.precio_unitario * self.cantidad
+
+
+class Envio(TimeStampedModel):
+    """Despacho/logistica de una venta del marketplace (canal tienda). Una
+    venta de mostrador/POS no tiene Envio asociado (no aplica).
+
+    Snapshot de direccion/ciudad al momento del checkout: si el cliente
+    cambia su direccion despues, los envios ya creados no se alteran (igual
+    criterio que el resto del sistema con datos historicos de factura)."""
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente de preparacion'),
+        ('preparando', 'Preparando pedido'),
+        ('despachado', 'Despachado'),
+        ('en_transito', 'En transito'),
+        ('entregado', 'Entregado'),
+        ('no_entregado', 'Intento fallido'),
+        ('devuelto', 'Devuelto al vendedor'),
+    ]
+    # Transiciones validas del estado de un envio. Un estado no listado como
+    # clave (entregado/devuelto) es terminal: no admite mas cambios.
+    TRANSICIONES_VALIDAS = {
+        'pendiente': {'preparando', 'despachado'},
+        'preparando': {'despachado'},
+        'despachado': {'en_transito', 'entregado', 'no_entregado'},
+        'en_transito': {'entregado', 'no_entregado'},
+        'no_entregado': {'en_transito', 'devuelto'},
+    }
+
+    venta = models.OneToOneField(Venta, on_delete=models.CASCADE, related_name='envio')
+    direccion = models.TextField()
+    ciudad = models.CharField(max_length=80)
+    departamento = models.CharField(max_length=80, blank=True)
+    transportadora = models.CharField(max_length=80, blank=True)
+    numero_guia = models.CharField(max_length=80, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    fecha_despacho = models.DateTimeField(null=True, blank=True)
+    fecha_entrega_estimada = models.DateField(null=True, blank=True)
+    fecha_entrega_real = models.DateTimeField(null=True, blank=True)
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['estado']),
+                   models.Index(fields=['numero_guia'])]
+
+    def __str__(self):
+        return f"Envio {self.get_estado_display()} - {self.venta.numero_factura}"
+
+    class TransicionInvalida(Exception):
+        pass
+
+    def cambiar_estado(self, nuevo_estado, *, guardar=True):
+        """Aplica la transicion si es valida; lanza TransicionInvalida si no.
+        Registra fecha_despacho/fecha_entrega_real automaticamente segun el
+        estado destino (no se editan a mano desde afuera)."""
+        if nuevo_estado not in dict(self.ESTADO_CHOICES):
+            raise self.TransicionInvalida(f"Estado desconocido: {nuevo_estado}")
+        permitidos = self.TRANSICIONES_VALIDAS.get(self.estado, set())
+        if nuevo_estado not in permitidos:
+            raise self.TransicionInvalida(
+                f"No se puede pasar de '{self.estado}' a '{nuevo_estado}'.")
+        self.estado = nuevo_estado
+        if nuevo_estado == 'despachado' and not self.fecha_despacho:
+            self.fecha_despacho = timezone.now()
+        if nuevo_estado == 'entregado':
+            self.fecha_entrega_real = timezone.now()
+        if guardar:
+            self.save(update_fields=['estado', 'fecha_despacho', 'fecha_entrega_real',
+                                     'updated_at'])
 
 
 class MovimientoInventario(TimeStampedModel):
@@ -277,7 +424,8 @@ class Notificacion(TimeStampedModel):
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['empresa', 'estado']),
-                   models.Index(fields=['usuario', 'leida'])]
+                   models.Index(fields=['usuario', 'leida']),
+                   models.Index(fields=['empresa', 'leida'])]
 
     def __str__(self):
         return f"{self.get_estado_display()} ({self.tipo}): {self.mensaje[:60]}"
@@ -306,10 +454,16 @@ class Cupon(TimeStampedModel):
 
 
 class Carrito(TimeStampedModel):
-    """Carrito de compras de un usuario (1 carrito activo por usuario)."""
+    """Carrito de compras de un usuario (1 carrito activo por usuario).
+
+    En el marketplace el carrito pertenece al comprador (no a una empresa
+    vendedora), por eso `empresa` puede ser None. El checkout agrupa los
+    items por empresa vendedora para generar una venta por cada una.
+    """
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                    related_name='carrito')
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='carritos')
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='carritos')
     cupon = models.ForeignKey(Cupon, on_delete=models.SET_NULL, null=True, blank=True,
                              related_name='carritos')
 

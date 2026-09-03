@@ -23,15 +23,7 @@ class UsuarioLecturaSerializer(serializers.Serializer):
     ultimo_login = serializers.DateTimeField(source="usuario.last_login")
 
 
-class EmpresaScopedMixin:
-    """Aporta la empresa del contexto para validar roles por tenant."""
-
-    @property
-    def empresa(self):
-        return self.context["empresa"]
-
-
-class UsuarioCreacionSerializer(EmpresaScopedMixin, serializers.Serializer):
+class UsuarioCreacionSerializer(serializers.Serializer):
     """Valida datos para crear una cuenta con su perfil (rol obligatorio)."""
 
     nombre = serializers.CharField(min_length=3, max_length=120)
@@ -40,10 +32,13 @@ class UsuarioCreacionSerializer(EmpresaScopedMixin, serializers.Serializer):
     rol = serializers.CharField()
 
     def validate_rol(self, valor):
-        valor = (valor or "").strip().upper()
-        if not Rol.objects.filter(empresa=self.empresa, nombre=valor).exists():
+        nombre = (valor or "").strip().upper()
+        empresa = self.context.get("empresa")
+        if not empresa or not Rol.objects.filter(
+                nombre=nombre).filter(empresa=empresa).exists() \
+                and not Rol.objects.filter(nombre=nombre, empresa__isnull=True).exists():
             raise serializers.ValidationError("El rol indicado no existe.")
-        return valor
+        return nombre
 
     def validate_email(self, valor):
         valor = valor.strip().lower()
@@ -53,7 +48,7 @@ class UsuarioCreacionSerializer(EmpresaScopedMixin, serializers.Serializer):
         return valor
 
 
-class UsuarioEdicionSerializer(EmpresaScopedMixin, serializers.Serializer):
+class UsuarioEdicionSerializer(serializers.Serializer):
     nombre = serializers.CharField(min_length=3, max_length=120)
     email = serializers.EmailField()
     rol = serializers.CharField()
@@ -61,10 +56,14 @@ class UsuarioEdicionSerializer(EmpresaScopedMixin, serializers.Serializer):
                                      validators=[validar_fuerza_password])
 
     def validate_rol(self, valor):
-        valor = (valor or "").strip().upper()
-        if not Rol.objects.filter(empresa=self.empresa, nombre=valor).exists():
+        nombre = (valor or "").strip().upper()
+        empresa = self.context.get("empresa")
+        visible = Rol.objects.filter(nombre=nombre, empresa__isnull=True).exists() or (
+            empresa is not None and Rol.objects.filter(
+                nombre=nombre, empresa=empresa).exists())
+        if not visible:
             raise serializers.ValidationError("El rol indicado no existe.")
-        return valor
+        return nombre
 
     def validate_email(self, valor):
         valor = valor.strip().lower()
@@ -89,7 +88,6 @@ class RolLecturaSerializer(serializers.Serializer):
                     .values_list("permiso__codigo", flat=True))
 
     def get_total_usuarios_activos(self, rol) -> int:
-        # Usa la anotacion del queryset (Fase 6) si existe.
         if hasattr(rol, "total_usuarios_activos"):
             return rol.total_usuarios_activos
         return Perfil.objects.filter(rol=rol, deleted_at__isnull=True,
@@ -99,7 +97,7 @@ class RolLecturaSerializer(serializers.Serializer):
         return rol.nombre in ROLES_DEL_SISTEMA
 
 
-class RolEscrituraSerializer(EmpresaScopedMixin, serializers.Serializer):
+class RolEscrituraSerializer(serializers.Serializer):
     nombre = serializers.CharField(min_length=3, max_length=30)
     descripcion = serializers.CharField(required=False, allow_blank=True,
                                         max_length=200, default="")
@@ -108,7 +106,17 @@ class RolEscrituraSerializer(EmpresaScopedMixin, serializers.Serializer):
 
     def validate_nombre(self, valor):
         valor = valor.strip().upper()
-        consulta = Rol.objects.filter(empresa=self.empresa, nombre__iexact=valor)
+        empresa = self.context.get("empresa") if self.context else None
+
+        # Un rol no puede usar el nombre de un rol base del sistema.
+        if valor in ROLES_DEL_SISTEMA:
+            raise serializers.ValidationError("Este nombre esta reservado. Elige otro.")
+
+        consulta = Rol.objects.filter(nombre__iexact=valor)
+        if empresa is not None:
+            # La unicidad de los roles personalizados es por empresa; los
+            # que son de otras empresas no colisionan.
+            consulta = consulta.filter(empresa=empresa)
         if self.instance is not None:
             consulta = consulta.exclude(pk=self.instance.pk)
         if consulta.exists():
