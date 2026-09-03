@@ -2,6 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
+import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import {
@@ -12,7 +13,7 @@ const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-productos',
-  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent, EstadoVacioComponent],
   templateUrl: './productos.component.html',
   styleUrl: './productos.component.css',
 })

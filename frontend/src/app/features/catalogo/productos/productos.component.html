@@ -118,6 +118,10 @@
     <div class="tarjeta sin-relleno">
       @if (cargando()) {
         <p class="gris centrado">Cargando productos...</p>
+      } @else if (!productos().length) {
+        <app-estado-vacio tipo="vacio" titulo="Aun no hay productos"
+                          mensaje="Crea tu primer producto para comenzar a facturar."
+                          accionTexto="Nuevo producto" (accion)="abrirCreacion()"></app-estado-vacio>
       } @else {
         <table class="tabla">
           <thead>
@@ -165,8 +169,6 @@
                   }
                 </td>
               </tr>
-            } @empty {
-              <tr><td colspan="6" class="centrado gris">Todavia no hay productos.</td></tr>
             }
           </tbody>
         </table>

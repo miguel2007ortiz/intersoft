@@ -1,12 +1,13 @@
 import { DecimalPipe, DatePipe } from '@angular/common';
 import { Component, inject, signal, OnInit } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { Pedido } from '../../../core/models/tienda.model';
+import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
 
 @Component({
   selector: 'app-pedidos',
-  imports: [DecimalPipe, DatePipe, RouterLink],
+  imports: [DecimalPipe, DatePipe, RouterLink, EstadoVacioComponent],
   template: `
     <div class="pedidos">
       <header class="pedidos-header">
@@ -17,15 +18,13 @@ import { Pedido } from '../../../core/models/tienda.model';
       @if (cargando()) {
         <div class="cargando">Cargando tus pedidos...</div>
       } @else if (error()) {
-        <div class="error-box" role="alert">
-          <p>{{ error() }}</p>
-          <button type="button" class="btn-reintentar" (click)="cargarPedidos()">Reintentar</button>
-        </div>
+        <app-estado-vacio tipo="error" titulo="No pudimos cargar tus pedidos"
+                          [mensaje]="error()" accionTexto="Reintentar"
+                          (accion)="cargarPedidos()"></app-estado-vacio>
       } @else if (!pedidos().length) {
-        <div class="vacio">
-          <p>Todavia no has hecho ningun pedido.</p>
-          <a routerLink="/catalogo" class="btn-seguir">Ver productos</a>
-        </div>
+        <app-estado-vacio tipo="vacio" titulo="Todavia no has hecho pedidos"
+                          mensaje="Explora el catalogo y haz tu primer pedido."
+                          accionTexto="Ver productos" (accion)="verCatalogo()"></app-estado-vacio>
       } @else {
         <section class="lista">
           @for (p of pedidos(); track p.id; let i = $index) {
@@ -120,12 +119,17 @@ import { Pedido } from '../../../core/models/tienda.model';
 })
 export class PedidosComponent implements OnInit {
   private readonly tienda = inject(TiendaService);
+  private readonly router = inject(Router);
 
   readonly pedidos = signal<Pedido[]>([]);
   readonly cargando = signal(true);
   readonly error = signal('');
 
   Number = Number;
+
+  verCatalogo(): void {
+    this.router.navigate(['/catalogo']);
+  }
 
   ngOnInit(): void {
     this.cargarPedidos();

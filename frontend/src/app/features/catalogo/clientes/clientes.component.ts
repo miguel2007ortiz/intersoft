@@ -2,6 +2,7 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
+import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
@@ -14,7 +15,7 @@ const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-clientes',
-  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent, EstadoVacioComponent],
   templateUrl: './clientes.component.html',
   styleUrl: './clientes.component.css',
 })

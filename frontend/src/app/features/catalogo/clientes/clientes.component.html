@@ -117,14 +117,13 @@
       @if (cargando()) {
         <p class="gris centrado">Cargando clientes...</p>
       } @else if (!clientes().length && hayBusqueda()) {
-        <p class="gris centrado">No se encontraron clientes para «{{ busqueda() }}».
-          <button type="button" class="enlace" (click)="limpiarBusqueda()">Limpiar busqueda</button>
-        </p>
+        <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
+                          [mensaje]="'No se encontraron clientes para «' + busqueda() + '».'"
+                          accionTexto="Limpiar busqueda" (accion)="limpiarBusqueda()"></app-estado-vacio>
       } @else if (!clientes().length) {
-        <div class="centrado vacio-onboarding">
-          <p class="gris">Todavia no hay clientes registrados.</p>
-          <button type="button" class="btn btn-primario" (click)="abrirCreacion()">Registrar el primero</button>
-        </div>
+        <app-estado-vacio tipo="vacio" titulo="Todavia no hay clientes"
+                          mensaje="Registra tu primer cliente y empieza a facturar."
+                          accionTexto="Registrar el primero" (accion)="abrirCreacion()"></app-estado-vacio>
       } @else {
         <table class="tabla">
           <thead>

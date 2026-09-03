@@ -5,11 +5,12 @@ import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { EstadoVacioComponent } from '../../shared/estado-vacio/estado-vacio.component';
 import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-ventas',
-  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, PanelShellComponent],
+  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, PanelShellComponent, EstadoVacioComponent],
   template: `
     <app-panel-shell>
       <div class="ventas">
@@ -47,12 +48,17 @@ import { debounce } from '../../core/utils/temporizador.util';
         @if (cargando()) {
           <p class="cargando">Cargando ventas...</p>
         } @else if (error()) {
-          <div class="estado-error" role="alert">
-            <p>{{ error() }}</p>
-            <button type="button" class="btn-reintentar" (click)="cargarVentas()">Reintentar</button>
-          </div>
+          <app-estado-vacio tipo="error" [titulo]="'No pudimos cargar las ventas'"
+                            [mensaje]="error()" accionTexto="Reintentar"
+                            (accion)="cargarVentas()"></app-estado-vacio>
         } @else if (!ventas().length) {
-          <p class="vacio">No hay ventas registradas.</p>
+          @if (busqueda || filtroEstado) {
+            <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
+                              mensaje="No se encontraron ventas para esa busqueda o filtro."></app-estado-vacio>
+          } @else {
+            <app-estado-vacio tipo="vacio" titulo="Aun no hay ventas"
+                              mensaje="Inicia una venta desde el punto de venta y aparecera aqui."></app-estado-vacio>
+          }
         } @else {
           <div class="tabla-wrap">
             <table class="tabla">
@@ -140,18 +146,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     .stat-label { display: block; font-size: 12px; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; }
     .stat-valor { font-size: 20px; font-weight: 700; }
 
-    .cargando, .vacio { color: var(--gris); text-align: center; padding: var(--e6); }
-
-    .estado-error {
-      text-align: center; padding: var(--e6) var(--e4); color: #b42318;
-      display: flex; flex-direction: column; align-items: center; gap: var(--e3);
-    }
-    .estado-error p { margin: 0; }
-    .btn-reintentar {
-      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
-      border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
-    }
-    .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }
+    .cargando { color: var(--gris); text-align: center; padding: var(--e6); }
 
     .tabla-wrap { overflow-x: auto; }
     .tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
