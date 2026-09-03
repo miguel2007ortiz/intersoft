@@ -10,21 +10,16 @@ Cubre los huecos de cobertura y las correcciones de la fase 5:
 """
 
 import threading
-from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
-from django.db import transaction
 from django.test import TestCase, TransactionTestCase
-from django.utils import timezone
 
 from cuentas.models import Perfil, Rol
 from rest_framework.test import APIClient
 
-from .models import (Camara, Carrito, CarritoItem, Categoria, Cliente, Cupon,
-                     Empresa, FacturaElectronica, MovimientoInventario,
-                     NotaCredito, Producto, Venta)
+from .models import (Camara, Carrito, CarritoItem, Categoria, Cliente, Empresa, FacturaElectronica, NotaCredito, Producto, Venta)
 from .services.dian_adapter import RespuestaDIAN
 
 

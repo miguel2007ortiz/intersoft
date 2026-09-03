@@ -20,7 +20,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from cuentas.models import Perfil, Rol, RolPermiso
+from cuentas.models import Perfil, Rol
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, Cupon, Empresa,
                      FacturaElectronica, MovimientoInventario, Notificacion,

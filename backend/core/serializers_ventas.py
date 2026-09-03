@@ -10,8 +10,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import (Cliente, DetalleVenta, MovimientoInventario, Producto,
-                     Venta)
+from .models import (DetalleVenta, MovimientoInventario, Venta)
 
 
 # ------------------------------ Ventas ------------------------------------

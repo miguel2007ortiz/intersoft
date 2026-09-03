@@ -71,7 +71,7 @@ class FiltrosDashboard:
         categoria_id (p. ej. clientes_frecuentes), donde el filtro por
         categoria simplemente se ignora.
         """
-        partes = [f"empresa_id = %s"]
+        partes = ["empresa_id = %s"]
         params = [self.empresa_id]
         if self.fecha_inicio:
             partes.append(f"{alias_fecha} >= %s")
@@ -115,7 +115,7 @@ def cache_analitica(ttl=60):
         @functools.wraps(fn)
         def envuelto(*args, **kwargs):
             material = pickle.dumps((fn.__name__, args, tuple(sorted(kwargs.items()))))
-            clave = 'analitica:' + hashlib.md5(material).hexdigest()
+            clave = 'analitica:' + hashlib.blake2b(material, digest_size=16).hexdigest()
             valor = dj_cache.get(clave)
             if valor is not None:
                 return valor

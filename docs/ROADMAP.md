@@ -81,3 +81,11 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   backend ya devuelve `pagina/por_pagina/total_paginas`.
 - **Proveedor de IA**: `openai` vs `groq` (configurable por `IA_PROVIDER`).
 - **Alcance de Docker**: solo dev vs incluir producción/nginx.
+- **C2 CI endurecido (resuelta)**: se añadió al workflow `.github/workflows/ci.yml` un paso de
+  `npm audit` (frontend); y en el job backend: `ruff check`, `bandit` (con `backend/bandit.yaml`
+  donde se justifican los falsos positivos B608/B310/B311/B105-B107) y cobertura mínima del 70%
+  con `coverage --fail-under=70` sobre el suite `core`. Herramientas en `backend/requirements-dev.txt`.
+- **C1 Docker (resuelta)**: `backend/Dockerfile` (Py 3.12 + Gunicorn), `frontend/Dockerfile`
+  (multi-stage Node 22 -> nginx con reverse proxy de `/api` y `/media`), `docker-compose.yml` con
+  MySQL 8, Redis (listo para B1) y ambos servicios. El frontend inyecta `apiUrl` en build vía
+  `--build-arg API_URL` (default relativo `/api`).

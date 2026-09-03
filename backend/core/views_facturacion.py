@@ -15,7 +15,6 @@ Flujo:
 6. Todo queda auditado en actividad_usuario."""
 
 import os
-from decimal import Decimal
 
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, models, transaction
@@ -29,8 +28,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (DetalleVenta, FacturaElectronica, MovimientoInventario,
-                     NotaCredito, Notificacion, Producto, Venta)
+from .models import (FacturaElectronica, MovimientoInventario,
+                     NotaCredito, Producto, Venta)
 from .serializers_facturacion import (FacturaElectronicaLecturaSerializer,
                                       GenerarFacturaSerializer,
                                       NotaCreditoInputSerializer,

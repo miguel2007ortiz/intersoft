@@ -1,0 +1,96 @@
+# =====================================================================
+#  InterSoft - stack de contenedores.
+#
+#  Uso (desde la raiz del repo):
+#    docker compose up --build
+#
+#  Servicios:
+#    - db       : MySQL 8 (persistente)
+#    - redis    : cache (backend usa DatabaseCache por defecto, pero aqui se
+#                 provee Redis listo para CACHE_BACKEND=redis; Fase B).
+#    - backend  : Django REST (migra y sirve con Gunicorn)
+#    - frontend : Angular (nginx) + reverse proxy de /api y /media
+#
+#  Acceso:
+#    - Frontend / SPA: http://localhost:8080
+#    - API directa   : http://localhost:8000/api/...
+#    - MySQL          : 127.0.0.1:3307 (evita colision con Laragon local:3306)
+# =====================================================================
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: intersoft_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: intersoft1_db
+      MYSQL_USER: intersoft
+      MYSQL_PASSWORD: intersoft
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: intersoft_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build: ./backend
+    container_name: intersoft_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DEBUG: "True"
+      SECRET_KEY: "docker-local-secret-cambiar-en-produccion-2026"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+      DB_NAME: intersoft1_db
+      DB_USER: intersoft
+      DB_PASSWORD: intersoft
+      DB_HOST: db
+      DB_PORT: "3306"
+      # Cache en Redis (Fase B). Descomentar para usar Redis en vez de DB.
+      # CACHE_BACKEND: django.core.cache.backends.redis.RedisCache
+      # CACHE_LOCATION: redis://redis:6379/1
+      CORS_ALLOWED_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
+      CSRF_TRUSTED_ORIGINS: "http://localhost:8080"
+      FRONTEND_URL: "http://localhost:8080"
+      EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+      IA_PROVIDER: "mock"
+      WA_VINCULADO: "False"
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_URL: /api   # relativa -> nginx proxya al backend del compose
+    container_name: intersoft_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:
+  redis_data:
+  backend_media:
+  backend_static:

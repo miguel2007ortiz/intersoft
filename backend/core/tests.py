@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 
 from cuentas.models import Perfil, Rol
 
-from .models import (Camara, Categoria, Carrito, CarritoItem, Cliente,
+from .models import (Camara, Categoria, Carrito, Cliente,
                      ComentarioProducto, DetalleVenta, Empresa, IAConversacion,
                      Favorito,
                      MovimientoInventario, Notificacion, Producto, Venta)
@@ -160,9 +160,8 @@ class VentaFacturaTest(BaseCoreTest):
 
 # ============================ FASE 3: API catalogo ============================
 
-from rest_framework.test import APIClient  # noqa: E402
 
-from cuentas.models import ActividadUsuario, Perfil, Rol  # noqa: E402
+from cuentas.models import ActividadUsuario  # noqa: E402
 
 
 class BaseCatalogoTest(BaseCoreTest):
@@ -640,8 +639,8 @@ class DashboardReportesTest(BaseCatalogoTest):
 
     def test_aislamiento_entre_empresas(self):
         otra = Empresa.objects.create(nombre="Otra", nit="900999991")
-        otro_prod = Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
-                                            precio=100, stock=5, stock_minimo=3)
+        Producto.objects.create(empresa=otra, nombre="Otro", sku="SKU-O01",
+                                precio=100, stock=5, stock_minimo=3)
         # Un administrador de la empresa 'otra'
         otro_admin = User.objects.create_user(username="otro@test.co",
                                               email="otro@test.co", password="Clave12345")
@@ -977,7 +976,6 @@ class NotificacionesApiTest(BaseCatalogoTest):
 
     def test_entrega_cae_al_canal_email_sin_whatsapp(self):
         # Sin WA_VINCULADO la entrega usa el canal alterno (email a consola).
-        import io
         from django.core import mail
         aviso = crear_notificacion(
             empresa=self.empresa, tipo="sistema", mensaje="Prueba de entrega",

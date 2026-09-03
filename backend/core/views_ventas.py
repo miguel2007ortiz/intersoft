@@ -163,8 +163,8 @@ class VentaPOSView(APIView):
             Empresa.objects.select_for_update().filter(pk=empresa.pk).first()
 
             subtotal = sum(
-                Decimal(str(l['precio_unitario'])) * l['cantidad']
-                for l in lineas_stock_ok
+                Decimal(str(linea['precio_unitario'])) * linea['cantidad']
+                for linea in lineas_stock_ok
             )
             descuento = Decimal(str(datos['descuento']))
             if descuento > subtotal:

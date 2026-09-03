@@ -13,8 +13,8 @@ import os
 import uuid as uuid_mod
 
 from django.core.cache import cache
-from django.db import models, transaction
-from django.db.models import Avg, Count, Q, Sum
+from django.db import transaction
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -26,7 +26,7 @@ from cuentas.permissions import EsPersonal
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
                      Cupon, DetalleVenta, Empresa, Favorito, MovimientoInventario,
-                     Notificacion, Producto, Venta)
+                     Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
                                   ComentarioProductoEscrituraSerializer,
@@ -88,7 +88,7 @@ class CatalogoPublicoView(APIView):
             params.get('con_stock', '') + '|' + params.get('orden', '') + '|' +
             params.get('pagina', '1')
         )
-        clave = 'cat:' + hashlib.md5(material.encode('utf-8')).hexdigest()
+        clave = 'cat:' + hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest()
         if cache.get(clave) is not None:
             return Response(cache.get(clave))
 

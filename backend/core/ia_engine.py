@@ -98,7 +98,7 @@ def construir_contexto(empresa, request) -> ContextoEmpresa:
     qp = request.query_params
     material = (str(empresa.id) + '|' + qp.get('fecha_inicio', '') + '|' +
                 qp.get('fecha_fin', '') + '|' + qp.get('categoria', ''))
-    clave = 'ia-contexto:' + hashlib.md5(material.encode('utf-8')).hexdigest()
+    clave = 'ia-contexto:' + hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest()
     datos = cache.get(clave)
     if datos is None:
         resumen = _resumen_seguro(request)
@@ -233,5 +233,5 @@ def _llamar_compatible(contexto, historial, pregunta) -> str:
 
     try:
         return datos["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, TypeError) as exc:
+    except (KeyError, IndexError, TypeError):
         raise IAError("El proveedor devolvio una respuesta inesperada.")

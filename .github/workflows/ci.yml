@@ -41,6 +41,9 @@ jobs:
       - name: Pruebas unitarias (Vitest + cobertura)
         run: npm run test:ci
 
+      - name: Auditoria de dependencias (npm audit)
+        run: npm audit --audit-level=high
+
   # ================= BACKEND (Django) =================
   backend:
     name: Backend — check + migraciones + tests sobre MySQL
@@ -106,3 +109,17 @@ jobs:
 
       - name: Suite de pruebas backend (Django test runner)
         run: python manage.py test
+
+      - name: Instalar herramientas de calidad (dev)
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint Python (ruff)
+        run: python -m ruff check core cuentas intersoft --exclude "*/migrations/*"
+
+      - name: Analisis estatico de seguridad (bandit)
+        run: python -m bandit -r core cuentas intersoft -c bandit.yaml -q
+
+      - name: Cobertura minima (70% de lineas)
+        run: |
+          python -m coverage run --source=core,cuentas --branch manage.py test core --noinput
+          python -m coverage report --fail-under=70
