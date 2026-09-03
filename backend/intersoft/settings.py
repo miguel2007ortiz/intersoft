@@ -259,6 +259,10 @@ IA_MODEL = config('IA_MODEL', default='gpt-3.5-turbo')
 IA_TIMEOUT = config('IA_TIMEOUT', default=20, cast=int)
 # Limite de mensajes de historial que se envian al motor por turno.
 IA_MAX_HISTORIAL = config('IA_MAX_HISTORIAL', default=10, cast=int)
+# Rate-limit del endpoint de chat por usuario (D2): maximo de peticiones
+# dentro de la ventana (segundos) para evitar abuso/costes por uso excesivo.
+IA_MAX_PETICIONES = config('IA_MAX_PETICIONES', default=15, cast=int)
+IA_PETICIONES_VENTANA = config('IA_PETICIONES_VENTANA', default=60, cast=int)
 
 # -- Notificaciones (fase 9) --------------------------------------
 # Si WA_VINCULADO es False (o la llamada a la API falla), el notificador

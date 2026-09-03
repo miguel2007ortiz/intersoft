@@ -788,6 +788,86 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(roles, ["usuario", "asistente"])
 
 
+# ====================== FASE D (D2): IA con contexto y rate-limit =============
+import json  # noqa: E402
+from django.core.cache import cache  # noqa: E402
+from django.test import override_settings  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+import core.ia_engine as ia_engine_mod  # noqa: E402
+
+
+class IAChatFaseDTest(BaseCatalogoTest):
+    """D2: el prompt incluye el contexto de empresa y hay rate-limit por usuario."""
+
+    def setUp(self):
+        # La cache (LocMemCache en tests) es global al proceso y no se limpia
+        # sola entre tests: vaciarla garantiza un contador de rate-limit limpio.
+        cache.clear()
+
+    def _contexto_fake(self):
+        empresa = MagicMock(nombre="Tienda Test")
+        return ia_engine_mod.ContextoEmpresa(
+            empresa=empresa,
+            resumen={"ingresos_totales": 150000, "num_ventas": 10,
+                     "unidades_vendidas": 22, "ticket_promedio": 15000,
+                     "valor_inventario": 800000, "unidades_inventario": 50,
+                     "productos_bajo_minimo": 2},
+            top_productos=[{"producto": "Café", "sku": "CAF01", "categoria": "Bebidas",
+                            "unidades": 5, "ingresos": 25000}],
+            clientes_frecuentes=[],
+            bajo_minimo=[{"producto": "Leche", "sku": "LEC01", "stock": 1, "stock_minimo": 3}])
+
+    def test_prompt_system_incluye_contexto_de_empresa(self):
+        # El contexto hay que "inyectarlo" en el system prompt del payload envido
+        # al proveedor (antes se construia pero no se pasaba al modelo).
+        contexto = self._contexto_fake()
+        capturado = {}
+
+        def _falso_urlopen(peticion, timeout=None):
+            capturado["cuerpo"] = json.loads(peticion.data.decode("utf-8"))
+            resp = MagicMock()
+            resp.read.return_value = json.dumps(
+                {"choices": [{"message": {"content": "respuesta OK"}}]}).encode("utf-8")
+            resp.__enter__.return_value = resp
+            return resp
+
+        with patch("urllib.request.urlopen", side_effect=_falso_urlopen), \
+             override_settings(IA_API_KEY="clave-test", IA_PROVIDER="openai"):
+            texto = ia_engine_mod._llamar_compatible(contexto, [], "¿cómo vamos?")
+        self.assertEqual(texto, "respuesta OK")
+        system = capturado["cuerpo"]["messages"][0]
+        self.assertEqual(system["role"], "system")
+        self.assertIn("Tienda Test", system["content"])
+        self.assertIn("150000", system["content"])       # ingresos reales en el contexto
+        self.assertIn("Café", system["content"])          # top producto presente
+        self.assertIn("Leche", system["content"])         # bajo minimo presente
+        # El ultimo mensaje es la pregunta del usuario.
+        self.assertEqual(capturado["cuerpo"]["messages"][-1]["content"], "¿cómo vamos?")
+
+    def test_rate_limit_bloquea_al_superar_el_maximo(self):
+        api = self.api_como(self.admin)
+        # El rate-limit es por usuario; con maximo 1, la segunda peticion -> 429.
+        with override_settings(IA_MAX_PETICIONES=1, IA_PETICIONES_VENTANA=60):
+            primero = api.post("/api/ia/chat/", {"mensaje": "uno"}, format="json")
+            self.assertEqual(primero.status_code, 200, primero.content)
+            excedido = api.post("/api/ia/chat/", {"mensaje": "dos"}, format="json")
+        self.assertEqual(excedido.status_code, 429)
+        self.assertEqual(excedido.json()["codigo"], "IA_DEMASIADAS_PETICIONES")
+
+    def test_rate_limit_es_independiente_por_usuario(self):
+        # El limite no castiga a toda la empresa por el uso de un miembro.
+        api_admin = self.api_como(self.admin)
+        api_emp = self.api_como(self.empleado)
+        with override_settings(IA_MAX_PETICIONES=1, IA_PETICIONES_VENTANA=60):
+            self.assertEqual(api_admin.post("/api/ia/chat/", {"mensaje": "a"},
+                                            format="json").status_code, 200)
+            self.assertEqual(api_emp.post("/api/ia/chat/", {"mensaje": "b"},
+                                          format="json").status_code, 200)
+            self.assertEqual(api_admin.post("/api/ia/chat/", {"mensaje": "c"},
+                                            format="json").status_code, 429)
+
+
 # ====================== FASE 9: Camaras y notificaciones =====================
 
 from core.notificaciones import crear_notificacion  # noqa: E402

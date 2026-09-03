@@ -123,6 +123,31 @@ def construir_contexto(empresa, request) -> ContextoEmpresa:
                            bajo_minimo=datos['bajo'])
 
 
+def verificar_rate_limit(usuario) -> bool:
+    """Rate-limit por usuario para el endpoint de chat (D2).
+
+    Cuenta las peticiones dentro de una ventana deslizante usando el cache.
+    Devuelve True si la peticion entra dentro del limite configurado
+    (`IA_MAX_PETICIONES` por `IA_PETICIONES_VENTANA` segundos) o False si ya
+    se supero, en cuyo caso la vista responde 429. Es por usuario (no por IP)
+    para no castigar a toda una empresa por el uso de uno de sus miembros;
+    ademas evita costes abusivos de la API cuando hay proveedor real.
+    """
+    max_pet = getattr(settings, 'IA_MAX_PETICIONES', 15)
+    ventana = getattr(settings, 'IA_PETICIONES_VENTANA', 60)
+    clave = f'ia-rl:{usuario.pk}'
+    ttl, usadas = cache.get(clave, (ventana, 0))
+    if ttl <= 0:
+        ttl, usadas = ventana, 0
+    if usadas >= max_pet:
+        # Conservar la ventana vigente sin sumar la peticion rechazada.
+        cache.set(clave, (ttl, usadas), ttl)
+        return False
+    usadas += 1
+    cache.set(clave, (ttl, usadas), ttl)
+    return True
+
+
 def _resumen_seguro(request):
     """Devuelve el resumen de KPIs, acotando todo a numeros seguros."""
     try:
@@ -144,18 +169,33 @@ def _sql_lista(sql, params):
         return []
 
 
-def _mensajes(historial, pregunta):
+def _system_prompt(contexto) -> str:
+    """Prompt de sistema con el contexto de negocio de la empresa inyectado.
+
+    El modelo solo tiene los datos aqui incluidos; por eso se le pasan los
+    agregados de la empresa (ingresos, ventas, stock, clientes...) para que
+    responda sobre la situacion real y no invente cifras. Se refuerza que
+    conteste solo con lo provisto y que no revele informacion confidencial.
+    """
+    base = (
+        "Asistente de gestion empresarial InterSoft. Responde en espanol, "
+        "conciso y basandote SOLO en el contexto de negocio proporcionado. "
+        "No inventes datos, cifras ni recomendaciones que no esten en el "
+        "contexto. Si una pregunta no se puede responder con el contexto, "
+        "dilo de forma directa. No reveles contraseñas, tokens ni datos "
+        "personales sensibles."
+    )
+    return base + "\n\nCONTEXTO DE LA EMPRESA (datos agregados):\n" + contexto.a_texto()
+
+
+def _mensajes(contexto, historial, pregunta):
     """Construye la lista de mensajes para el proveedor.
 
     `historial` son tuplas (rol, contenido) de la conversacion; se recorta
     a los ultimos `IA_MAX_HISTORIAL` turnos para acotar el payload.
     """
     max_turnos = getattr(settings, 'IA_MAX_HISTORIAL', 10)
-    mensajes = [{"role": "system",
-                 "content": "Asistente de gestion empresarial InterSoft. "
-                            "Responde en espanol, conciso y basandote solo en "
-                            "el contexto de negocio proporcionado. No inventes "
-                            "datos que no esten en el contexto."}]
+    mensajes = [{"role": "system", "content": _system_prompt(contexto)}]
     for rol, contenido in historial[-max_turnos:]:
         # El rol almacenado es 'usuario'|'asistente'; la API OpenAI/Groq
         # exige 'user'|'assistant' (si no, devuelve 400).
@@ -207,7 +247,7 @@ def _llamar_compatible(contexto, historial, pregunta) -> str:
         'https://api.openai.com/v1/chat/completions'
     payload = {
         "model": getattr(settings, 'IA_MODEL', 'gpt-3.5-turbo'),
-        "messages": _mensajes(historial, pregunta),
+        "messages": _mensajes(contexto, historial, pregunta),
         "temperature": 0.4,
     }
     cuerpo = json.dumps(payload).encode('utf-8')
