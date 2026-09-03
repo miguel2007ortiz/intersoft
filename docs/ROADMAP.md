@@ -51,8 +51,8 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 
 ## Fase E — Calidad de producto
 - **E1. Design system vivo**: tokens de `styles.css` + capturas `figma-marketplace/` → documentar
-  el sistema (colores, tipografía, componentes de tienda).
-- **E2. Validar descarga de PDF/XML** de facturas y notas crédito en todos los casos (tests e2e).
+  el sistema (colores, tipografía, componentes de tienda). **Hecho** → `docs/DESIGN_SYSTEM.md`.
+- **E2. Validar descarga de PDF/XML** de facturas y notas crédito en todos los casos (tests e2e). **Hecho**.
 
 ---
 
@@ -96,3 +96,6 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   clase `DescargaComprobantesTest`) que validan que la factura y la nota crédito aprobadas
   exponen URLs `/media/...` de su PDF/XML, que el archivo existe en disco con su contenido, y que
   un comprobante no aprobado no expone nada descargable.
+- **E1 design system vivo (resuelta)**: documento `docs/DESIGN_SYSTEM.md` con los tokens reales de
+  `frontend/src/styles.css` (colores claro/noche, espaciado, radios, sombras, tipografía),
+  componentes reutilizables y referencia a `figma-marketplace/` (tokens + capturas, no versionado).
