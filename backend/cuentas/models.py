@@ -44,7 +44,7 @@ class Rol(models.Model):
 
         Los roles base no pertenecen a ninguna empresa; evita fallos si el
         seed no corrio."""
-        rol, _ = cls.objects.get_or_create(nombre=nombre)
+        rol, _ = cls.objects.get_or_create(nombre=nombre, empresa=None)
         return rol
 
 
