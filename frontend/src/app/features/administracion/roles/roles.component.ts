@@ -6,6 +6,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
 import {
   ErrorSeguridad, PermisoCatalogo, RolAdmin,
 } from '../../../core/models/seguridad.model';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -17,6 +18,7 @@ const CERRAR_AVISO_MS = 4000;
 })
 export class RolesComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly seguridad = inject(SeguridadService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -144,10 +146,15 @@ export class RolesComponent {
     });
   }
 
-  eliminar(rol: RolAdmin): void {
-    if (!confirm(`¿Eliminar el rol "${rol.nombre}"? Esta accion no se puede deshacer.`)) {
-      return;
-    }
+  async eliminar(rol: RolAdmin): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Eliminar rol',
+      mensaje: `Se eliminara el rol "${rol.nombre}". Los usuarios que lo tengan `
+        + 'asignado perderan esos permisos.',
+      confirmar: 'Eliminar rol',
+      destructivo: true,
+    });
+    if (!acepto) return;
     this.seguridad.eliminarRol(rol.id).subscribe({
       next: () => {
         this.exito.set('Rol eliminado.');

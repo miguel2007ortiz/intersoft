@@ -187,7 +187,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     .input {
       width: 100%; padding: 10px 14px; border: 1px solid var(--linea);
       border-radius: 8px; font: inherit; font-size: 14px;
-      background: #fff; transition: border-color .15s;
+      background: var(--blanco); transition: border-color .15s;
     }
     .input:focus { outline: none; border-color: var(--primario); }
     .flex-1 { flex: 1; }
@@ -197,7 +197,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     .hint.error { color: #b42318; }
     .hint a { color: var(--primario); }
     .btn-reintentar {
-      margin-left: 8px; padding: 4px 12px; border: 1px solid var(--linea); background: #fff;
+      margin-left: 8px; padding: 4px 12px; border: 1px solid var(--linea); background: var(--blanco);
       border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
     }
     .btn-reintentar:hover { border-color: #b42318; color: #b42318; }
@@ -205,7 +205,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     .producto-add { position: relative; display: flex; gap: var(--e3); }
     .resultados-busqueda {
       position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
-      background: #fff; border: 1px solid var(--linea); border-radius: 8px;
+      background: var(--blanco); border: 1px solid var(--linea); border-radius: 8px;
       box-shadow: 0 8px 24px rgba(15,23,42,.12); max-height: 240px; overflow-y: auto;
     }
     .resultado-item {
@@ -235,7 +235,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     .metodos-pago { display: flex; gap: var(--e2); flex-wrap: wrap; }
     .btn-metodo {
       padding: 8px 16px; border: 1px solid var(--linea); border-radius: 8px;
-      background: #fff; cursor: pointer; font: inherit; font-size: 13px;
+      background: var(--blanco); cursor: pointer; font: inherit; font-size: 13px;
       transition: all .15s;
     }
     .btn-metodo:hover { border-color: var(--primario); }

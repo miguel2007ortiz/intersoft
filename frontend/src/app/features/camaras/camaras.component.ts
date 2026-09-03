@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { MonitoreoService } from '../../core/services/monitoreo.service';
 import { Camara, CamaraEscritura, ErrorMonitoreo, GrabacionCamara } from '../../core/models/monitoreo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { ConfirmacionService } from '../../core/services/confirmacion.service';
 
 /** Fase 9: panel de camaras de vigilancia (solo ADMINISTRADOR).
  * Muestra el video en vivo y permite consultar grabaciones historicas
@@ -15,6 +16,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class CamarasComponent implements OnInit {
   private readonly monitoreo = inject(MonitoreoService);
+  private readonly confirmacion = inject(ConfirmacionService);
 
   readonly camaras = signal<Camara[]>([]);
   readonly cargando = signal(true);
@@ -78,8 +80,14 @@ export class CamarasComponent implements OnInit {
     });
   }
 
-  eliminar(c: Camara): void {
-    if (!confirm(`Eliminar la camara "${c.nombre}"?`)) return;
+  async eliminar(c: Camara): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Eliminar camara',
+      mensaje: `Se eliminara la camara "${c.nombre}" y dejara de emitir video.`,
+      confirmar: 'Eliminar camara',
+      destructivo: true,
+    });
+    if (!acepto) return;
     this.monitoreo.eliminarCamara(c.id).subscribe({
       next: () => this.cargarCamaras(),
       error: (e: ErrorMonitoreo) => this.error.set(e.detalle ?? 'No se pudo eliminar la camara.'),

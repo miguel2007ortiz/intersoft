@@ -199,7 +199,7 @@ import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicacione
     .metodos { display: flex; gap: var(--e2); flex-wrap: wrap; }
     .btn-metodo {
       padding: 10px 18px; border: 1px solid var(--linea); border-radius: 8px;
-      background: #fff; cursor: pointer; font: inherit; font-size: 14px;
+      background: var(--blanco); cursor: pointer; font: inherit; font-size: 14px;
       transition: all .15s;
     }
     .btn-metodo:hover { border-color: var(--primario); }

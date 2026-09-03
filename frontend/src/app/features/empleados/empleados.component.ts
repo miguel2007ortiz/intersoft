@@ -5,6 +5,7 @@ import { EmpleadosService } from '../../core/services/empleados.service';
 import { AuthService } from '../../core/services/auth.service';
 import { debounce, programarAviso } from '../../core/utils/temporizador.util';
 import { DatosEmpleado, Empleado, ErrorEmpleado, RolAsignable } from '../../core/models/empleado.model';
+import { ConfirmacionService } from '../../core/services/confirmacion.service';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -16,6 +17,7 @@ const CERRAR_AVISO_MS = 4000;
 })
 export class EmpleadosComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly empleados = inject(EmpleadosService);
   private readonly destroyRef = inject(DestroyRef);
   readonly auth = inject(AuthService);
@@ -184,8 +186,14 @@ export class EmpleadosComponent {
     });
   }
 
-  regenerarPassword(empleado: Empleado): void {
-    if (!confirm(`¿Generar una nueva contrasena temporal para ${empleado.nombre}?`)) return;
+  async regenerarPassword(empleado: Empleado): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Nueva contrasena temporal',
+      mensaje: `Se generara una contrasena temporal para ${empleado.nombre}. La `
+        + 'actual dejara de servir y solo veras la nueva una vez.',
+      confirmar: 'Generar contrasena',
+    });
+    if (!acepto) return;
     this.empleados.regenerarPassword(empleado.id).subscribe({
       next: ({ password_temporal }) => this.passwordTemporal.set(password_temporal),
       error: (e: ErrorEmpleado) => this.error.set(e.detalle ?? 'No se pudo generar la contrasena.'),

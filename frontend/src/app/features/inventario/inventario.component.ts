@@ -179,14 +179,14 @@ import { debounce } from '../../core/utils/temporizador.util';
 
     .input {
       width: 100%; padding: 10px 14px; border: 1px solid var(--linea);
-      border-radius: 8px; font: inherit; font-size: 14px; background: #fff;
+      border-radius: 8px; font: inherit; font-size: 14px; background: var(--blanco);
     }
     .input:focus { outline: none; border-color: var(--primario); }
 
     .filtros { display: flex; gap: var(--e3); align-items: center; margin-bottom: var(--e4); }
     .filtro-stock { font-size: 14px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
 
-    .ajuste-form { background: #fff; border: 1px solid var(--linea); border-radius: 12px; padding: var(--e5); }
+    .ajuste-form { background: var(--blanco); border: 1px solid var(--linea); border-radius: 12px; padding: var(--e5); }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--e3); }
     .full { grid-column: 1 / -1; }
     .form-grid label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
@@ -199,7 +199,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     }
     .estado-error p { margin: 0; }
     .btn-reintentar {
-      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
+      padding: 8px 18px; border: 1px solid var(--linea); background: var(--blanco);
       border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
     }
     .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }

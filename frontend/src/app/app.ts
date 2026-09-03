@@ -3,12 +3,16 @@ import { RouterOutlet } from '@angular/router';
 import { WelcomeOverlayComponent } from './shared/welcome-overlay/welcome-overlay.component';
 import { CookieBannerComponent } from './shared/cookie-banner/cookie-banner.component';
 import { NavProgressComponent } from './shared/nav-progress/nav-progress.component';
+import { ConfirmacionComponent } from './shared/confirmacion/confirmacion.component';
 import { TemaService } from './core/services/tema.service';
 import { AuthService } from './core/services/auth.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, WelcomeOverlayComponent, CookieBannerComponent, NavProgressComponent],
+  imports: [
+    RouterOutlet, WelcomeOverlayComponent, CookieBannerComponent,
+    NavProgressComponent, ConfirmacionComponent,
+  ],
   templateUrl: './app.html',
 })
 export class App {

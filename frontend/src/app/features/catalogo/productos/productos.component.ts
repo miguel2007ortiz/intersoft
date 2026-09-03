@@ -6,6 +6,7 @@ import { debounce, programarAviso } from '../../../core/utils/temporizador.util'
 import {
   Categoria, ErrorCatalogo, Producto,
 } from '../../../core/models/catalogo.model';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -17,6 +18,7 @@ const CERRAR_AVISO_MS = 4000;
 })
 export class ProductosComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly catalogo = inject(CatalogoService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -181,10 +183,15 @@ export class ProductosComponent {
     });
   }
 
-  eliminar(producto: Producto): void {
-    if (!confirm(`¿Eliminar "${producto.nombre}"?`)) {
-      return;
-    }
+  async eliminar(producto: Producto): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Eliminar producto',
+      mensaje: `Se eliminara "${producto.nombre}" del catalogo. Si ya tiene ventas `
+        + 'registradas no se podra borrar, pero puedes desactivarlo.',
+      confirmar: 'Eliminar producto',
+      destructivo: true,
+    });
+    if (!acepto) return;
     this.catalogo.eliminarProducto(producto.id).subscribe({
       next: () => {
         this.exito.set('Producto eliminado.');

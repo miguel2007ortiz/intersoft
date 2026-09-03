@@ -7,6 +7,7 @@ import { SeguridadService } from '../../../core/services/seguridad.service';
 import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import { ErrorCatalogo, Cliente } from '../../../core/models/catalogo.model';
 import { UsuarioAdmin } from '../../../core/models/seguridad.model';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 const TIPOS_DOCUMENTO = ['CC', 'NIT', 'CE', 'PAS'] as const;
 const CERRAR_AVISO_MS = 4000;
@@ -19,6 +20,7 @@ const CERRAR_AVISO_MS = 4000;
 })
 export class ClientesComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly catalogo = inject(CatalogoService);
   private readonly seguridad = inject(SeguridadService);
   private readonly destroyRef = inject(DestroyRef);
@@ -176,11 +178,14 @@ export class ClientesComponent {
     programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
   }
 
-  desactivar(cliente: Cliente): void {
-    if (!confirm(`¿Desactivar a "${cliente.nombre}"? Dejara de aparecer en nuevas ventas, `
-      + 'pero su historial se conserva y puedes reactivarlo cuando quieras.')) {
-      return;
-    }
+  async desactivar(cliente: Cliente): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Desactivar cliente',
+      mensaje: `"${cliente.nombre}" dejara de aparecer en nuevas ventas. Su `
+        + 'historial se conserva y puedes reactivarlo cuando quieras.',
+      confirmar: 'Desactivar',
+    });
+    if (!acepto) return;
     this.catalogo.cambiarEstadoCliente(cliente.id, 'desactivar').subscribe({
       next: () => {
         this.exito.set('Cliente desactivado.');

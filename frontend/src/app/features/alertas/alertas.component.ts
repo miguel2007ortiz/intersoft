@@ -75,7 +75,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
     }
     .estado-error p { margin: 0; }
     .btn-reintentar {
-      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
+      padding: 8px 18px; border: 1px solid var(--linea); background: var(--blanco);
       border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
     }
     .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }
@@ -90,7 +90,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
     .alerta-card {
       display: flex; align-items: flex-start; gap: var(--e4);
-      background: #fff; border: 1px solid #fecdca; border-left: 4px solid #f97316;
+      background: var(--blanco); border: 1px solid #fecdca; border-left: 4px solid #f97316;
       border-radius: 10px; padding: var(--e4);
       transition: box-shadow .15s;
     }

@@ -82,7 +82,7 @@ import { Pedido } from '../../../core/models/tienda.model';
     }
     .error-box p { margin: 0; }
     .btn-reintentar {
-      padding: 8px 18px; border: 1px solid #fecdca; background: #fff;
+      padding: 8px 18px; border: 1px solid #fecdca; background: var(--blanco);
       border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
       white-space: nowrap;
     }
@@ -91,7 +91,7 @@ import { Pedido } from '../../../core/models/tienda.model';
     .lista { display: flex; flex-direction: column; gap: var(--e4); }
     .pedido {
       border: 1px solid var(--linea); border-radius: 12px; padding: var(--e4);
-      background: #fff; transition: box-shadow .2s;
+      background: var(--blanco); transition: box-shadow .2s;
     }
     .pedido:hover { box-shadow: 0 8px 24px rgba(15,23,42,.08); }
     .pedido-cabecera {

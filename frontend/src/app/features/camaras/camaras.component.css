@@ -7,7 +7,7 @@
 .campo { display: flex; flex-direction: column; gap: 6px; }
 .campo label { font-size: 13px; font-weight: 600; color: var(--tinta, #222); }
 .campo input, .campo select {
-  padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 8px; font: inherit; background: #fff;
+  padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 8px; font: inherit; background: var(--blanco);
 }
 .campo input:focus, .campo select:focus {
   outline: none; border-color: var(--acento, #2563eb); box-shadow: 0 0 0 3px rgba(37,99,235,.12);
@@ -18,7 +18,7 @@
   display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--e4);
 }
 .camara-card {
-  background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden;
+  background: var(--blanco); border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden;
   display: flex; flex-direction: column; transition: box-shadow .15s;
 }
 .camara-card:hover { box-shadow: 0 6px 18px rgba(15,23,42,.08); }
@@ -46,7 +46,7 @@
   padding: 0 var(--e4) var(--e4); display: flex; flex-wrap: wrap; gap: var(--e2);
 }
 
-.grabadora { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: var(--e5); }
+.grabadora { background: var(--blanco); border: 1px solid #e4e7ec; border-radius: 12px; padding: var(--e5); }
 .grabadora-cab { display: flex; align-items: center; justify-content: space-between; gap: var(--e3); }
 .grabadora-cab h2 { margin: 0; font-size: 18px; }
 .grabadora-form { display: flex; flex-wrap: wrap; gap: var(--e3); align-items: flex-end; margin-top: var(--e4); }

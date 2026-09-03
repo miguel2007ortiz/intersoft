@@ -1,5 +1,5 @@
 import { DatePipe, DecimalPipe, SlicePipe } from '@angular/common';
-import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
+import { Component, DestroyRef, HostListener, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { FacturaElectronica, NotaCredito, Venta } from '../../core/models/catalogo.model';
@@ -234,8 +234,9 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
         <!-- Modal detalle / motivo rechazo -->
         @if (detalleVisible()) {
           <div class="modal-overlay" (click)="detalleVisible.set(false)">
-            <div class="modal" (click)="$event.stopPropagation()">
-              <h3>Detalle de Factura</h3>
+            <div class="modal" role="dialog" aria-modal="true"
+                 aria-labelledby="detalle-titulo" (click)="$event.stopPropagation()">
+              <h3 id="detalle-titulo">Detalle de Factura</h3>
               @if (detalleSeleccion()) {
                 <div class="modal-body">
                   <p><strong>Numero:</strong> {{ detalleSeleccion()!.numero }}</p>
@@ -271,8 +272,9 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
         <!-- Modal reenviar -->
         @if (reenviarVisible()) {
           <div class="modal-overlay" (click)="reenviarVisible.set(false)">
-            <div class="modal" (click)="$event.stopPropagation()">
-              <h3>Reenviar Factura</h3>
+            <div class="modal" role="dialog" aria-modal="true"
+                 aria-labelledby="reenviar-titulo" (click)="$event.stopPropagation()">
+              <h3 id="reenviar-titulo">Reenviar Factura</h3>
               <p>Factura: <strong>{{ facturaReenviar()?.numero }}</strong></p>
               <p>Cliente: {{ facturaReenviar()?.cliente_nombre }}</p>
               <div class="nc-form">
@@ -293,7 +295,7 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
 
         <!-- Toast exito -->
         @if (exito()) {
-          <div class="exito-toast">{{ exito() }}</div>
+          <div class="exito-toast" role="status" aria-live="polite">{{ exito() }}</div>
         }
       </div>
     </app-panel-shell>
@@ -323,7 +325,7 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
     .input {
       padding: 10px 14px; border: 1px solid var(--linea);
       border-radius: 8px; font: inherit; font-size: 14px;
-      background: #fff; transition: border-color .15s;
+      background: var(--blanco); transition: border-color .15s;
     }
     .input:focus { outline: none; border-color: var(--primario); }
     .input-select { min-width: 180px; }
@@ -356,7 +358,7 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
 
     .btn-sm {
       padding: 4px 10px; border: 1px solid var(--linea); border-radius: 6px;
-      background: #fff; cursor: pointer; font: inherit; font-size: 12px;
+      background: var(--blanco); cursor: pointer; font: inherit; font-size: 12px;
       font-weight: 600; transition: all .15s;
     }
     .btn-sm:hover { border-color: var(--primario); }
@@ -364,7 +366,7 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
     .btn-primary { background: var(--primario); color: #fff; border-color: var(--primario); }
     .btn-primary:hover { opacity: .9; }
     .btn-warning { background: #b54708; color: #fff; border-color: #b54708; }
-    .btn-outline { background: #fff; }
+    .btn-outline { background: var(--blanco); }
 
     .hint { font-size: 14px; color: var(--gris); margin-bottom: var(--e3); }
     .section-header { display: flex; justify-content: space-between; align-items: center; }
@@ -378,7 +380,7 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
       background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center;
     }
     .modal {
-      background: #fff; border-radius: 12px; padding: 24px;
+      background: var(--blanco); border-radius: 12px; padding: 24px;
       max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
     }
     .modal h3 { margin: 0 0 var(--e3); }
@@ -404,8 +406,7 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
     }
   `],
 })
-export class FacturacionComponent implements OnInit {
-  private readonly catalogo = inject(CatalogoService);
+export class FacturacionComponent implements OnInit {  private readonly catalogo = inject(CatalogoService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly pestana = signal<'facturas' | 'notas' | 'generar' | 'crear-nc'>('facturas');
@@ -573,5 +574,13 @@ export class FacturacionComponent implements OnInit {
         this.creandoNc.set(false);
       },
     });
+  }
+
+  /** Escape cierra el modal abierto: se espera de cualquier dialogo y evita
+   * tener que apuntar al boton "Cerrar" con el raton. */
+  @HostListener('document:keydown.escape')
+  cerrarConEscape(): void {
+    this.detalleVisible.set(false);
+    this.reenviarVisible.set(false);
   }
 }

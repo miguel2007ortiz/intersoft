@@ -1,5 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
@@ -94,8 +94,9 @@ import { debounce } from '../../core/utils/temporizador.util';
         <!-- Modal de anulacion -->
         @if (ventaAnulando()) {
           <div class="modal-overlay" (click)="cancelarAnulacion()">
-            <div class="modal" (click)="$event.stopPropagation()">
-              <h2>Anular venta</h2>
+            <div class="modal" role="dialog" aria-modal="true"
+                 aria-labelledby="anular-titulo" (click)="$event.stopPropagation()">
+              <h2 id="anular-titulo">Anular venta</h2>
               <p>Factura: <strong>{{ ventaAnulando()!.numero_factura }}</strong></p>
               <p>Cliente: {{ ventaAnulando()!.cliente_nombre }} — Total: {{ ventaAnulando()!.total | number }}</p>
               <label>Motivo de anulacion</label>
@@ -130,7 +131,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     .filtros { display: flex; gap: var(--e3); margin-bottom: var(--e4); }
     .input {
       padding: 10px 14px; border: 1px solid var(--linea); border-radius: 8px;
-      font: inherit; font-size: 14px; background: #fff;
+      font: inherit; font-size: 14px; background: var(--blanco);
     }
     .input:focus { outline: none; border-color: var(--primario); }
     .input-estado { max-width: 200px; }
@@ -148,7 +149,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     }
     .estado-error p { margin: 0; }
     .btn-reintentar {
-      padding: 8px 18px; border: 1px solid var(--linea); background: #fff;
+      padding: 8px 18px; border: 1px solid var(--linea); background: var(--blanco);
       border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
     }
     .btn-reintentar:hover { border-color: var(--primario); color: var(--primario); }
@@ -179,7 +180,7 @@ import { debounce } from '../../core/utils/temporizador.util';
       display: grid; place-items: center; z-index: 1000;
     }
     .modal {
-      background: #fff; border-radius: 14px; padding: var(--e6);
+      background: var(--blanco); border-radius: 14px; padding: var(--e6);
       width: min(480px, 90vw); box-shadow: 0 20px 50px rgba(15,23,42,.2);
     }
     .modal h2 { margin: 0 0 var(--e3); }
@@ -191,7 +192,7 @@ import { debounce } from '../../core/utils/temporizador.util';
     }
     .modal-acciones { display: flex; justify-content: flex-end; gap: var(--e3); margin-top: var(--e4); }
     .btn-cancelar {
-      padding: 10px 20px; border: 1px solid var(--linea); background: #fff;
+      padding: 10px 20px; border: 1px solid var(--linea); background: var(--blanco);
       border-radius: 8px; cursor: pointer; font: inherit;
     }
     .btn-confirmar-anular {
@@ -251,6 +252,12 @@ export class VentasComponent implements OnInit {
 
   cancelarAnulacion(): void {
     this.ventaAnulando.set(null);
+  }
+
+  /** Escape cierra el modal de anulacion, como cualquier otro dialogo. */
+  @HostListener('document:keydown.escape')
+  cerrarConEscape(): void {
+    if (this.ventaAnulando()) this.cancelarAnulacion();
   }
 
   confirmarAnulacion(): void {

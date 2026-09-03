@@ -131,7 +131,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         width: 20px;
         height: 20px;
         border-radius: 50%;
-        background: #fff;
+        background: var(--blanco);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
         transition: transform 0.2s ease;
       }

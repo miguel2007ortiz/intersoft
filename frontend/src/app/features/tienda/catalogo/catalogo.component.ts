@@ -313,7 +313,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
       </section>
 
       @if (exito()) {
-        <div class="exito-toast">{{ exito() }}</div>
+        <div class="exito-toast" role="status" aria-live="polite">{{ exito() }}</div>
       }
 
       @if (productoDetalle(); as p) {
@@ -453,7 +453,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
     /* Sugerencias del buscador (autocompletado visual) */
     .sugerencias {
       position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 600;
-      background: #fff; border: 1px solid var(--linea); border-radius: 10px;
+      background: var(--blanco); border: 1px solid var(--linea); border-radius: 10px;
       box-shadow: 0 12px 32px rgba(15,23,42,.16); list-style: none; margin: 0; padding: 6px;
       max-height: 360px; overflow-y: auto;
     }
@@ -509,7 +509,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
     .orbe-a { width: 320px; height: 320px; top: -80px; left: -60px; }
     .orbe-b { width: 260px; height: 260px; bottom: -100px; right: -40px; animation-delay: 1.2s; }
     .etiqueta {
-      display: inline-block; background: #fff; border: 1px solid var(--linea); border-radius: 999px;
+      display: inline-block; background: var(--blanco); border: 1px solid var(--linea); border-radius: 999px;
       padding: var(--e1) var(--e4); font-size: 13.5px; font-weight: 600; color: var(--primario-osc); margin: 0 0 var(--e4);
     }
     .hero h1 { font-size: clamp(26px, 4.5vw, 40px); line-height: 1.2; margin: 0 0 var(--e4); }
@@ -554,9 +554,9 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
       width: 8px; height: 8px; border-radius: 999px; border: 0; padding: 0; cursor: pointer;
       background: rgba(255,255,255,.45); transition: background .2s, width .2s;
     }
-    .hero-punto-activo { width: 22px; background: #fff; }
+    .hero-punto-activo { width: 22px; background: var(--blanco); }
 
-    .confianza { border-bottom: 1px solid var(--linea); background: #fff; }
+    .confianza { border-bottom: 1px solid var(--linea); background: var(--blanco); }
     .confianza-grilla {
       display: grid; gap: var(--e4); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       max-width: 1100px; margin: 0 auto; padding: var(--e4); width: 100%;
@@ -575,7 +575,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
     .chips { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
     .chip {
       display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
-      border: 1px solid var(--linea); border-radius: 999px; background: #fff;
+      border: 1px solid var(--linea); border-radius: 999px; background: var(--blanco);
       font: inherit; font-size: 13.5px; font-weight: 600; color: var(--tinta);
       cursor: pointer; transition: all .2s ease;
     }
@@ -589,7 +589,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
     .input {
       padding: 10px 14px; border: 1px solid var(--linea);
       border-radius: 8px; font: inherit; font-size: 14px;
-      background: #fff; transition: border-color .15s;
+      background: var(--blanco); transition: border-color .15s;
     }
     .input:focus { outline: none; border-color: var(--primario); }
     .input-select { min-width: 180px; }
@@ -609,7 +609,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
       .grid { grid-template-columns: repeat(4, 1fr); }
     }
     .card {
-      position: relative; background: #fff; border: 1px solid var(--linea); border-radius: 12px;
+      position: relative; background: var(--blanco); border: 1px solid var(--linea); border-radius: 12px;
       overflow: hidden;
     }
     .tarjeta-hover { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
@@ -697,7 +697,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
       margin-top: var(--e6); padding-top: var(--e5); border-top: 1px solid var(--linea);
     }
     .btn-paginador {
-      padding: 8px 16px; background: #fff; border: 1px solid var(--linea);
+      padding: 8px 16px; background: var(--blanco); border: 1px solid var(--linea);
       border-radius: 8px; font: inherit; font-size: 13.5px; font-weight: 600;
       color: var(--tinta); cursor: pointer; transition: border-color .15s, color .15s;
     }
@@ -735,7 +735,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
       animation: fondo-entrar .25s ease;
     }
     .modal-caja {
-      position: relative; background: #fff; border-radius: 14px; max-width: 760px;
+      position: relative; background: var(--blanco); border-radius: 14px; max-width: 760px;
       width: 100%; padding: var(--e5); margin-top: var(--e5);
       box-shadow: 0 24px 60px rgba(0,0,0,.25);
       animation: modal-entrar .3s cubic-bezier(.22,1,.36,1);
@@ -747,7 +747,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
     }
     .modal-cerrar {
       position: absolute; top: 14px; right: 14px; width: 32px; height: 32px;
-      border-radius: 50%; border: 1px solid var(--linea); background: #fff;
+      border-radius: 50%; border: 1px solid var(--linea); background: var(--blanco);
       cursor: pointer; font-size: 14px; color: var(--gris);
     }
     .modal-cerrar:hover { color: var(--tinta); border-color: var(--gris); }
