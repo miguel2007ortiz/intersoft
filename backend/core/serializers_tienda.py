@@ -6,7 +6,7 @@ from django.db import models
 from rest_framework import serializers
 
 from .models import (Carrito, CarritoItem, Cliente, ComentarioProducto,
-                     Cupon, Favorito, Producto, Categoria, Venta)
+                     Cupon, Envio, Favorito, Producto, Categoria, Venta)
 from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
@@ -213,15 +213,36 @@ class CompletarCompradorSerializer(serializers.Serializer):
 
 # ------------------------------ Pedidos del comprador ---------------------
 
+class EnvioSeguimientoSerializer(serializers.ModelSerializer):
+    """Envio visto por el comprador: solo lo que le sirve para hacer
+    seguimiento, sin `notas` internas del vendedor."""
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = Envio
+        fields = ["direccion", "ciudad", "departamento", "transportadora",
+                  "numero_guia", "estado", "estado_display",
+                  "fecha_despacho", "fecha_entrega_estimada", "fecha_entrega_real"]
+
+
 class PedidoCompradorSerializer(serializers.ModelSerializer):
     """Una venta vista desde el comprador del marketplace: agrega el nombre
     de la empresa vendedora (el comprador no ve el resto de datos internos
     de la venta, solo lo que le corresponde como pedido)."""
     empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
     detalles = DetalleVentaLecturaSerializer(many=True, read_only=True)
+    envio = serializers.SerializerMethodField()
 
     class Meta:
         model = Venta
         fields = ["id", "numero_factura", "fecha", "empresa_nombre",
                   "subtotal", "descuento", "total", "estado",
-                  "metodo_pago", "detalles", "created_at"]
+                  "metodo_pago", "detalles", "envio", "created_at"]
+
+    def get_envio(self, obj):
+        # Ventas anteriores a esta funcionalidad (o del canal POS, que no
+        # pasa por checkout) no tienen Envio asociado: null explicito en
+        # vez de omitir la clave, mas facil de manejar en el frontend.
+        if not hasattr(obj, 'envio'):
+            return None
+        return EnvioSeguimientoSerializer(obj.envio).data

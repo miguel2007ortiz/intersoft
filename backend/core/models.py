@@ -293,6 +293,74 @@ class DetalleVenta(TimeStampedModel):
         return self.precio_unitario * self.cantidad
 
 
+class Envio(TimeStampedModel):
+    """Despacho/logistica de una venta del marketplace (canal tienda). Una
+    venta de mostrador/POS no tiene Envio asociado (no aplica).
+
+    Snapshot de direccion/ciudad al momento del checkout: si el cliente
+    cambia su direccion despues, los envios ya creados no se alteran (igual
+    criterio que el resto del sistema con datos historicos de factura)."""
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente de preparacion'),
+        ('preparando', 'Preparando pedido'),
+        ('despachado', 'Despachado'),
+        ('en_transito', 'En transito'),
+        ('entregado', 'Entregado'),
+        ('no_entregado', 'Intento fallido'),
+        ('devuelto', 'Devuelto al vendedor'),
+    ]
+    # Transiciones validas del estado de un envio. Un estado no listado como
+    # clave (entregado/devuelto) es terminal: no admite mas cambios.
+    TRANSICIONES_VALIDAS = {
+        'pendiente': {'preparando', 'despachado'},
+        'preparando': {'despachado'},
+        'despachado': {'en_transito', 'entregado', 'no_entregado'},
+        'en_transito': {'entregado', 'no_entregado'},
+        'no_entregado': {'en_transito', 'devuelto'},
+    }
+
+    venta = models.OneToOneField(Venta, on_delete=models.CASCADE, related_name='envio')
+    direccion = models.TextField()
+    ciudad = models.CharField(max_length=80)
+    departamento = models.CharField(max_length=80, blank=True)
+    transportadora = models.CharField(max_length=80, blank=True)
+    numero_guia = models.CharField(max_length=80, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    fecha_despacho = models.DateTimeField(null=True, blank=True)
+    fecha_entrega_estimada = models.DateField(null=True, blank=True)
+    fecha_entrega_real = models.DateTimeField(null=True, blank=True)
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['estado']),
+                   models.Index(fields=['numero_guia'])]
+
+    def __str__(self):
+        return f"Envio {self.get_estado_display()} - {self.venta.numero_factura}"
+
+    class TransicionInvalida(Exception):
+        pass
+
+    def cambiar_estado(self, nuevo_estado, *, guardar=True):
+        """Aplica la transicion si es valida; lanza TransicionInvalida si no.
+        Registra fecha_despacho/fecha_entrega_real automaticamente segun el
+        estado destino (no se editan a mano desde afuera)."""
+        if nuevo_estado not in dict(self.ESTADO_CHOICES):
+            raise self.TransicionInvalida(f"Estado desconocido: {nuevo_estado}")
+        permitidos = self.TRANSICIONES_VALIDAS.get(self.estado, set())
+        if nuevo_estado not in permitidos:
+            raise self.TransicionInvalida(
+                f"No se puede pasar de '{self.estado}' a '{nuevo_estado}'.")
+        self.estado = nuevo_estado
+        if nuevo_estado == 'despachado' and not self.fecha_despacho:
+            self.fecha_despacho = timezone.now()
+        if nuevo_estado == 'entregado':
+            self.fecha_entrega_real = timezone.now()
+        if guardar:
+            self.save(update_fields=['estado', 'fecha_despacho', 'fecha_entrega_real',
+                                     'updated_at'])
+
+
 class MovimientoInventario(TimeStampedModel):
     """Kardex: cada entrada, salida o ajuste que afecta el stock de un producto."""
     TIPO_CHOICES = [('entrada', 'Entrada'), ('salida', 'Salida'), ('ajuste', 'Ajuste')]

@@ -60,6 +60,22 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 
 ---
 
+## Fase F — Envíos (despachos del marketplace)
+- **F1. Módulo de envíos (backend, hecho)**: modelo `Envio` (1:1 con `Venta`,
+  solo canal marketplace), máquina de estados
+  (`pendiente/preparando/despachado/en_transito/entregado/no_entregado/devuelto`),
+  `CheckoutView` exige dirección/ciudad del cliente (`SIN_DIRECCION_ENVIO`) y
+  crea el envío al facturar. API de gestión (`/api/envios/`,
+  `/api/ventas/<id>/envio/`, `EsPersonal`, aislada por empresa) y de
+  seguimiento para el comprador (`/api/tienda/pedidos/` incluye `envio`).
+  Tests en `core/tests.py` (`EnvioCreacionTest`, `EnvioGestionTest`).
+- **F2. Panel de envíos (frontend, pendiente)**: vista de seguimiento en el
+  historial de pedidos del comprador + panel de gestión para personal
+  interno (lista filtrable + cambio de estado/transportadora/guía). Detalle
+  de la tarea en `AGENTS.md` §6.2.
+
+---
+
 ## Matriz de prioridad (impacto vs esfuerzo)
 | Ítem | Impacto | Esfuerzo | Prioridad |
 |------|---------|----------|-----------|
@@ -74,6 +90,8 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | E1 Design system | Medio | Medio | 9 |
 | D1 DIAN real | Alto | Alto | 10 |
 | D2 IA real | Alto | Alto | 11 |
+| F1 Envíos backend | Alto | Medio | — (hecho) |
+| F2 Envíos frontend | Alto | Bajo | 12 |
 
 ---
 

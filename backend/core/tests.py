@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from cuentas.models import Perfil, Rol
 
 from .models import (Camara, Categoria, Carrito, Cliente,
-                     ComentarioProducto, DetalleVenta, Empresa, IAConversacion,
+                     ComentarioProducto, DetalleVenta, Empresa, Envio, IAConversacion,
                      Favorito,
                      MovimientoInventario, Notificacion, Producto, Venta)
 
@@ -1093,7 +1093,8 @@ class BaseMarketplaceTest(TestCase):
         cls.cliente_comprador = Cliente.objects.create(
             usuario=cls.comprador, empresa=None, nombre="Juan Perez",
             tipo_documento="CC", numero_documento="1000000000",
-            email="comprador@test.co")
+            email="comprador@test.co",
+            direccion="Calle 10 # 5-20", ciudad="Bogota")
 
     @classmethod
     def api_como(cls, usuario):
@@ -1346,6 +1347,124 @@ class MarketplaceCheckoutTest(BaseMarketplaceTest):
         # El stock no se toco: la venta nunca se creo.
         self.producto_a.refresh_from_db()
         self.assertEqual(self.producto_a.stock, 10)
+
+    def test_checkout_sin_direccion_rechaza_y_no_toca_stock(self):
+        # Comprador con Cliente vinculado pero sin direccion/ciudad de envio.
+        sin_direccion = User.objects.create_user(username="sindir@test.co",
+                                                  email="sindir@test.co",
+                                                  password="Clave12345")
+        Perfil.objects.create(usuario=sin_direccion, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        Cliente.objects.create(usuario=sin_direccion, empresa=None, nombre="Sin Direccion",
+                               tipo_documento="CC", numero_documento="1000000099")
+        api = self.api_como(sin_direccion)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "SIN_DIRECCION_ENVIO")
+        self.assertEqual(Venta.objects.count(), 0)
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, 10)
+
+
+# ============================ FASE 10: Envios ============================
+
+class BaseEnvioTest(BaseMarketplaceTest):
+    """Suma un administrador por cada empresa vendedora, para probar la
+    gestion de envios del lado del personal interno (EsPersonal)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin_a = User.objects.create_user(username="admin.a@test.co",
+                                               email="admin.a@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=cls.admin_a, empresa=cls.vendedor_a,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+        cls.admin_b = User.objects.create_user(username="admin.b@test.co",
+                                               email="admin.b@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=cls.admin_b, empresa=cls.vendedor_b,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+
+    def _comprar_producto_a(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        return Venta.objects.get(empresa=self.vendedor_a)
+
+
+class EnvioCreacionTest(BaseEnvioTest):
+    def test_checkout_crea_envio_pendiente_con_direccion_del_cliente(self):
+        venta = self._comprar_producto_a()
+        envio = Envio.objects.get(venta=venta)
+        self.assertEqual(envio.estado, "pendiente")
+        self.assertEqual(envio.direccion, self.cliente_comprador.direccion)
+        self.assertEqual(envio.ciudad, self.cliente_comprador.ciudad)
+        self.assertIsNone(envio.fecha_despacho)
+
+    def test_pedido_del_comprador_incluye_seguimiento_de_envio(self):
+        self._comprar_producto_a()
+        api = self.api_como(self.comprador)
+        resp = api.get("/api/tienda/pedidos/")
+        self.assertEqual(resp.status_code, 200)
+        pedido_a = next(p for p in resp.data["resultados"]
+                        if p["empresa_nombre"] == "Vendedor A")
+        self.assertIsNotNone(pedido_a["envio"])
+        self.assertEqual(pedido_a["envio"]["estado"], "pendiente")
+        self.assertNotIn("notas", pedido_a["envio"])  # vista de comprador, sin notas internas
+
+
+class EnvioGestionTest(BaseEnvioTest):
+    def test_empleado_actualiza_transportadora_y_avanza_estado(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_a)
+
+        resp = api.patch(f"/api/ventas/{venta.id}/envio/",
+                         {"transportadora": "Servientrega", "numero_guia": "SV-123",
+                          "estado": "despachado"}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["estado"], "despachado")
+        self.assertEqual(resp.data["transportadora"], "Servientrega")
+        self.assertIsNotNone(resp.data["fecha_despacho"])
+
+    def test_transicion_invalida_se_rechaza(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_a)
+        # pendiente -> entregado no es una transicion valida (falta pasar
+        # por preparando/despachado/en_transito).
+        resp = api.patch(f"/api/ventas/{venta.id}/envio/",
+                         {"estado": "entregado"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "TRANSICION_INVALIDA")
+        self.assertEqual(Envio.objects.get(venta=venta).estado, "pendiente")
+
+    def test_empleado_de_otra_empresa_no_ve_ni_edita_el_envio(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_b)
+
+        self.assertEqual(api.get(f"/api/ventas/{venta.id}/envio/").status_code, 404)
+        resp = api.patch(f"/api/ventas/{venta.id}/envio/",
+                         {"estado": "despachado"}, format="json")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(Envio.objects.get(venta=venta).estado, "pendiente")
+
+    def test_lista_de_envios_filtra_por_estado_y_por_empresa(self):
+        venta = self._comprar_producto_a()
+        Envio.objects.filter(venta=venta).update(estado="despachado")
+
+        api_a = self.api_como(self.admin_a)
+        resp = api_a.get("/api/envios/", {"estado": "despachado"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["total"], 1)
+        self.assertEqual(str(resp.data["resultados"][0]["venta"]), str(venta.id))
+
+        # La empresa B no tiene envios propios todavia.
+        api_b = self.api_como(self.admin_b)
+        resp_b = api_b.get("/api/envios/")
+        self.assertEqual(resp_b.data["total"], 0)
 
 
 class RegistroCompradorTest(TestCase):
