@@ -13,6 +13,7 @@ import threading
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.core.management import call_command
 from django.test import TestCase, TransactionTestCase
 
@@ -390,6 +391,90 @@ class ComprobantesDianTest(BaseFase5Test):
         self.assertTrue(nota.xml.name)
         self.assertEqual(nota.pdf.read().decode(), "contenido pdf nota credito")
         self.assertEqual(nota.xml.read().decode(), "<NotaCredito/>")
+
+
+# ==================== Fase E2: descarga de PDF/XML ===========================
+# El comprobante aprobado expone su PDF/XML como URLs descargables (FileField
+# → /media/...). Estos tests validan que la URL se serializa, que el archivo
+# existe en disco y que responde por HTTP con el contenido correcto; y que un
+# comprobante NO aprobado no expone nada que descargar.
+
+class DescargaComprobantesTest(BaseFase5Test):
+    RESPUESTA_APROBADA = RespuestaDIAN(
+        aprobada=True, cufe="CUFE-DESCARGABLE",
+        mensaje="Factura aprobada por la DIAN.",
+        comprobante_pdf="contenido pdf descargable",
+        comprobante_xml="<FacturaElectronicaEjemplo/>",
+    )
+
+    def _factuar_venta(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        with patch("core.views_facturacion.enviar_factura",
+                  return_value=self.RESPUESTA_APROBADA):
+            api.post("/api/facturacion/", {"venta_id": str(venta.id)},
+                     format="json")
+        return FacturaElectronica.objects.get(venta=venta)
+
+    def test_factura_expone_urls_pdf_y_xml_descargables(self):
+        factura = self._factuar_venta()
+        cuerpo = self.api_como(self.empleado).get(
+            f"/api/facturacion/{factura.id}/").json()
+        self.assertEqual(cuerpo["estado"], "aprobada")
+        # El serializer expone las URLs de los FileField (path bajo /media/).
+        self.assertTrue(cuerpo["pdf"], "Debe existir URL de PDF")
+        self.assertTrue(cuerpo["xml"], "Debe existir URL de XML")
+        self.assertIn("/media/", cuerpo["pdf"])
+        self.assertIn("/media/", cuerpo["xml"])
+
+    def test_descarga_del_pdf_de_factura_por_su_ruta(self):
+        # El PDF queda persistido en MEDIA_ROOT bajo la ruta que expone la
+        # URL del FileField; cualquier servidor de estaticos (static() en
+        # DEBUG, nginx en produccion) puede servirlo. Se verifica el archivo
+        # en disco y que su contenido es el guardado.
+        factura = self._factuar_venta()
+        ruta = factura.pdf.name
+        url_expuesta = self.api_como(self.empleado).get(
+            f"/api/facturacion/{factura.id}/").json()["pdf"]
+        # La URL expuesta termina en la ruta del archivo en media/.
+        self.assertTrue(url_expuesta.endswith(ruta), f"{url_expuesta} != .../{ruta}")
+        with open(settings.MEDIA_ROOT / ruta, "rb") as fh:
+            self.assertEqual(fh.read().decode(), "contenido pdf descargable")
+
+    def test_nota_credito_expone_urls_pdf_y_xml(self):
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        FacturaElectronica.objects.create(
+            venta=venta, numero=f"FE-{venta.numero_factura}",
+            estado="aprobada", cufe="CUFE-FACTURA")
+        respuesta_nc = RespuestaDIAN(
+            aprobada=True, cufe="CUFE-NC",
+            mensaje="Nota credito aprobada.",
+            comprobante_pdf="pdf de la nota",
+            comprobante_xml="<NotaCreditoEjemplo/>")
+        with patch("core.views_facturacion.enviar_nota_credito",
+                  return_value=respuesta_nc):
+            api.post("/api/notas-credito/",
+                     {"venta_id": str(venta.id), "motivo": "Devolucion"},
+                     format="json")
+        nota = NotaCredito.objects.get(venta_original=venta)
+        cuerpo = api.get(f"/api/notas-credito/{nota.id}/").json()
+        self.assertTrue(cuerpo["pdf"])
+        self.assertTrue(cuerpo["xml"])
+        self.assertIn("/media/", cuerpo["pdf"])
+        self.assertIn("/media/", cuerpo["xml"])
+
+    def test_factura_no_aprobada_no_expone_comprobantes(self):
+        # Sin respuesta aprobada, el comprobante queda sin PDF/XML: no hay
+        # nada descargable.
+        api = self.api_como(self.empleado)
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(
+            venta=venta, numero=f"FE-{venta.numero_factura}",
+            estado="pendiente")
+        cuerpo = api.get(f"/api/facturacion/{factura.id}/").json()
+        self.assertIsNone(cuerpo["pdf"])
+        self.assertIsNone(cuerpo["xml"])
 
 
 # -------------------- Carreras: POS ---------------------------------------

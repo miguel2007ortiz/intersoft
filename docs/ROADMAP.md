@@ -89,3 +89,10 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   (multi-stage Node 22 -> nginx con reverse proxy de `/api` y `/media`), `docker-compose.yml` con
   MySQL 8, Redis (listo para B1) y ambos servicios. El frontend inyecta `apiUrl` en build vía
   `--build-arg API_URL` (default relativo `/api`).
+- **D2 IA con contexto (resuelta)**: el prompt de sistema ahora inyecta el contexto de negocio
+  (`ia_engine._system_prompt`) y hay rate-limit por usuario del chat
+  (`IA_MAX_PETICIONES`/`IA_PETICIONES_VENTANA`, default 15 en 60s) con respuesta 429.
+- **E2 descarga de PDF/XML (resuelta)**: se añadieron tests (`core/tests_fase5.py`,
+  clase `DescargaComprobantesTest`) que validan que la factura y la nota crédito aprobadas
+  exponen URLs `/media/...` de su PDF/XML, que el archivo existe en disco con su contenido, y que
+  un comprobante no aprobado no expone nada descargable.
