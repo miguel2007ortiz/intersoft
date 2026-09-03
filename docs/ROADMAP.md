@@ -43,7 +43,12 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ## Fase D — Integraciones reales
 - **D1. Facturación electrónica DIAN real**: el adaptador (`services/dian_adapter.py`) es solo mock
   (`DIAN_MOCK=True`). Integrar web service real: certificado/habilitación, PDF/XML reales con firma,
-  persistir CUDE/certificación; mantener mock detrás de flag. Mayor brecha a producción.
+  persistir CUDE/certificación; mantener mock detrás de flag. **Estado: preparada** — el mock se
+  endureció (validación de `nit_empresa`, `detalles` y nota `motivo`) y el docstring del adaptador
+  documenta la hoja de ruta completa de la integración (habilitación oficial, endpoint SOAP/EIP 2.0,
+  CUFE SHA-384 real, firma XAdES-EPES, variables `.env` y las reglas de negocio a conservar).
+  Requiere credenciales oficiales (usuario/clave de habilitación + certificado) para poder probarse;
+  sin ellas no es verificable localmente.
 - **D2. IA con proveedor real**: `ia_engine.py` cae a `_mock` sin `IA_API_KEY`. Definir prompt de
   sistema con contexto de empresa + rate-limit y timeout con fallback.
 
@@ -99,3 +104,8 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 - **E1 design system vivo (resuelta)**: documento `docs/DESIGN_SYSTEM.md` con los tokens reales de
   `frontend/src/styles.css` (colores claro/noche, espaciado, radios, sombras, tipografía),
   componentes reutilizables y referencia a `figma-marketplace/` (tokens + capturas, no versionado).
+- **D1 DIAN real (resuelta como preparada)**: no se escribe la integración SOAP real por falta de
+  credenciales oficiales (no verificable). Se endureció el mock (`nit_empresa` y `detalles`
+  obligatorios en factura; `motivo` y `nit_empresa` en nota crédito) y el docstring del adaptador
+  quedó como hoja de ruta: habilitación oficial, endpoint, CUFE SHA-384, firma XAdES-EPES,
+  variables `.env` y reglas de negocio a conservar.

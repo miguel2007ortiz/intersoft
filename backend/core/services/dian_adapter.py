@@ -3,11 +3,33 @@ Adaptador mock del servicio web de la DIAN.
 
 Configuracion por variable de entorno:
 - DIAN_MOCK=True (default): simula respuestas de la DIAN.
-- DIAN_MOCK=False: lanza error indicando que las credenciales reales
-  aun no estan configuradas.
+- DIAN_MOCK=False: devuelve RespuestaDIAN(aprobada=False) indicando que las
+  credenciales reales aun no estan configuradas (codigo SIN_CREDENCIALES).
 
-En el futuro, reemplazar la logica interna con la integracion
-SOAP/REST real contra el web service de la DIAN.
+Hoja de ruta hacia la integracion real (habilitacion DIAN / numero 900444):
+1. Habilitacion oficial ante la DIAN (resolucion de facturacion electronica,
+   usuario y clave de habilitacion + certificado digital de la empresa).
+2. Consumir el Web Service de la DIAN (SOAP 1.2 sobre HTTPS) en
+   https://vpfe-hab.dian.gov.co/Wcf/DocumentManagementService.svc (pruebas
+   habilitacion) o el ambito de produccion segun corresponda. Alternativa
+   REST/EIP 2.0: https://api-sitdian-af-... (entorno habilitacion).
+3. Generar el CUFE real: SHA-384 (cadena de factura con la llave de resumen
+   hash provista por la DIAN), NO el SHA-256 simulado de este mock.
+4. Firmar digitalmente el documento XML (firma XAdES-EPES en Colombia) con el
+   certificado de la empresa (sellar la representacion Canonical XML al final
+   del documento) antes del envío.
+5. Validar las respuestas: estado "EN PROCESO"/"APROBADO"/"RECHAZADO" y el
+   resultado de la validacion (errores de schema para reenviar).
+6. Configurar credenciales por variables de entorno (.env): DIAN_MOCK=False,
+   DIAN_WSDL, DIAN_USUARIO, DIAN_CLAVE, DIAN_CERTIFICADO (ruta PKCS12),
+   DIAN_CLAVE_CERTIFICADO. Mantener la firma del adaptador (devolver
+   RespuestaDIAN) para que las vistas y tests no cambien.
+
+Reglas de negocio validadas por este mock (conservar en la integracion real):
+- cliente_doc y nit_empresa son obligatorios.
+- El total de la factura debe ser mayor a 0.
+- La factura debe tener al menos una linea de detalle.
+- La nota de credito requiere motivo y nit_empresa.
 """
 
 import hashlib
@@ -115,6 +137,21 @@ def enviar_factura(datos_venta: dict) -> RespuestaDIAN:
             codigo_error='DATOS_INVALIDOS',
         )
 
+    if not datos_venta.get('nit_empresa'):
+        return RespuestaDIAN(
+            aprobada=False,
+            mensaje='Rechazado: la empresa no tiene NIT configurado '
+                    '(obligatorio en la facturacion electronica DIAN).',
+            codigo_error='DATOS_INVALIDOS',
+        )
+
+    if not datos_venta.get('detalles'):
+        return RespuestaDIAN(
+            aprobada=False,
+            mensaje='Rechazado: la factura no tiene lineas de detalle.',
+            codigo_error='DATOS_INVALIDOS',
+        )
+
     if not datos_venta.get('total') or float(str(datos_venta.get('total', 0))) <= 0:
         return RespuestaDIAN(
             aprobada=False,
@@ -173,6 +210,13 @@ def enviar_nota_credito(datos_nota: dict) -> RespuestaDIAN:
         return RespuestaDIAN(
             aprobada=False,
             mensaje='Rechazado: motivo de nota credito requerido.',
+            codigo_error='DATOS_INVALIDOS',
+        )
+
+    if not datos_nota.get('nit_empresa'):
+        return RespuestaDIAN(
+            aprobada=False,
+            mensaje='Rechazado: la empresa no tiene NIT configurado.',
             codigo_error='DATOS_INVALIDOS',
         )
 
