@@ -167,6 +167,20 @@ class GenerarFacturaTest(BaseFacturacionTest):
         self.assertEqual(factura.numero, f"FE-{venta.numero_factura}")
 
     @patch("core.views_facturacion.enviar_factura")
+    def test_generar_aprobada_pdf_como_texto_legacy(self, enviar):
+        # Respaldo para PDFs que llegan como string (mock/legacy).
+        enviar.return_value = RespuestaDIAN(
+            aprobada=True, cufe="CUFE-TEXTO",
+            comprobante_pdf="%PDF-1.4 legacy", comprobante_xml="<xml/>")
+        venta = self.crear_venta()
+        resp = self.api_como(self.admin).post(
+            "/api/facturacion/", {"venta_id": str(venta.id)}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        factura = FacturaElectronica.objects.get(venta=venta)
+        self.assertEqual(factura.estado, "aprobada")
+        self.assertTrue(factura.pdf)
+
+    @patch("core.views_facturacion.enviar_factura")
     def test_generar_rechazada_notifica_al_admin(self, enviar):
         enviar.return_value = RespuestaDIAN(
             aprobada=False, codigo_error="DATOS_INVALIDOS",

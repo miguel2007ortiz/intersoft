@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
@@ -1199,6 +1200,12 @@ class ComentarioProductoTest(BaseMarketplaceTest):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.data["resultados"]), 2)
 
+    def test_comentarios_limite_invalido_usa_default(self):
+        listado = APIClient().get(
+            f"/api/tienda/catalogo/{self.producto_a.id}/comentarios/?limite=abc")
+        self.assertEqual(listado.status_code, 200)
+        self.assertGreaterEqual(len(listado.data["resultados"]), 0)
+
 
 class MarketplaceCarritoTest(BaseMarketplaceTest):
     def test_carrito_acepta_productos_de_dos_empresas_distintas(self):
@@ -2132,6 +2139,35 @@ class CarritoItemsAvanzadoTest(BaseMarketplaceTest):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
 
+    def test_post_item_acumula_cantidad(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        resp = api.post("/api/tienda/carrito/items/",
+                        {"producto": str(self.producto_a.id), "cantidad": 3}, format="json")
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["total_items"], 5)
+
+    def test_put_item_datos_invalidos_400(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.put("/api/tienda/carrito/items/00000000-0000-0000-0000-000000000098/",
+                       {}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_put_item_supera_stock_400(self):
+        api = self.api_como(self.comprador)
+        creado = api.post("/api/tienda/carrito/items/",
+                          {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        item_id = creado.data["items"][0]["id"]
+        resp = api.put(f"/api/tienda/carrito/items/{item_id}/",
+                       {"producto": str(self.producto_a.id), "cantidad": 999},
+                       format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+
     def test_put_actualiza_cantidad(self):
         api = self.api_como(self.comprador)
         creado = api.post("/api/tienda/carrito/items/",
@@ -2259,3 +2295,367 @@ class CheckoutPagoYCuponTest(BaseMarketplaceTest):
         resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+
+
+# ============ Complemento de cobertura: catalogo / ventas / empleados =====
+
+class CatalogoComplementoTest(BaseCatalogoTest):
+    """Ramas no ejercitadas de views_catalogo.py (limite, pagina, estado,
+    generico, PUT/PATCH de producto y permisos finos)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")  # ADMINISTRADOR necesita producto.actualizar
+
+    def test_limite_invalido_usa_por_defecto(self):
+        resp = self.api_como(self.admin).get("/api/productos/?limite=abc")
+        self.assertEqual(resp.status_code, 200)
+        self.assertLessEqual(resp.data["total"], 50)
+
+    def test_listar_clientes_inactivos(self):
+        api = self.api_como(self.admin)
+        self.cliente.soft_delete()
+        resp = api.get("/api/clientes/?estado=inactivos")
+        self.assertEqual(resp.status_code, 200)
+        ids = {c["id"] for c in resp.data["resultados"]}
+        self.assertIn(str(self.cliente.id), ids)
+
+    def test_pagina_invalida_usa_1(self):
+        resp = self.api_como(self.admin).get("/api/clientes/?pagina=abc")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["pagina"], 1)
+
+    def test_cliente_generico_se_crea_y_devuelve(self):
+        resp = self.api_como(self.admin).get("/api/clientes/generico/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["numero_documento"])
+
+    def test_put_producto_completo_200(self):
+        api = self.api_como(self.admin)
+        payload = {"nombre": "Zapatos Renovados", "descripcion": "Modelo 2026",
+                   "sku": "SKU-T02", "precio": "80000", "stock": "30",
+                   "stock_minimo": "5"}
+        resp = api.put(f"/api/productos/{self.producto.id}/", payload, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.precio, Decimal("80000"))
+
+    def test_patch_producto_parcial_200(self):
+        api = self.api_como(self.admin)
+        resp = api.patch(f"/api/productos/{self.producto.id}/",
+                         {"stock": "25"}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 25)
+
+    def test_patch_cliente_datos_invalidos_400(self):
+        resp = self.api_como(self.admin).patch(
+            f"/api/clientes/{self.cliente.id}/", {"tipo_documento": "XX"},
+            format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_put_cliente_edicion_completa_200(self):
+        api = self.api_como(self.admin)
+        payload = {"nombre": "Carlos Ramirez R.", "tipo_documento": "CC",
+                   "numero_documento": "1020304050", "email": "carlos@test.co",
+                   "telefono": "3105557777"}
+        resp = api.put(f"/api/clientes/{self.cliente.id}/", payload, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.cliente.refresh_from_db()
+        self.assertEqual(self.cliente.nombre, "Carlos Ramirez R.")
+
+    def test_patch_producto_datos_invalidos_400(self):
+        resp = self.api_como(self.admin).patch(
+            f"/api/productos/{self.producto.id}/", {"stock": "no-es-numero"},
+            format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_empleado_sin_permiso_producto_actualizar_403(self):
+        resp = self.api_como(self.empleado).put(
+            f"/api/productos/{self.producto.id}/",
+            {"nombre": "X", "descripcion": "Y", "sku": "SKU-ZZ",
+             "precio": "1", "stock": "1", "stock_minimo": "0"}, format="json")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_detalle_producto_existente(self):
+        resp = self.api_como(self.admin).get(f"/api/productos/{self.producto.id}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["nombre"], "Zapatos")
+
+    def test_cliente_estado_accion_invalida_404(self):
+        resp = self.api_como(self.admin).post(
+            f"/api/clientes/{self.cliente.id}/otra/", format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_producto_estado_404_inexistente(self):
+        resp = self.api_como(self.admin).post(
+            "/api/productos/00000000-0000-0000-0000-000000000021/desactivar/",
+            format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_producto_estado_accion_invalida_404(self):
+        resp = self.api_como(self.admin).post(
+            f"/api/productos/{self.producto.id}/otra/", format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_producto_reactivar_ya_activo_400(self):
+        resp = self.api_como(self.admin).post(
+            f"/api/productos/{self.producto.id}/reactivar/", format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "YA_ACTIVO")
+
+    def test_producto_desactivar_dos_veces_ya_desactivado(self):
+        api = self.api_como(self.admin)
+        api.post(f"/api/productos/{self.producto.id}/desactivar/", format="json")
+        resp = api.post(f"/api/productos/{self.producto.id}/desactivar/", format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "YA_DESACTIVADO")
+
+
+class VentasComplementoTest(BaseCatalogoTest):
+    """Ramas no ejercitadas de views_ventas.py: POS invalido, filtros de
+    lista, anulacion con estado raro, inventario (GET/ajustes/alertas) y
+    alerta de stock con producto inactivo."""
+
+    def _pos(self, api, producto=None, cantidad=2):
+        return api.post("/api/ventas/pos/", {
+            "cliente": str(self.cliente.id),
+            "metodo_pago": "efectivo",
+            "detalles": [{"producto": str((producto or self.producto).id),
+                          "cantidad": cantidad}],
+        }, format="json")
+
+    def test_pos_datos_invalidos_400(self):
+        resp = self.api_como(self.admin).post("/api/ventas/pos/", {}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_listar_ventas_con_filtros(self):
+        api = self.api_como(self.admin)
+        self._pos(api)
+        resp = api.get("/api/ventas/", {"estado": "completada", "busqueda": "Carlos"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["total"], 1)
+
+    def test_listar_ventas_fecha_fin_invalida_400(self):
+        resp = self.api_como(self.admin).get("/api/ventas/", {"fecha_fin": "no-es-fecha"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "FECHA_INVALIDA")
+
+    def test_detalle_venta_existente(self):
+        api = self.api_como(self.admin)
+        venta = self._pos(api).json()
+        resp = api.get(f"/api/ventas/{venta['id']}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["estado"], "completada")
+
+    def test_anular_venta_en_estado_no_completada_400(self):
+        api = self.api_como(self.admin)
+        venta = Venta.objects.get(pk=self._pos(api).json()["id"])
+        Venta.objects.filter(pk=venta.pk).update(estado="en_proceso")
+        resp = api.post(f"/api/ventas/{venta.id}/anular/", {"motivo": "cancelado por doble"},
+                        format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "ESTADO_INVALIDO")
+
+    def test_inventario_lista_filtros(self):
+        api = self.api_como(self.admin)
+        self._pos(api, cantidad=1)
+        api.post(f"/api/inventario/{self.producto.id}/ajustar/",
+                 {"cantidad": 5, "tipo": "entrada", "motivo": "reposicion"}, format="json")
+        resp = api.get("/api/inventario/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["total"], 2)
+        resp2 = api.get(f"/api/inventario/?producto={self.producto.id}&tipo=entrada")
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(resp2.data["total"], 1)
+
+    def test_ajuste_datos_invalidos_400(self):
+        resp = self.api_como(self.admin).post("/api/inventario/", {}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_ajuste_producto_inexistente_400(self):
+        resp = self.api_como(self.admin).post("/api/inventario/", {
+            "producto": "00000000-0000-0000-0000-000000000031",
+            "cantidad": 1, "tipo": "entrada", "motivo": "prueba"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "PRODUCTO_NO_ENCONTRADO")
+
+    def test_ajuste_salida_sin_stock_400(self):
+        resp = self.api_como(self.admin).post("/api/inventario/", {
+            "producto": str(self.producto.id), "cantidad": 999,
+            "tipo": "salida", "motivo": "prueba"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+
+    def test_ajuste_salida_ok(self):
+        api = self.api_como(self.admin)
+        resp = api.post("/api/inventario/", {
+            "producto": str(self.producto.id), "cantidad": 2,
+            "tipo": "salida", "motivo": "merma"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 38)
+
+    def test_ajuste_producto_inactivo_no_genera_alerta(self):
+        inactivo = Producto.objects.create(empresa=self.empresa, nombre="Apagado",
+                                           sku="SKU-APG", precio=10, stock=5,
+                                           stock_minimo=3, activo=False)
+        resp = self.api_como(self.admin).post(
+            f"/api/inventario/{inactivo.id}/ajustar/",
+            {"cantidad": 2, "tipo": "entrada", "motivo": "prueba"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock").exists())
+
+    def test_marcar_alerta_revisada(self):
+        api = self.api_como(self.admin)
+        alerta = crear_notificacion(empresa=self.empresa, tipo="stock",
+                                    mensaje="Stock bajo: Zapatos (SKU-T01) tiene 0 unidades.")
+        resp = api.post(f"/api/alertas/{alerta.id}/revisar/")
+        self.assertEqual(resp.status_code, 200)
+        alerta.refresh_from_db()
+        self.assertTrue(alerta.leida)
+
+    def test_reabastecer_alerta_sin_producto_400(self):
+        api = self.api_como(self.admin)
+        alerta = crear_notificacion(empresa=self.empresa, tipo="sistema",
+                                    mensaje="Un aviso que no es de stock")
+        resp = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "ALERTA_INVALIDA")
+
+    def test_reabastecer_mensaje_sin_formato_400(self):
+        api = self.api_como(self.admin)
+        alerta = crear_notificacion(empresa=self.empresa, tipo="stock",
+                                    mensaje="Stock bajo: no hay parentesis")
+        resp = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "ALERTA_INVALIDA")
+
+    def test_reabastecer_cantidad_invalida_400(self):
+        api = self.api_como(self.admin)
+        alerta = crear_notificacion(
+            empresa=self.empresa, tipo="stock",
+            mensaje=f"Stock bajo: {self.producto.nombre} ({self.producto.sku}) "
+                    f"tiene 0 unidades (minimo 10).")
+        resp = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/",
+                        {"cantidad": 0}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_reabastecer_sku_sin_producto_400(self):
+        api = self.api_como(self.admin)
+        alerta = crear_notificacion(empresa=self.empresa, tipo="stock",
+                                    mensaje="Stock bajo: Fantasma (SKU-FANTASMA) "
+                                            "tiene 0 unidades (minimo 5).")
+        resp = api.post(f"/api/alertas/{alerta.id}/actualizar-stock/")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "PRODUCTO_NO_ENCONTRADO")
+
+    def test_inventario_productos_con_filtros(self):
+        api = self.api_como(self.admin)
+        categoria = self.crear_categoria("Ropa")
+        Producto.objects.create(
+            empresa=self.empresa, nombre="Short", sku="SKU-SHT",
+            precio=20000, stock=2, stock_minimo=5, categoria=categoria)
+        resp = api.get("/api/inventario/productos/?busqueda=Zapatos")
+        self.assertEqual(resp.status_code, 200)
+        nombres = [p["nombre"] for p in resp.data["resultados"]]
+        self.assertIn("Zapatos", nombres)
+        bajos = api.get("/api/inventario/productos/?stock_bajo=true")
+        nombres_bajos = [p["nombre"] for p in bajos.data["resultados"]]
+        self.assertIn("Short", nombres_bajos)
+        self.assertIn("Zapatos", [p["nombre"] for p in
+                                  api.get("/api/inventario/productos/?limite=abc").data["resultados"]])
+
+
+class EnvioVentasComplementoTest(BaseEnvioTest):
+    """Ramas no ejercitadas de la API de envios en views_ventas.py."""
+
+    def test_envios_limite_invalido_y_estado_invalido(self):
+        api = self.api_como(self.admin_a)
+        self._comprar_producto_a()
+        resp = api.get("/api/envios/", {"limite": "abc"})
+        self.assertEqual(resp.status_code, 200)
+        resp2 = api.get("/api/envios/", {"estado": "no-existe"})
+        self.assertEqual(resp2.status_code, 400)
+        self.assertEqual(resp2.data["codigo"], "ESTADO_INVALIDO")
+
+    def test_envio_detalle_ok_y_patch_invalido(self):
+        venta = self._comprar_producto_a()
+        api = self.api_como(self.admin_a)
+        resp = api.get(f"/api/ventas/{venta.id}/envio/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["estado"], "pendiente")
+        resp2 = api.patch(f"/api/ventas/{venta.id}/envio/",
+                          {"estado": "otra-cosa"}, format="json")
+        self.assertEqual(resp2.status_code, 400)
+        self.assertEqual(resp2.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_envio_detalle_inexistente_404(self):
+        venta = self._comprar_producto_a()
+        venta_otra = Venta.objects.create(empresa=self.vendedor_a,
+                                          cliente=self.cliente_comprador,
+                                          vendedor=venta.vendedor, total=1)
+        resp = self.api_como(self.admin_a).get(f"/api/ventas/{venta_otra.id}/envio/")
+        self.assertEqual(resp.status_code, 404)
+
+
+class EmpleadoEdicionSerializerTest(BaseCatalogoTest):
+    """Ramas no ejercitadas de serializers_empleados.py (update: nombre,
+    email, rol y documento)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")  # ADMINISTRADOR necesita empleado.actualizar
+        cls.empleado_edit = User.objects.create_user(username="emp.edit@test.co",
+                                                     email="emp.edit@test.co",
+                                                     password="Clave12345")
+        Perfil.objects.create(usuario=cls.empleado_edit, empresa=cls.empresa,
+                              rol=Rol.de_nombre("EMPLEADO"),
+                              tipo_documento="CC", numero_documento="22223333")
+        cls.empleado_conflicto_doc = User.objects.create_user(
+            username="emp.doc@test.co", email="emp.doc@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=cls.empleado_conflicto_doc, empresa=cls.empresa,
+                              rol=Rol.de_nombre("EMPLEADO"),
+                              tipo_documento="CC", numero_documento="88889999")
+
+    def test_editar_nombre_email_rol_y_documento(self):
+        api = self.api_como(self.admin)
+        resp = api.patch(f"/api/empleados/{self.empleado_edit.perfil.id}/", {
+            "nombre": "Ana Maria",
+            "email": "emp.edit2@test.co",
+            "rol": "EMPLEADO",
+            "tipo_documento": "NIT",
+            "numero_documento": "555666",
+            "telefono": "3000000000",
+            "cargo": "Vendedor",
+        }, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.empleado_edit.refresh_from_db()
+        self.assertEqual(self.empleado_edit.first_name, "Ana")
+        self.assertEqual(self.empleado_edit.last_name, "Maria")
+        self.assertEqual(self.empleado_edit.username, "emp.edit2@test.co")
+        perfil = self.empleado_edit.perfil
+        self.assertEqual(perfil.numero_documento, "555666")
+        self.assertEqual(perfil.rol.nombre, "EMPLEADO")
+
+    def test_email_duplicado_al_editar_400(self):
+        resp = self.api_como(self.admin).patch(
+            f"/api/empleados/{self.empleado_edit.perfil.id}/",
+            {"email": self.empleado.email}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("correo", str(resp.data["errores"]["email"]).lower())
+
+    def test_documento_duplicado_al_editar_400(self):
+        resp = self.api_como(self.admin).patch(
+            f"/api/empleados/{self.empleado_edit.perfil.id}/",
+            {"tipo_documento": "CC", "numero_documento": "88889999"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("88889999", str(resp.data["errores"]["numero_documento"]))
