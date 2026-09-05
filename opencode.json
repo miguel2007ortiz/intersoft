@@ -30,7 +30,7 @@
       "git checkout -b*": "allow",
       "git push*": "ask",
       "git merge*": "ask",
-      "git push origin main*": "deny",
+      "git push origin main*": "ask",
       "git push origin develop*": "ask",
       "python manage.py migrate*": "ask",
       "python manage.py flush*": "deny",
