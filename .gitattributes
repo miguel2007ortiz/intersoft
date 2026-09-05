@@ -1,0 +1,30 @@
+# Normalizacion de lineas y encoding.
+# git almacena SIEMPRE LF + UTF-8; el checkout usa CRLF solo donde se pide.
+* text=auto
+
+# Docs y codigo: LF fijo en cualquier plataforma (consistencia en CI/Linux)
+*.py          text eol=lf
+*.ts          text eol=lf
+*.js          text eol=lf
+*.html        text eol=lf
+*.css         text eol=lf
+*.md          text eol=lf
+*.json        text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.txt         text eol=lf
+*.toml        text eol=lf
+.env.example  text eol=lf
+
+# Scripts de Windows conservan CRLF (ejecutables .bat/.cmd)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.sqlite3 binary

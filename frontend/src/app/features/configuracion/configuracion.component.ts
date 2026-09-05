@@ -6,7 +6,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 
 @Component({
   selector: 'app-configuracion',
-  imports: [RouterLink, PanelShellComponent],
+  imports: [PanelShellComponent, RouterLink],
   template: `
     <app-panel-shell>
       <section class="contenedor seccion">
@@ -14,10 +14,22 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
           <h1>Configuracion</h1>
           <p class="descripcion">Informacion de tu cuenta y de la empresa.</p>
           <dl>
-            <div class="fila"><dt>Nombre</dt><dd>{{ auth.usuario()?.nombre }}</dd></div>
-            <div class="fila"><dt>Correo</dt><dd>{{ auth.usuario()?.email }}</dd></div>
-            <div class="fila"><dt>Rol</dt><dd>{{ auth.usuario()?.rol }}</dd></div>
-            <div class="fila"><dt>Empresa</dt><dd>{{ auth.usuario()?.empresa }}</dd></div>
+            <div class="fila">
+              <dt>Nombre</dt>
+              <dd>{{ auth.usuario()?.nombre }}</dd>
+            </div>
+            <div class="fila">
+              <dt>Correo</dt>
+              <dd>{{ auth.usuario()?.email }}</dd>
+            </div>
+            <div class="fila">
+              <dt>Rol</dt>
+              <dd>{{ auth.usuario()?.rol }}</dd>
+            </div>
+            <div class="fila">
+              <dt>Empresa</dt>
+              <dd>{{ auth.usuario()?.empresa }}</dd>
+            </div>
           </dl>
 
           <h2>Apariencia</h2>
@@ -38,6 +50,20 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
               <span class="perilla"></span>
             </button>
           </div>
+          @if (auth.usuario()?.empresa === null || auth.usuario()?.empresa === undefined) {
+            <h2>Empresa</h2>
+            <div class="fila empresas">
+              <div>
+                <dt>¿Tienes un negocio?</dt>
+                <p class="ayuda">
+                  Registra tu empresa y administra producto, inventario, ventas y mas desde el
+                  panel.
+                </p>
+              </div>
+              <a routerLink="/registro" class="btn-negocio">Crear negocio</a>
+            </div>
+          }
+
           <p class="nota">Mas opciones de configuracion disponibles proximamente.</p>
         </div>
       </section>
@@ -57,8 +83,14 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         padding: var(--e6);
         box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
       }
-      h1 { margin: 0 0 var(--e2); font-size: clamp(24px, 4vw, 30px); }
-      .descripcion { margin: 0 0 var(--e5); color: var(--gris); }
+      h1 {
+        margin: 0 0 var(--e2);
+        font-size: clamp(24px, 4vw, 30px);
+      }
+      .descripcion {
+        margin: 0 0 var(--e5);
+        color: var(--gris);
+      }
 
       h2 {
         margin: var(--e5) 0 var(--e3);
@@ -66,7 +98,12 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         letter-spacing: 0.02em;
       }
 
-      dl { margin: 0; display: flex; flex-direction: column; gap: var(--e3); }
+      dl {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--e3);
+      }
       .fila {
         display: flex;
         justify-content: space-between;
@@ -74,11 +111,43 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         padding-bottom: var(--e3);
         border-bottom: 1px dashed var(--linea);
       }
-      dt { color: var(--gris); font-size: 14.5px; }
-      dd { margin: 0; font-weight: 600; text-align: right; }
+      dt {
+        color: var(--gris);
+        font-size: 14.5px;
+      }
+      dd {
+        margin: 0;
+        font-weight: 600;
+        text-align: right;
+      }
 
-      .apariencia { align-items: center; }
-      .ayuda { margin: var(--e1) 0 0; }
+      .apariencia {
+        align-items: center;
+      }
+      .empresas {
+        align-items: center;
+      }
+      .btn-negocio {
+        flex: none;
+        padding: 9px 18px;
+        border-radius: 8px;
+        background: var(--primario);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+        transition:
+          opacity 0.15s,
+          transform 0.1s;
+      }
+      .btn-negocio:hover {
+        opacity: 0.92;
+        transform: translateY(-1px);
+      }
+      .ayuda {
+        margin: var(--e1) 0 0;
+      }
 
       .interruptor {
         position: relative;
@@ -102,10 +171,18 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
         transition: transform 0.2s ease;
       }
-      .interruptor.activo { background: var(--primario); }
-      .interruptor.activo .perilla { transform: translateX(20px); }
+      .interruptor.activo {
+        background: var(--primario);
+      }
+      .interruptor.activo .perilla {
+        transform: translateX(20px);
+      }
 
-      .nota { margin: var(--e5) 0 0; font-size: 13.5px; color: var(--gris); }
+      .nota {
+        margin: var(--e5) 0 0;
+        font-size: 13.5px;
+        color: var(--gris);
+      }
     `,
   ],
 })

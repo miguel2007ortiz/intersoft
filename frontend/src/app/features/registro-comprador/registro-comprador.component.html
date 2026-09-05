@@ -1,0 +1,126 @@
+<app-auth-shell>
+  <div class="tarjeta caja-auth aparecer">
+    <h1>Crear cuenta de comprador</h1>
+    <p class="subtitulo">
+      Regístrate para comprar en el marketplace de todas las empresas.
+    </p>
+
+    @if (error(); as e) {
+      <div class="aviso aviso-error" role="alert">{{ e.mensaje }}</div>
+    }
+
+    <form [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
+      <div class="campo">
+        <label for="c-nombre">Nombre completo</label>
+        <input id="c-nombre" type="text" formControlName="nombre" autocomplete="name"
+               placeholder="Ana Torres" />
+        @if (c.nombre.touched && c.nombre.invalid) {
+          <p class="mensaje-error" role="alert">Escribe tu nombre completo (minimo 3 caracteres).</p>
+        }
+      </div>
+
+      <div class="campo">
+        <label for="c-email">Correo electronico</label>
+        <input id="c-email" type="email" formControlName="email" autocomplete="email"
+               placeholder="ana@correo.co" />
+        @if (c.email.pending) {
+          <p class="ayuda">Verificando disponibilidad...</p>
+        } @else if (c.email.touched && c.email.invalid) {
+          <p class="mensaje-error" role="alert">
+            @if (c.email.hasError('required')) { Escribe tu correo. }
+            @else if (c.email.hasError('emailEnUso')) { Ya existe una cuenta con este correo. }
+            @else { Ese correo no tiene un formato valido. }
+          </p>
+        } @else if (c.email.valid && c.email.touched) {
+          <p class="ayuda ok">Correo disponible.</p>
+        }
+      </div>
+
+      <div class="campo">
+        <label for="c-password">Contraseña</label>
+        <div class="campo-password">
+          <input id="c-password" [type]="verPassword() ? 'text' : 'password'"
+                 formControlName="password" autocomplete="new-password" />
+          <button type="button" class="ver" (click)="verPassword.set(!verPassword())"
+                  [attr.aria-label]="verPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+            {{ verPassword() ? 'Ocultar' : 'Ver' }}
+          </button>
+        </div>
+        @if (c.password.touched && c.password.hasError('fuerza')) {
+          <p class="mensaje-error" role="alert">La contraseña necesita: {{ faltantesPassword().join(', ') }}.</p>
+        } @else if (c.password.touched && c.password.hasError('required')) {
+          <p class="mensaje-error" role="alert">Escribe una contraseña.</p>
+        } @else {
+          <p class="ayuda">Minimo 8 caracteres, con mayuscula, minuscula y numero.</p>
+        }
+      </div>
+
+      <div class="campo">
+        <label for="c-password2">Repite la contraseña</label>
+        <input id="c-password2" type="password" formControlName="password2" autocomplete="new-password" />
+        @if (formulario.hasError('passwordsDistintas') && c.password2.touched) {
+          <p class="mensaje-error" role="alert">Las contraseñas no coinciden.</p>
+        }
+      </div>
+
+      <div class="fila-documento">
+        <div class="campo">
+          <label for="c-tipo">Tipo de documento</label>
+          <select id="c-tipo" formControlName="tipo_documento">
+            @for (t of tiposDocumento; track t.valor) {
+              <option [value]="t.valor">{{ t.etiqueta }}</option>
+            }
+          </select>
+        </div>
+        <div class="campo">
+          <label for="c-numero">Numero</label>
+          <input id="c-numero" type="text" formControlName="numero_documento"
+                 autocomplete="off" />
+          @if (c.numero_documento.touched && c.numero_documento.invalid) {
+            <p class="mensaje-error" role="alert">Escribe el numero de documento.</p>
+          }
+        </div>
+      </div>
+
+      <div class="campo">
+        <label for="c-telefono">Telefono</label>
+        <input id="c-telefono" type="text" formControlName="telefono" autocomplete="tel"
+               placeholder="300 123 4567" />
+      </div>
+
+      <p class="ayuda ayuda-seccion">¿Desde donde nos visitas? Asi te mostramos y enviamos mejor tus pedidos.</p>
+      <div class="fila-documento">
+        <div class="campo">
+          <label for="c-departamento">Departamento</label>
+          <select id="c-departamento" formControlName="departamento" (change)="c.ciudad.setValue('')">
+            <option value="">Selecciona...</option>
+            @for (d of departamentos; track d.nombre) {
+              <option [value]="d.nombre">{{ d.nombre }}</option>
+            }
+          </select>
+        </div>
+        <div class="campo">
+          <label for="c-ciudad">Ciudad</label>
+          <select id="c-ciudad" formControlName="ciudad" [disabled]="!c.departamento.value">
+            <option value="">
+              {{ c.departamento.value ? 'Selecciona...' : 'Elige un departamento primero' }}
+            </option>
+            @for (ciu of ciudadesDisponibles(); track ciu) {
+              <option [value]="ciu">{{ ciu }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primario btn-bloque" [disabled]="cargando()">
+        {{ cargando() ? 'Creando cuenta...' : 'Crear cuenta de comprador' }}
+      </button>
+    </form>
+
+    <div class="enlaces">
+      <span>¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesion</a></span>
+      <span class="divisor">|</span>
+      <span><a routerLink="/registro">Registrar un negocio</a></span>
+    </div>
+  </div>
+</app-auth-shell>

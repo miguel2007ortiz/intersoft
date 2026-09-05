@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (Empresa, Categoria, Producto, Cliente, Venta,
-                     DetalleVenta, MovimientoInventario, Notificacion)
+                     DetalleVenta, MovimientoInventario, Notificacion,
+                     ComentarioProducto)
 
 
 @admin.register(Empresa)
@@ -68,7 +69,16 @@ class MovimientoInventarioAdmin(admin.ModelAdmin):
 
 @admin.register(Notificacion)
 class NotificacionAdmin(admin.ModelAdmin):
-    list_display = ('mensaje', 'usuario', 'leida', 'created_at')
-    list_filter = ('leida',)
+    list_display = ('mensaje', 'tipo', 'estado', 'canal', 'empresa',
+                    'usuario', 'leida', 'created_at')
+    list_filter = ('tipo', 'estado', 'canal', 'empresa')
     search_fields = ('mensaje', 'usuario__email')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+
+
+@admin.register(ComentarioProducto)
+class ComentarioProductoAdmin(admin.ModelAdmin):
+    list_display = ('producto', 'usuario', 'calificacion', 'created_at')
+    list_filter = ('calificacion',)
+    search_fields = ('producto__nombre', 'usuario__email', 'comentario')
     readonly_fields = ('id', 'created_at', 'updated_at')

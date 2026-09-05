@@ -29,6 +29,7 @@ class Empresa(TimeStampedModel):
                     ('enterprise', 'Plan Empresarial')]
     nombre = models.CharField(max_length=150)
     nit = models.CharField(max_length=20, unique=True)
+    slug = models.SlugField(max_length=150, unique=True, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
     telefono = models.CharField(max_length=20, blank=True)
     direccion = models.CharField(max_length=200, blank=True)
@@ -40,6 +41,21 @@ class Empresa(TimeStampedModel):
 
     def __str__(self):
         return f"{self.nombre} ({self.get_plan_display()})"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._generar_slug()
+        super().save(*args, **kwargs)
+
+    def _generar_slug(self):
+        from django.utils.text import slugify
+        base = slugify(self.nombre) or slugify(self.nit)
+        slug = base
+        contador = 2
+        while Empresa.objects.exclude(pk=self.pk).filter(slug=slug).exists():
+            slug = f"{base}-{contador}"
+            contador += 1
+        return slug
 
 
 class Categoria(TimeStampedModel):
@@ -91,10 +107,58 @@ class Producto(TimeStampedModel):
         return self.stock <= self.stock_minimo
 
 
+class ComentarioProducto(TimeStampedModel):
+    """Reseña/comentario de un comprador sobre un producto del marketplace.
+
+    Un usuario autenticado deja como maximo un comentario por producto
+    (unique_together); si vuelve a comentar, se actualiza el existente
+    (ver ComentarioProductoSerializer)."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='comentarios')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='comentarios_productos')
+    calificacion = models.PositiveSmallIntegerField()
+    comentario = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'comentario_producto'
+        unique_together = ('producto', 'usuario')
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(calificacion__gte=1) & models.Q(calificacion__lte=5),
+                name='comentario_calificacion_entre_1_y_5'),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto} ({self.calificacion}/5)"
+
+
+class Favorito(TimeStampedModel):
+    """Producto marcado como favorito por un usuario del marketplace.
+
+    Es global por `usuario`+`producto` (no depende de la empresa del usuario),
+    de modo que cualquier rol logueado (CLIENTE, EMPLEADO o ADMINISTRADOR)
+    pueda guardar productos que le interesan."""
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='favoritos')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='favoritos')
+
+    class Meta:
+        db_table = 'producto_favorito'
+        unique_together = ('usuario', 'producto')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.usuario} -> {self.producto}"
+
+
 class Cliente(TimeStampedModel):
     TIPO_DOC_CHOICES = [('CC', 'Cedula de Ciudadania'), ('NIT', 'NIT'),
                         ('CE', 'Cedula de Extranjeria'), ('PAS', 'Pasaporte')]
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='clientes')
+    # `empresa` puede ser None para los compradores del marketplace, que no
+    # pertenecen a ninguna empresa vendedora (su cliente es global).
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='clientes')
     # Cuenta opcional del portal (tabla usuario real: auth_user + Perfil)
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name='perfil_cliente')
@@ -107,12 +171,40 @@ class Cliente(TimeStampedModel):
     ciudad = models.CharField(max_length=80, blank=True)
 
     class Meta:
-        # Documento unico DENTRO de cada empresa (multi-tenant)
+        # Documento unico DENTRO de cada empresa (multi-tenant). En MySQL los
+        # NULL se consideran distintos, asi que los clientes del marketplace
+        # (empresa=None) no colisionan entre si ni con los de las empresas.
         unique_together = ('empresa', 'tipo_documento', 'numero_documento')
+        indexes = [models.Index(fields=['empresa', 'nombre'])]
         ordering = ['nombre']
 
     def __str__(self):
         return f"{self.nombre} ({self.tipo_documento} {self.numero_documento})"
+
+    # Documento fijo del cliente generico (RN: venta rapida en tienda fisica
+    # sin registrar datos de cada comprador, ej. mostrador de supermercado).
+    DOCUMENTO_GENERICO = '0000000000'
+
+    @classmethod
+    def generico(cls, empresa):
+        """Devuelve (creandolo si hace falta) el Cliente "Consumidor final"
+        de una empresa, para ventas de mostrador donde pedir documento y
+        datos completos no es practico (fila, ticket de bajo valor, etc.).
+        Idempotente: usa get_or_create sobre el documento fijo reservado."""
+        cliente, creado = cls.objects.get_or_create(
+            empresa=empresa, tipo_documento='NIT', numero_documento=cls.DOCUMENTO_GENERICO,
+            defaults={'nombre': 'Consumidor final'},
+        )
+        # Si alguien lo desactivo por error, se reactiva: es un cliente
+        # de sistema, siempre debe estar disponible para venta rapida.
+        if not creado and cliente.deleted_at is not None:
+            cliente.deleted_at = None
+            cliente.save(update_fields=['deleted_at'])
+        return cliente
+
+    @property
+    def es_generico(self):
+        return self.numero_documento == self.DOCUMENTO_GENERICO
 
     @property
     def total_compras(self):
@@ -132,28 +224,42 @@ class Venta(TimeStampedModel):
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name='ventas')
     vendedor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                  blank=True, related_name='ventas_realizadas')
-    numero_factura = models.CharField(max_length=50, unique=True, blank=True)
+    numero_factura = models.CharField(max_length=50, blank=True)
     fecha = models.DateTimeField(auto_now_add=True)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    descuento = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='efectivo')
     notas = models.TextField(blank=True)
+    motivo_anulacion = models.TextField(blank=True)
+    anulada_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-fecha']
-        indexes = [models.Index(fields=['empresa', '-fecha']), models.Index(fields=['estado'])]
+        indexes = [models.Index(fields=['empresa', '-fecha']),
+                   models.Index(fields=['estado']),
+                   models.Index(fields=['empresa', 'estado', '-fecha'],
+                                name='venta_empresa_estado_fecha_idx')]
         constraints = [
             models.CheckConstraint(condition=models.Q(total__gte=0),
                                    name='venta_total_no_negativo'),
+            models.CheckConstraint(condition=models.Q(descuento__gte=0),
+                                   name='venta_descuento_no_negativo'),
+            models.UniqueConstraint(fields=['empresa', 'numero_factura'],
+                                    name='venta_numero_factura_empresa_unico'),
         ]
 
     def __str__(self):
         return f"Factura {self.numero_factura} - {self.cliente.nombre} (${self.total})"
 
-    def _generar_numero_factura(self):
+    def _generar_numero_factura(self, bloqueada=False):
         fecha = timezone.localtime().strftime('%Y%m%d')
+        # Correlativo por empresa. Si 'bloqueada' es True es porque la fila de
+        # la empresa ya esta siendo lockeada (SELECT FOR UPDATE) por el caller,
+        # lo que serializa la generacion del consecutivo sin colisiones.
         consecutivo = Venta.objects.filter(empresa=self.empresa).count() + 1
-        prefijo = self.empresa.id.hex[:8].upper()
+        prefijo = self.empresa_id.hex[:8].upper()
         return f"{prefijo}-{fecha}-{consecutivo:05d}"
 
     def save(self, *args, **kwargs):
@@ -187,6 +293,74 @@ class DetalleVenta(TimeStampedModel):
         return self.precio_unitario * self.cantidad
 
 
+class Envio(TimeStampedModel):
+    """Despacho/logistica de una venta del marketplace (canal tienda). Una
+    venta de mostrador/POS no tiene Envio asociado (no aplica).
+
+    Snapshot de direccion/ciudad al momento del checkout: si el cliente
+    cambia su direccion despues, los envios ya creados no se alteran (igual
+    criterio que el resto del sistema con datos historicos de factura)."""
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente de preparacion'),
+        ('preparando', 'Preparando pedido'),
+        ('despachado', 'Despachado'),
+        ('en_transito', 'En transito'),
+        ('entregado', 'Entregado'),
+        ('no_entregado', 'Intento fallido'),
+        ('devuelto', 'Devuelto al vendedor'),
+    ]
+    # Transiciones validas del estado de un envio. Un estado no listado como
+    # clave (entregado/devuelto) es terminal: no admite mas cambios.
+    TRANSICIONES_VALIDAS = {
+        'pendiente': {'preparando', 'despachado'},
+        'preparando': {'despachado'},
+        'despachado': {'en_transito', 'entregado', 'no_entregado'},
+        'en_transito': {'entregado', 'no_entregado'},
+        'no_entregado': {'en_transito', 'devuelto'},
+    }
+
+    venta = models.OneToOneField(Venta, on_delete=models.CASCADE, related_name='envio')
+    direccion = models.TextField()
+    ciudad = models.CharField(max_length=80)
+    departamento = models.CharField(max_length=80, blank=True)
+    transportadora = models.CharField(max_length=80, blank=True)
+    numero_guia = models.CharField(max_length=80, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    fecha_despacho = models.DateTimeField(null=True, blank=True)
+    fecha_entrega_estimada = models.DateField(null=True, blank=True)
+    fecha_entrega_real = models.DateTimeField(null=True, blank=True)
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['estado']),
+                   models.Index(fields=['numero_guia'])]
+
+    def __str__(self):
+        return f"Envio {self.get_estado_display()} - {self.venta.numero_factura}"
+
+    class TransicionInvalida(Exception):
+        pass
+
+    def cambiar_estado(self, nuevo_estado, *, guardar=True):
+        """Aplica la transicion si es valida; lanza TransicionInvalida si no.
+        Registra fecha_despacho/fecha_entrega_real automaticamente segun el
+        estado destino (no se editan a mano desde afuera)."""
+        if nuevo_estado not in dict(self.ESTADO_CHOICES):
+            raise self.TransicionInvalida(f"Estado desconocido: {nuevo_estado}")
+        permitidos = self.TRANSICIONES_VALIDAS.get(self.estado, set())
+        if nuevo_estado not in permitidos:
+            raise self.TransicionInvalida(
+                f"No se puede pasar de '{self.estado}' a '{nuevo_estado}'.")
+        self.estado = nuevo_estado
+        if nuevo_estado == 'despachado' and not self.fecha_despacho:
+            self.fecha_despacho = timezone.now()
+        if nuevo_estado == 'entregado':
+            self.fecha_entrega_real = timezone.now()
+        if guardar:
+            self.save(update_fields=['estado', 'fecha_despacho', 'fecha_entrega_real',
+                                     'updated_at'])
+
+
 class MovimientoInventario(TimeStampedModel):
     """Kardex: cada entrada, salida o ajuste que afecta el stock de un producto."""
     TIPO_CHOICES = [('entrada', 'Entrada'), ('salida', 'Salida'), ('ajuste', 'Ajuste')]
@@ -210,15 +384,263 @@ class MovimientoInventario(TimeStampedModel):
 
 
 class Notificacion(TimeStampedModel):
-    """Aviso para un usuario (p. ej. alertas de stock bajo)."""
+    """Aviso para un usuario (p. ej. alertas de stock bajo, fase 9).
+
+    Desde la fase 9 el sistema es global por empresa:
+    - `tipo`: origen del evento (stock, factura, camara, sistema).
+    - `empresa`: alcance multi-tenancy (null en avisos pre-fase 9).
+    - `estado`: nueva -> revisada -> resuelta. Una notificacion 'resuelta'
+      se retira del panel activo de notificaciones.
+    - `canal`: via de entrega efectiva (whatsapp/email/ninguno).
+    - `entrega_pendiente`: True si la entrega fallo y queda a la espera de
+      reintento (mecanismo "no perder el aviso", fase 9).
+    Se conserva `leida` (equivalente a estado != 'nueva') por compatibilidad
+    con fases anteriores.
+    """
+    TIPO_CHOICES = [('stock', 'Stock bajo'), ('factura', 'Facturacion'),
+                    ('camara', 'Camara'), ('sistema', 'Sistema')]
+    ESTADO_CHOICES = [('nueva', 'Nueva'), ('revisada', 'Revisada'),
+                      ('resuelta', 'Resuelta')]
+    CANAL_CHOICES = [('ninguno', 'Sin entrega'), ('whatsapp', 'WhatsApp'),
+                     ('email', 'Email')]
+
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                 null=True, blank=True, related_name='notificaciones')
-    mensaje = models.TextField()
+    empresa = models.ForeignKey('Empresa', on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='notificaciones')
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES,
+                            default='sistema')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES,
+                              default='nueva')
+    canal = models.CharField(max_length=20, choices=CANAL_CHOICES,
+                             default='ninguno')
     leida = models.BooleanField(default=False)
+    entrega_pendiente = models.BooleanField(
+        default=False,
+        help_text="True si se intento notificar pero fallo la entrega por "
+                  "todos los canales y queda pendiente de reintento.")
+    mensaje = models.TextField()
 
     class Meta:
         ordering = ['-created_at']
-        indexes = [models.Index(fields=['usuario', 'leida'])]
+        indexes = [models.Index(fields=['empresa', 'estado']),
+                   models.Index(fields=['usuario', 'leida']),
+                   models.Index(fields=['empresa', 'leida'])]
 
     def __str__(self):
-        return f"{'Leida' if self.leida else 'Nueva'}: {self.mensaje[:60]}"
+        return f"{self.get_estado_display()} ({self.tipo}): {self.mensaje[:60]}"
+
+
+class Cupon(TimeStampedModel):
+    """Codigo de descuento con vigencia y porcentaje."""
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='cupones')
+    codigo = models.CharField(max_length=30)
+    porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    activo = models.BooleanField(default=True)
+    fecha_inicio = models.DateTimeField()
+    fecha_fin = models.DateTimeField()
+
+    class Meta:
+        unique_together = ('empresa', 'codigo')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.codigo} ({self.porcentaje}%)"
+
+    @property
+    def esta_vigente(self):
+        now = timezone.now()
+        return self.activo and self.fecha_inicio <= now <= self.fecha_fin
+
+
+class Carrito(TimeStampedModel):
+    """Carrito de compras de un usuario (1 carrito activo por usuario).
+
+    En el marketplace el carrito pertenece al comprador (no a una empresa
+    vendedora), por eso `empresa` puede ser None. El checkout agrupa los
+    items por empresa vendedora para generar una venta por cada una.
+    """
+    usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                   related_name='carrito')
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='carritos')
+    cupon = models.ForeignKey(Cupon, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='carritos')
+
+    class Meta:
+        verbose_name_plural = "Carritos"
+
+    def __str__(self):
+        return f"Carrito de {self.usuario.email}"
+
+    @property
+    def total_items(self):
+        return sum(item.cantidad for item in self.items.all())
+
+    @property
+    def subtotal(self):
+        return sum(item.subtotal for item in self.items.all())
+
+
+class CarritoItem(TimeStampedModel):
+    """Item individual dentro de un carrito."""
+    carrito = models.ForeignKey(Carrito, on_delete=models.CASCADE, related_name='items')
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='carrito_items')
+    cantidad = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        unique_together = ('carrito', 'producto')
+
+    def __str__(self):
+        return f"{self.cantidad} x {self.producto.nombre}"
+
+    @property
+    def subtotal(self):
+        return self.producto.precio * self.cantidad
+
+
+class FacturaElectronica(TimeStampedModel):
+    """Comprobante electronico DIAN ligado a una venta.
+
+    Estados:
+    - pendiente: documento generado, esperando envio/respuesta DIAN.
+    - enviada: enviada a DIAN, esperando validacion.
+    - aprobada: DIAN acepto → tiene CUFE + comprobante PDF/XML.
+    - rechazada: DIAN rechazo → motivo en motivo_rechazo, admin corrige.
+    - fallida: servicio DIAN sin respuesta → reintento automatico.
+    """
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('enviada', 'Enviada'),
+        ('aprobada', 'Aprobada'),
+        ('rechazada', 'Rechazada'),
+        ('fallida', 'Fallida'),
+    ]
+
+    venta = models.OneToOneField(Venta, on_delete=models.CASCADE,
+                                 related_name='factura_electronica')
+    numero = models.CharField(max_length=50, unique=True, blank=True)
+    cufe = models.CharField(max_length=100, blank=True, default='')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    motivo_rechazo = models.TextField(blank=True, default='')
+    pdf = models.FileField(upload_to='facturas/%Y/%m/pdf/', blank=True, null=True)
+    xml = models.FileField(upload_to='facturas/%Y/%m/xml/', blank=True, null=True)
+    intentos = models.PositiveSmallIntegerField(default=0)
+    ultimo_intento = models.DateTimeField(null=True, blank=True)
+    enviado_correo = models.BooleanField(default=False)
+    enviado_correo_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Factura {self.numero} [{self.get_estado_display()}]"
+
+
+class NotaCredito(TimeStampedModel):
+    """Nota credito DIAN para reversar una venta ya facturada.
+
+    Estados: pendiente / aprobada / rechazada.
+    Cuando se aprueba, la venta original se marca como anulada y se
+    revierte el stock.
+    """
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aprobada', 'Aprobada'),
+        ('rechazada', 'Rechazada'),
+    ]
+
+    venta_original = models.ForeignKey(Venta, on_delete=models.CASCADE,
+                                       related_name='notas_credito')
+    numero = models.CharField(max_length=50, unique=True, blank=True)
+    cufe_nota = models.CharField(max_length=100, blank=True, default='')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    motivo = models.TextField()
+    pdf = models.FileField(upload_to='notas_credito/%Y/%m/pdf/', blank=True, null=True)
+    xml = models.FileField(upload_to='notas_credito/%Y/%m/xml/', blank=True, null=True)
+    reverso_stock = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Nota Credito {self.numero} sobre {self.venta_original.numero_factura}"
+
+
+# --------------------------- Fase 8: Asistente IA ---------------------------
+
+class IAConversacion(TimeStampedModel):
+    """Sesion de chat del asistente IA (una por contexto de la conversacion).
+
+    Guarda el contexto para preguntas de seguimiento dentro de la misma
+    sesion: los mensajes de la sesion se reutilizan al llamar al motor."
+    """
+    ESTADO_CHOICES = [('activa', 'Activa'), ('archivada', 'Archivada')]
+
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='ia_conversaciones')
+    titulo = models.CharField(max_length=120, blank=True, default='')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activa')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = "Conversaciones IA"
+
+    @property
+    def ultimo_mensaje(self):
+        ultimo = self.mensajes.order_by('-created_at').first()
+        return ultimo.contenido if ultimo else ''
+
+    def __str__(self):
+        return f"IA {self.titulo or self.id} de {self.usuario.email}"
+
+
+class IAMensaje(TimeStampedModel):
+    """Mensaje individual de una conversacion IA.
+
+    `rol`: quién emite (usuario o asistente).
+    `estado`/`error`: si el motor fallo (timeout), el mensaje del asistente
+    queda con estado 'error' y la conversacion se conserva para reintentar.
+    """
+    ROL_CHOICES = [('usuario', 'Usuario'), ('asistente', 'Asistente')]
+    ESTADO_CHOICES = [('ok', 'Ok'), ('error', 'Error')]
+
+    conversacion = models.ForeignKey(IAConversacion, on_delete=models.CASCADE,
+                                     related_name='mensajes')
+    rol = models.CharField(max_length=20, choices=ROL_CHOICES)
+    contenido = models.TextField()
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='ok')
+    error = models.CharField(max_length=200, blank=True, default='')
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['conversacion', 'created_at'])]
+
+    def __str__(self):
+        return f"{self.get_rol_display()}: {self.contenido[:40]}"
+
+
+# --------------------------- Fase 9: Camaras ---------------------------------
+
+class Camara(TimeStampedModel):
+    """Camara de vigilancia de la empresa (solo ADMINISTRADOR).
+
+    `url_stream`: URL del video en vivo de la camara.
+    `activa`: si esta False la camara se oculta del panel.
+    Las grabaciones historicas no se guardan aqui: se resuelven por fecha/hora
+    contra el servidor de almacenamiento (`url_stream` base) en
+    `servicios/camaras.py`.
+    """
+    empresa = models.ForeignKey('Empresa', on_delete=models.CASCADE,
+                                related_name='camaras')
+    nombre = models.CharField(max_length=120)
+    ubicacion = models.CharField(max_length=150, blank=True, default='')
+    url_stream = models.CharField(max_length=300, blank=True, default='')
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['nombre']
+        indexes = [models.Index(fields=['empresa', 'activa'])]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.ubicacion or 'Sin ubicacion'})"

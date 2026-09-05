@@ -14,7 +14,10 @@
       <div class="aviso aviso-ok">{{ exito() }}</div>
     }
     @if (error() && !formularioAbierto()) {
-      <div class="aviso aviso-error">{{ error() }}</div>
+      <div class="aviso aviso-error" role="alert">
+        {{ error() }}
+        <button type="button" class="enlace" (click)="cargar()">Reintentar</button>
+      </div>
     }
 
     @if (formularioAbierto()) {
@@ -23,17 +26,17 @@
 
         <div class="campo">
           <label for="nombre">Nombre completo</label>
-          <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Torres" />
+          <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Torres" autocomplete="name" />
           @if (campoInvalido('nombre')) {
-            <p class="mensaje-error">Escribe el nombre (minimo 3 caracteres).</p>
+            <p class="mensaje-error" role="alert">Escribe el nombre (minimo 3 caracteres).</p>
           }
         </div>
 
         <div class="campo">
           <label for="email">Correo electronico</label>
-          <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" />
+          <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" autocomplete="email" />
           @if (campoInvalido('email')) {
-            <p class="mensaje-error">Ingresa un correo valido.</p>
+            <p class="mensaje-error" role="alert">Ingresa un correo valido.</p>
           }
         </div>
 
@@ -52,19 +55,19 @@
             </label>
             <input id="password" type="password" formControlName="password" autocomplete="new-password" />
             @if (campoInvalido('password')) {
-              <p class="mensaje-error">Minimo 8 caracteres.</p>
+              <p class="mensaje-error" role="alert">Minimo 8 caracteres.</p>
             }
           </div>
         </div>
 
         @if (error()) {
-          <div class="aviso aviso-error">{{ error() }}</div>
+          <div class="aviso aviso-error" role="alert">{{ error() }}</div>
         }
 
         <div class="acciones-form">
           <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
-          <button type="submit" class="btn btn-primario">
-            {{ editando() ? 'Guardar cambios' : 'Crear usuario' }}
+          <button type="submit" class="btn btn-primario" [disabled]="guardando()">
+            {{ guardando() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Crear usuario') }}
           </button>
         </div>
       </form>

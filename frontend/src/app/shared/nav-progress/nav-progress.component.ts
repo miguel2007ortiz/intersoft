@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
 
 @Component({
@@ -19,7 +20,7 @@ export class NavProgressComponent {
   private ocultarId?: ReturnType<typeof setTimeout>;
 
   constructor() {
-    this.router.events.subscribe((evento) => {
+    this.router.events.pipe(takeUntilDestroyed()).subscribe((evento) => {
       if (evento instanceof NavigationStart) {
         clearTimeout(this.ocultarId);
         this.completa.set(false);

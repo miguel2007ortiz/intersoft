@@ -1,0 +1,806 @@
+﻿<div class="catalogo">
+  <header class="barra aparecer">
+    <div class="contenedor barra-int">
+      <a routerLink="/" class="logo"
+        >Inter<span>Soft</span> <em class="logo-market">Marketplace</em></a
+      >
+
+      <div class="buscador" (focusout)="onBuscadorBlur($event)">
+        <svg
+          class="buscador-icono"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.3-4.3" />
+        </svg>
+        <input
+          #campoBusqueda
+          type="text"
+          placeholder="Buscar productos..."
+          [(ngModel)]="busqueda"
+          (keyup.enter)="buscar()"
+          (input)="onBusquedaInput()"
+          (focus)="onBuscadorFocus()"
+          role="combobox"
+          aria-autocomplete="list"
+          [attr.aria-expanded]="mostrarSugerencias()"
+          aria-controls="lista-sugerencias"
+          autocomplete="off"
+          class="input"
+        />
+        <button type="button" class="btn-buscar" (click)="buscar()">Buscar</button>
+
+        @if (mostrarSugerencias()) {
+          <ul class="sugerencias" id="lista-sugerencias" role="listbox">
+            @if (cargandoSugerencias()) {
+              <li class="sugerencia-info">Buscando...</li>
+            } @else if (!sugerencias().length) {
+              <li class="sugerencia-info">Sin resultados para "{{ busqueda }}"</li>
+            } @else {
+              @for (s of sugerencias(); track s.id) {
+                <li role="option">
+                  <button type="button" class="sugerencia" (click)="seleccionarSugerencia(s)">
+                    @if (s.imagen) {
+                      <img
+                        [src]="s.imagen"
+                        [alt]="s.nombre"
+                        class="sugerencia-img"
+                        loading="lazy"
+                      />
+                    } @else {
+                      <span class="sugerencia-img sugerencia-img-vacia">{{
+                        s.nombre.charAt(0)
+                      }}</span>
+                    }
+                    <span class="sugerencia-info-txt">
+                      <span class="sugerencia-nombre">{{ s.nombre }}</span>
+                      <span class="sugerencia-precio">{{ s.precio | number }} COP</span>
+                    </span>
+                  </button>
+                </li>
+              }
+            }
+          </ul>
+        }
+      </div>
+
+      <nav class="acciones">
+        <a routerLink="/carrito" class="btn-carrito">
+          <svg
+            class="btn-carrito-icono"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+          </svg>
+          <span>Carrito</span>
+          <span class="btn-carrito-contador" [class.rebote]="carritoAnimado()">{{
+            totalItems()
+          }}</span>
+        </a>
+
+        <div class="menu">
+          <button
+            type="button"
+            class="btn-menu"
+            (click)="menuAbierto.set(!menuAbierto())"
+            [attr.aria-expanded]="menuAbierto()"
+            aria-label="Menu de opciones"
+            aria-haspopup="menu"
+          >
+            <span class="icono-menu" aria-hidden="true"></span>
+          </button>
+
+          @if (menuAbierto()) {
+            <div class="menu-desplegable" role="menu" (click)="menuAbierto.set(false)">
+              @if (sesion(); as u) {
+                <div class="menu-usuario">
+                  <strong>{{ u.nombre }}</strong>
+                  <span class="menu-rol">{{ u.rol }}</span>
+                </div>
+                @if (esAdministrador()) {
+                  <a routerLink="/dashboard" class="menu-item" role="menuitem">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="17"
+                      height="17"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect x="3" y="3" width="7" height="9" rx="1" />
+                      <rect x="14" y="3" width="7" height="5" rx="1" />
+                      <rect x="14" y="12" width="7" height="9" rx="1" />
+                      <rect x="3" y="16" width="7" height="5" rx="1" />
+                    </svg>
+                    Volver al panel
+                  </a>
+                }
+                <a routerLink="/favoritos" class="menu-item" role="menuitem">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="17"
+                    height="17"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"
+                    />
+                  </svg>
+                  Mis favoritos
+                </a>
+                <a routerLink="/pedidos" class="menu-item" role="menuitem">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="17"
+                    height="17"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 2l4-1v4L6 8V2z" />
+                    <path d="M18 2l-4-1v4l4-1V2z" />
+                    <path d="M10 2h4" />
+                    <path d="M6 8h12v12a2 2 0 01-2 2H8a2 2 0 01-2-2V8z" />
+                  </svg>
+                  Mis pedidos
+                </a>
+                <button type="button" class="menu-item" role="menuitem" (click)="salir()">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="17"
+                    height="17"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  Salir
+                </button>
+              } @else {
+                <a routerLink="/login" class="menu-item" role="menuitem">Iniciar sesion</a>
+                <a
+                  routerLink="/registro-comprador"
+                  class="menu-item menu-item-primario"
+                  role="menuitem"
+                >
+                  Registrarse
+                </a>
+              }
+            </div>
+          }
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <section
+    class="hero"
+    [class.hero-con-imagen]="heroSlides().length"
+    appBrilloCursor
+    (mouseenter)="heroPausado.set(true)"
+    (mouseleave)="heroPausado.set(false)"
+  >
+    @if (heroSlides().length) {
+      <div
+        class="hero-carrusel"
+        role="group"
+        aria-roledescription="carousel"
+        aria-label="Productos destacados"
+      >
+        @for (s of heroSlides(); track s.id; let i = $index) {
+          <div
+            class="hero-slide"
+            [class.hero-slide-activo]="i === heroIndex()"
+            [style.background-image]="
+              'linear-gradient(180deg, rgba(10,18,32,.25), rgba(10,18,32,.78)), url(' +
+              s.imagen +
+              ')'
+            "
+            [attr.aria-hidden]="i !== heroIndex()"
+          ></div>
+        }
+      </div>
+      <button
+        type="button"
+        class="hero-flecha hero-flecha-izq"
+        (click)="heroAnterior()"
+        aria-label="Banner anterior"
+      >
+        &#10094;
+      </button>
+      <button
+        type="button"
+        class="hero-flecha hero-flecha-der"
+        (click)="heroSiguiente()"
+        aria-label="Banner siguiente"
+      >
+        &#10095;
+      </button>
+    } @else {
+      <span class="orbe-fondo orbe-a"></span>
+      <span class="orbe-fondo orbe-b"></span>
+    }
+
+    <div class="contenedor hero-int">
+      <p class="etiqueta aparecer insignia-pulso">Empresas verificadas y activas</p>
+      <h1 class="aparecer" style="--retraso: 90ms">
+        Compra directo a las empresas<br /><span class="resaltado">que ya conoces y confias</span>
+      </h1>
+      <p class="entrada aparecer" style="--retraso: 180ms">
+        Un solo lugar para explorar el catalogo de tus proveedores favoritos, comparar precios y
+        hacer seguimiento a tu pedido de principio a fin.
+      </p>
+
+      @if (heroSlides().length) {
+        <button
+          type="button"
+          class="hero-destacado aparecer"
+          style="--retraso: 220ms"
+          (click)="abrirDetalle(heroSlides()[heroIndex()])"
+        >
+          Destacado: {{ heroSlides()[heroIndex()].nombre }} —
+          <strong>{{ heroSlides()[heroIndex()].precio | number }} COP</strong>
+        </button>
+      }
+
+      <div class="hero-acciones aparecer" style="--retraso: 270ms">
+        <button type="button" class="btn btn-primario" (click)="irAlCatalogo()">
+          <svg
+            class="hero-cta-icono"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+          </svg>
+          Ver Ofertas Destacadas
+        </button>
+        @if (!sesion()) {
+          <a routerLink="/registro-comprador" class="btn btn-secundario">Crear cuenta gratis</a>
+        }
+      </div>
+    </div>
+
+    @if (heroSlides().length > 1) {
+      <div class="hero-puntos" role="tablist" aria-label="Seleccionar banner">
+        @for (s of heroSlides(); track s.id; let i = $index) {
+          <button
+            type="button"
+            class="hero-punto"
+            [class.hero-punto-activo]="i === heroIndex()"
+            role="tab"
+            [attr.aria-selected]="i === heroIndex()"
+            [attr.aria-label]="'Ver banner ' + (i + 1)"
+            (click)="irHeroSlide(i)"
+          ></button>
+        }
+      </div>
+    }
+  </section>
+
+  <section class="confianza" appRevelarAlEntrar>
+    <div class="contenedor confianza-grilla">
+      <div class="confianza-item">
+        <span class="confianza-icono" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
+            <path d="M9.5 12l1.8 1.8L15 10.2" />
+          </svg>
+        </span>
+        <span>Empresas registradas y verificadas</span>
+      </div>
+      <div class="confianza-item">
+        <span class="confianza-icono" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="11" width="18" height="10" rx="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+        </span>
+        <span>Compra segura con tu cuenta</span>
+      </div>
+      <div class="confianza-item">
+        <span class="confianza-icono" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 4h2l2.5 12h9L20 8H7" />
+            <circle cx="10" cy="20" r="1.4" />
+            <circle cx="17" cy="20" r="1.4" />
+          </svg>
+        </span>
+        <span>Seguimiento de tu pedido en linea</span>
+      </div>
+      <div class="confianza-item">
+        <span class="confianza-icono" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 11.5a8.4 8.4 0 01-8.4 8.4H4l2.2-3.3A8.4 8.4 0 1121 11.5Z" />
+          </svg>
+        </span>
+        <span>Atencion directa del vendedor</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="filtros aparecer" style="--retraso: 80ms">
+    <div class="chips">
+      <button
+        type="button"
+        class="chip"
+        [class.chip-activo]="!categoriaSeleccionada"
+        (click)="filtrarPorCategoria('')"
+      >
+        Todas
+      </button>
+      @for (cat of categorias(); track cat.id) {
+        <button
+          type="button"
+          class="chip"
+          [class.chip-activo]="categoriaSeleccionada === cat.id"
+          (click)="filtrarPorCategoria(cat.id)"
+        >
+          {{ cat.nombre }} <span class="chip-cuenta">{{ cat.productos_count }}</span>
+        </button>
+      }
+    </div>
+    <select [(ngModel)]="orden" (change)="buscar()" class="input input-select">
+      <option value="nombre">Nombre</option>
+      <option value="precio">Menor precio</option>
+      <option value="-precio">Mayor precio</option>
+      <option value="reciente">Mas recientes</option>
+    </select>
+  </section>
+
+  <section class="area-tienda">
+    @if (cargando()) {
+      <section class="grid" aria-hidden="true">
+        @for (i of esqueletos; track i) {
+          <div class="card card-esqueleto">
+            <div class="skeleton skeleton-img"></div>
+            <div class="card-body">
+              <div class="skeleton skeleton-linea" style="width: 40%"></div>
+              <div class="skeleton skeleton-linea" style="width: 80%"></div>
+              <div class="skeleton skeleton-linea" style="width: 50%"></div>
+            </div>
+          </div>
+        }
+      </section>
+    } @else if (error()) {
+      <div class="error-box">{{ error() }}</div>
+    } @else if (!productos().length) {
+      <div class="vacio">No se encontraron productos.</div>
+    } @else {
+      <section class="grid">
+        @for (p of productos(); track p.id; let i = $index) {
+          <div
+            class="card tarjeta-flot tarjeta-hover aparecer"
+            [style.--retraso.ms]="(i % 12) * 60"
+            [class.tarjeta-doble-click]="tarjetaEfecto() === p.id"
+            (click)="abrirDetalle(p)"
+            (dblclick)="abrirDetalle(p, $event)"
+            title="Click para ver el detalle"
+          >
+            @if (tarjetaEfecto() === p.id) {
+              <span
+                class="onda-click"
+                [style.left.%]="ondaPos().x"
+                [style.top.%]="ondaPos().y"
+              ></span>
+            }
+            <div class="card-img">
+              @if (p.imagen && !imagenesFallidas().has(p.id)) {
+                <img
+                  [src]="p.imagen"
+                  [alt]="p.nombre"
+                  loading="lazy"
+                  (error)="marcarImagenFallida(p.id)"
+                />
+              } @else {
+                <div class="placeholder-img">{{ p.nombre.charAt(0) }}</div>
+              }
+              <button
+                type="button"
+                class="btn-corazon"
+                [class.corazon-activo]="esFavorito(p.id)"
+                [disabled]="favoritoCambioId() === p.id"
+                (click)="$event.stopPropagation(); alternarFavorito(p)"
+                [attr.aria-label]="
+                  esFavorito(p.id) ? 'Quitar de favoritos' : 'Guardar en favoritos'
+                "
+                [attr.aria-pressed]="esFavorito(p.id)"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  aria-hidden="true"
+                  [attr.fill]="esFavorito(p.id) ? 'currentColor' : 'none'"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"
+                  />
+                </svg>
+              </button>
+              <div class="card-badges">
+                @if (p.stock > 0 && p.stock <= 5) {
+                  <span class="badge badge-urgencia">¡Ultimas {{ p.stock }}!</span>
+                }
+                @if (esTopCalificado(p)) {
+                  <span class="badge badge-top">★ Top calificado</span>
+                }
+                @if (esNuevo(p)) {
+                  <span class="badge badge-nuevo">Nuevo</span>
+                }
+              </div>
+            </div>
+            <div class="card-body">
+              <span class="card-categoria">{{ p.categoria_nombre || 'Sin categoria' }}</span>
+              <h3 class="card-nombre">{{ p.nombre }}</h3>
+              @if (p.total_comentarios > 0) {
+                <p class="card-calificacion">
+                  <span class="estrellas-mini">{{
+                    estrellasTexto(redondear(p.promedio_calificacion))
+                  }}</span>
+                  {{ p.promedio_calificacion }}
+                  <span class="gris">({{ p.total_comentarios }})</span>
+                </p>
+              } @else {
+                <p class="card-calificacion gris">Sin calificaciones aun</p>
+              }
+              <p class="card-sku">SKU: {{ p.sku }}</p>
+              <div class="card-footer">
+                <span class="card-precio">{{ p.precio | number }} COP</span>
+                @if (p.stock > 0) {
+                  <button
+                    type="button"
+                    class="btn-agregar"
+                    [class.btn-agregar-ok]="agregadoId() === p.id"
+                    [disabled]="agregandoId() === p.id"
+                    (click)="$event.stopPropagation(); agregarAlCarrito(p)"
+                  >
+                    @if (agregandoId() === p.id) {
+                      Agregando...
+                    } @else if (agregadoId() === p.id) {
+                      <svg
+                        class="icono-check"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                      ¡Añadido!
+                    } @else {
+                      <svg
+                        class="icono-carrito"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+                      </svg>
+                      Carrito
+                    }
+                  </button>
+                } @else {
+                  <span class="sin-stock">Sin stock</span>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </section>
+
+      @if (totalPaginas() > 1) {
+        <nav class="paginador aparecer">
+          <button
+            type="button"
+            class="btn-paginador"
+            [disabled]="pagina() <= 1"
+            (click)="irPagina(pagina() - 1)"
+          >
+            &larr; Anterior
+          </button>
+          <span class="paginador-info">Pagina {{ pagina() }} de {{ totalPaginas() }}</span>
+          <button
+            type="button"
+            class="btn-paginador"
+            [disabled]="pagina() >= totalPaginas()"
+            (click)="irPagina(pagina() + 1)"
+          >
+            Siguiente &rarr;
+          </button>
+        </nav>
+      }
+    }
+  </section>
+
+  @if (exito()) {
+    <div class="exito-toast">{{ exito() }}</div>
+  }
+
+  @if (productoDetalle(); as p) {
+    <div class="modal-fondo" (click)="cerrarDetalle()">
+      <div
+        class="modal-caja"
+        role="dialog"
+        aria-modal="true"
+        [attr.aria-label]="p.nombre"
+        (click)="$event.stopPropagation()"
+      >
+        <button type="button" class="modal-cerrar" (click)="cerrarDetalle()" aria-label="Cerrar">
+          âœ•
+        </button>
+
+        <div class="detalle">
+          <div class="detalle-img">
+            @if (p.imagen && !imagenesFallidas().has(p.id)) {
+              <img [src]="p.imagen" [alt]="p.nombre" (error)="marcarImagenFallida(p.id)" />
+            } @else {
+              <div class="placeholder-img placeholder-grande">{{ p.nombre.charAt(0) }}</div>
+            }
+            <button
+              type="button"
+              class="btn-corazon btn-corazon-img"
+              [class.corazon-activo]="esFavorito(p.id)"
+              [disabled]="favoritoCambioId() === p.id"
+              (click)="alternarFavorito(p)"
+              [attr.aria-label]="esFavorito(p.id) ? 'Quitar de favoritos' : 'Guardar en favoritos'"
+              [attr.aria-pressed]="esFavorito(p.id)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="22"
+                height="22"
+                aria-hidden="true"
+                [attr.fill]="esFavorito(p.id) ? 'currentColor' : 'none'"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div class="detalle-info">
+            <div class="detalle-cabecera">
+              <span class="card-categoria">{{ p.categoria_nombre || 'Sin categoria' }}</span>
+              <h2 class="detalle-nombre">{{ p.nombre }}</h2>
+            </div>
+            <p class="detalle-vendedor">
+              Vendido por <strong>{{ p.empresa_nombre }}</strong>
+            </p>
+
+            @if (p.total_comentarios > 0) {
+              <p class="detalle-calificacion">
+                ★ {{ p.promedio_calificacion }}
+                <span class="gris">({{ p.total_comentarios }} comentarios)</span>
+              </p>
+            } @else {
+              <p class="detalle-calificacion gris">Sin comentarios todavia</p>
+            }
+
+            <p class="detalle-precio">{{ p.precio | number }} COP</p>
+            <p class="detalle-descripcion">{{ p.descripcion || 'Sin descripcion.' }}</p>
+
+            @if (p.stock > 0) {
+              <div class="detalle-acciones">
+                <div class="selector-cantidad" role="group" aria-label="Cantidad">
+                  <button
+                    type="button"
+                    class="cantidad-btn"
+                    aria-label="Menos cantidad"
+                    [disabled]="cantidad() <= 1"
+                    (click)="cantidad.set(cantidad() - 1)"
+                  >
+                    âˆ’
+                  </button>
+                  <input
+                    class="cantidad-input"
+                    type="number"
+                    min="1"
+                    [max]="p.stock"
+                    [ngModel]="cantidad()"
+                    (ngModelChange)="setCantidad($event)"
+                    inputmode="numeric"
+                    aria-label="Cantidad"
+                  />
+                  <button
+                    type="button"
+                    class="cantidad-btn"
+                    aria-label="Mas cantidad"
+                    [disabled]="cantidad() >= p.stock"
+                    (click)="cantidad.set(cantidad() + 1)"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div class="detalle-botones">
+                  <button
+                    type="button"
+                    class="btn btn-primario"
+                    [disabled]="agregandoId() === p.id || cantidad() < 1 || cantidad() > p.stock"
+                    (click)="agregarAlCarritoModal(p)"
+                  >
+                    @if (agregandoId() === p.id) {
+                      Agregando...
+                    } @else {
+                      + Agregar al carrito
+                    }
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-cta"
+                    [disabled]="cantidad() < 1 || cantidad() > p.stock"
+                    (click)="comprarProducto(p)"
+                  >
+                    Comprar ahora
+                  </button>
+                </div>
+              </div>
+            } @else {
+              <span class="sin-stock">Sin stock</span>
+            }
+          </div>
+        </div>
+
+        <div class="comentarios">
+          <h3>Comentarios</h3>
+
+          @if (sesion()) {
+            <div class="form-comentario">
+              <label>Tu calificacion</label>
+              <div class="estrellas">
+                @for (n of [1, 2, 3, 4, 5]; track n) {
+                  <button
+                    type="button"
+                    class="estrella"
+                    [class.estrella-activa]="n <= miCalificacion()"
+                    (click)="miCalificacion.set(n)"
+                  >
+                    ★
+                  </button>
+                }
+              </div>
+              <textarea
+                class="input"
+                rows="2"
+                placeholder="Que te parecio el producto? (opcional)"
+                [(ngModel)]="miComentario"
+              ></textarea>
+              @if (errorComentario()) {
+                <p class="error-comentario">{{ errorComentario() }}</p>
+              }
+              <button
+                type="button"
+                class="btn btn-secundario btn-sm"
+                [disabled]="enviandoComentario()"
+                (click)="enviarComentario(p.id)"
+              >
+                @if (enviandoComentario()) {
+                  Enviando...
+                } @else {
+                  Publicar comentario
+                }
+              </button>
+            </div>
+          } @else {
+            <p class="gris"><a routerLink="/login">Inicia sesion</a> para dejar tu comentario.</p>
+          }
+
+          @if (cargandoComentarios()) {
+            <p class="gris">Cargando comentarios...</p>
+          } @else if (!comentarios().length) {
+            <p class="gris">Aun no hay comentarios para este producto.</p>
+          } @else {
+            <ul class="lista-comentarios">
+              @for (c of comentarios(); track c.id) {
+                <li>
+                  <div class="comentario-cabeza">
+                    <strong>{{ c.usuario_nombre || 'Comprador' }}</strong>
+                    <span class="comentario-estrellas">{{ estrellasTexto(c.calificacion) }}</span>
+                    <span class="gris">{{ c.created_at | date: 'dd/MM/yyyy' }}</span>
+                  </div>
+                  @if (c.comentario) {
+                    <p>{{ c.comentario }}</p>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  <section class="llamado" appRevelarAlEntrar>
+    <div class="contenedor llamado-int">
+      <div>
+        <h2>¿Tienes un negocio?</h2>
+        <p>Suma tu catalogo a InterSoft y llega a compradores listos para comprar hoy.</p>
+      </div>
+      <a routerLink="/registro" class="btn btn-primario">Registrar mi negocio</a>
+    </div>
+  </section>
+
+  <footer class="pie">
+    <span>InterSoft Marketplace</span>
+  </footer>
+</div>

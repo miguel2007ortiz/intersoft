@@ -9,23 +9,41 @@ from django.utils.crypto import get_random_string
 
 
 class Rol(models.Model):
-    """Rol de la plataforma. Los nombres estan fijos por fase 1:
-    ADMINISTRADOR, EMPLEADO y CLIENTE."""
+    """Rol de la plataforma.
+
+    Los roles base (ADMINISTRADOR, EMPLEADO, CLIENTE) son globales y
+    compartidos por todas las empresas: su FK `empresa` queda en None.
+
+    Los roles personalizados creados por un ADMINISTRADOR pertenecen a su
+    propia `empresa`, aislados del resto de tenants.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    nombre = models.CharField(max_length=30, unique=True)
+    nombre = models.CharField(max_length=30)
     descripcion = models.CharField(max_length=200, blank=True)
+    empresa = models.ForeignKey("core.Empresa", on_delete=models.CASCADE,
+                                null=True, blank=True, related_name="roles")
 
     class Meta:
         db_table = "rol"
         ordering = ["nombre"]
+        # Igual nombre solo dentro de la misma empresa. En MySQL los NULL
+        # se consideran distintos, asi que el nombre de un rol global
+        # (empresa=None) no colisiona con los de una empresa.
+        constraints = [
+            models.UniqueConstraint(fields=["empresa", "nombre"],
+                                    name="rol_empresa_nombre_unicos"),
+        ]
 
     def __str__(self):
         return self.nombre.title()
 
     @classmethod
     def de_nombre(cls, nombre: str) -> "Rol":
-        """Obtiene o crea un rol por nombre; evita fallos si el seed no corrio."""
+        """Obtiene o crea un rol GLOBAL por nombre (empresa=None).
+
+        Los roles base no pertenecen a ninguna empresa; evita fallos si el
+        seed no corrio."""
         rol, _ = cls.objects.get_or_create(nombre=nombre)
         return rol
 
@@ -63,20 +81,46 @@ class RolPermiso(models.Model):
 class Perfil(models.Model):
     ROLES = [("ADMINISTRADOR", "Administrador"), ("EMPLEADO", "Empleado"),
              ("CLIENTE", "Cliente")]
+    TIPO_DOC_CHOICES = [("CC", "Cedula de Ciudadania"), ("NIT", "NIT"),
+                        ("CE", "Cedula de Extranjeria"), ("PAS", "Pasaporte")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                    related_name="perfil")
-    empresa = models.ForeignKey("core.Empresa", on_delete=models.PROTECT, related_name="perfiles")
+    # `empresa` puede ser None para los compradores del marketplace (rol
+    # CLIENTE sin empresa). El personal interno siempre tiene una empresa.
+    empresa = models.ForeignKey("core.Empresa", on_delete=models.PROTECT,
+                                null=True, blank=True, related_name="perfiles")
     rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name="perfiles")
     es_propietario = models.BooleanField(default=False)
     intentos_fallidos = models.PositiveSmallIntegerField(default=0)
     fecha_desbloqueo = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    # Datos laborales (fase Empleados). Nulos/blank para no romper filas
+    # existentes (clientes del marketplace y personal ya creado en fase 2).
+    tipo_documento = models.CharField(max_length=10, choices=TIPO_DOC_CHOICES,
+                                      null=True, blank=True)
+    numero_documento = models.CharField(max_length=20, null=True, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    cargo = models.CharField(max_length=80, blank=True)
+    fecha_ingreso = models.DateField(null=True, blank=True)
+    debe_cambiar_password = models.BooleanField(default=False)
 
     class Meta:
         db_table = "perfil"
         verbose_name_plural = "Perfiles"
+        constraints = [
+            # NULL se considera distinto en MySQL (igual que Cliente): los
+            # perfiles sin documento (clientes del marketplace, personal sin
+            # dato aun) no colisionan entre si.
+            models.UniqueConstraint(
+                fields=["empresa", "tipo_documento", "numero_documento"],
+                name="perfil_empresa_documento_unico",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "rol"], name="perfil_empresa_rol_idx"),
+        ]
 
     def __str__(self):
         return f"{self.usuario.email} ({self.rol.nombre})"

@@ -70,7 +70,7 @@ export class LoginComponent implements OnDestroy {
         this.cargando.set(false);
         const nombre = this.auth.usuario()?.nombre;
         if (nombre) this.welcome.mostrar(nombre);
-        const destino = this.ruta.snapshot.queryParamMap.get('redirigir') ?? '/dashboard';
+        const destino = this.destinoDespuesDeLogin();
         this.router.navigateByUrl(destino);
       },
       error: (e: ErrorAuth) => {
@@ -83,5 +83,18 @@ export class LoginComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     clearInterval(this.reloj);
+  }
+
+  /** Valida la redireccion post-login: solo rutas internas del SPA
+   *  (empieza por "/" y no por "//" para bloquear rutas maliciosas). */
+  private destinoDespuesDeLogin(): string {
+    const crudo = this.ruta.snapshot.queryParamMap.get('redirigir');
+    if (crudo && crudo.startsWith('/') && !crudo.startsWith('//')) return crudo;
+    // Los compradores del marketplace (CLIENTE sin empresa) van a la tienda.
+    const usuario = this.auth.usuario();
+    if (usuario && usuario.rol === 'CLIENTE' && !usuario.empresa) {
+      return '/catalogo';
+    }
+    return '/dashboard';
   }
 }

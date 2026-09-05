@@ -1,31 +1,44 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
+import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
+import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import {
   Categoria, ErrorCatalogo, Producto,
 } from '../../../core/models/catalogo.model';
 
+const CERRAR_AVISO_MS = 4000;
+
 @Component({
   selector: 'app-productos',
-  imports: [ReactiveFormsModule, PanelShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent, EstadoVacioComponent],
   templateUrl: './productos.component.html',
   styleUrl: './productos.component.css',
 })
 export class ProductosComponent {
   private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly productos = signal<Producto[]>([]);
   readonly categorias = signal<Categoria[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Producto | null>(null);
   readonly formularioAbierto = signal(false);
+  /** Archivo elegido en el input de imagen (null = sin cambio / sin imagen). */
+  readonly imagenNueva = signal<File | null>(null);
+  /** URL de la imagen actual (al editar) o del preview del archivo elegido. */
+  readonly imagenPreview = signal<string | null>(null);
   readonly busqueda = signal('');
   /** filtro del catalogo: todos | activos | inactivos */
   readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
+  private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
   readonly formulario = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(150)]],
@@ -65,7 +78,7 @@ export class ProductosComponent {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
-    this.cargar();
+    this.buscarDebounced();
   }
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {
@@ -79,6 +92,8 @@ export class ProductosComponent {
       nombre: '', sku: '', descripcion: '', categoria_id: '',
       precio: 0, stock: 0, stock_minimo: 10,
     });
+    this.imagenNueva.set(null);
+    this.imagenPreview.set(null);
     this.error.set(null);
     this.formularioAbierto.set(true);
   }
@@ -94,6 +109,8 @@ export class ProductosComponent {
       stock: producto.stock,
       stock_minimo: producto.stock_minimo,
     });
+    this.imagenNueva.set(null);
+    this.imagenPreview.set(producto.imagen);
     this.error.set(null);
     this.formularioAbierto.set(true);
   }
@@ -101,17 +118,31 @@ export class ProductosComponent {
   cerrarFormulario(): void {
     this.formularioAbierto.set(false);
     this.editando.set(null);
+    this.imagenNueva.set(null);
+    this.imagenPreview.set(null);
     this.error.set(null);
   }
 
+  seleccionarImagen(evento: Event): void {
+    const archivo = (evento.target as HTMLInputElement).files?.[0] ?? null;
+    this.imagenNueva.set(archivo);
+    this.imagenPreview.set(archivo ? URL.createObjectURL(archivo) : this.editando()?.imagen ?? null);
+  }
+
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
     }
     const valores = this.formulario.getRawValue();
-    const datos = { ...valores, categoria_id: valores.categoria_id || null };
+    const datos = {
+      ...valores,
+      categoria_id: valores.categoria_id || null,
+      ...(this.imagenNueva() ? { imagen: this.imagenNueva() } : {}),
+    };
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     const peticion = enEdicion
       ? this.catalogo.editarProducto(enEdicion.id, datos)
@@ -119,13 +150,22 @@ export class ProductosComponent {
 
     peticion.subscribe({
       next: () => {
+        this.guardando.set(false);
         this.exito.set(enEdicion ? 'Producto actualizado.' : 'Producto creado.');
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
-      error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorCatalogo) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
+  }
+
+  /** Oculta el aviso de "exito" despues de unos segundos. */
+  private avisarExito(): void {
+    programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
   }
 
   alternarActivo(producto: Producto): void {
@@ -137,7 +177,7 @@ export class ProductosComponent {
         this.exito.set(actualizado.activo
           ? 'Producto visible en el catalogo.'
           : 'Producto oculto del catalogo.');
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo cambiar el estado.'),
     });
@@ -151,13 +191,13 @@ export class ProductosComponent {
       next: () => {
         this.exito.set('Producto eliminado.');
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        this.avisarExito();
       },
       error: (e: ErrorCatalogo) => {
         // Regla fase 3: con ventas registradas solo se permite desactivar
         if (e.codigo === 'PRODUCTO_CON_VENTAS') {
           this.error.set(`${e.detalle} Usa "Desactivar" para ocultarlo.`);
-          setTimeout(() => this.error.set(null), 6000);
+          programarAviso(this.destroyRef, () => this.error.set(null), 6000);
           return;
         }
         this.error.set(e.detalle ?? 'No se pudo eliminar.');

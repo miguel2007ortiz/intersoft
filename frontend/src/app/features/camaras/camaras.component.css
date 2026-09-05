@@ -1,0 +1,56 @@
+.form-camara {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--e4);
+  align-items: end;
+}
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 13px; font-weight: 600; color: var(--tinta, #222); }
+.campo input, .campo select {
+  padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 8px; font: inherit; background: #fff;
+}
+.campo input:focus, .campo select:focus {
+  outline: none; border-color: var(--acento, #2563eb); box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+.acciones-form { display: flex; gap: var(--e2); justify-content: flex-start; }
+
+.grilla-camaras {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--e4);
+}
+.camara-card {
+  background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column; transition: box-shadow .15s;
+}
+.camara-card:hover { box-shadow: 0 6px 18px rgba(15,23,42,.08); }
+.camara-card.inactiva { opacity: .72; }
+
+.camara-video { position: relative; aspect-ratio: 16/9; background: #111827; }
+.camara-video img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sello-vivo {
+  position: absolute; top: 10px; left: 10px; background: #ef4444; color: #fff;
+  font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; letter-spacing: .5px;
+}
+.sin-stream {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--e2); color: #64748b; font-size: 13px;
+}
+
+.camara-info { padding: var(--e4); }
+.camara-titulo { display: flex; align-items: center; justify-content: space-between; gap: var(--e2); }
+.camara-titulo h2 { margin: 0; font-size: 17px; }
+.estado { font-size: 11px; font-weight: 700; color: #b54708; background: #fffaeb; padding: 2px 8px; border-radius: 999px; }
+.estado.activada { color: #067647; background: #ecfdf3; }
+.camara-ubicacion { margin: 6px 0 0; font-size: 13px; color: var(--gris, #667085); }
+
+.camara-acciones {
+  padding: 0 var(--e4) var(--e4); display: flex; flex-wrap: wrap; gap: var(--e2);
+}
+
+.grabadora { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: var(--e5); }
+.grabadora-cab { display: flex; align-items: center; justify-content: space-between; gap: var(--e3); }
+.grabadora-cab h2 { margin: 0; font-size: 18px; }
+.grabadora-form { display: flex; flex-wrap: wrap; gap: var(--e3); align-items: flex-end; margin-top: var(--e4); }
+.grabadora-resultado { margin-top: var(--e4); }
+.video-grabacion { width: 100%; max-height: 420px; border-radius: 10px; background: #111827; }
+
+.btn-chico { padding: 6px 12px; font-size: 12px; }

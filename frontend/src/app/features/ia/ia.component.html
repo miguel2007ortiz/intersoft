@@ -1,0 +1,87 @@
+<app-panel-shell>
+  <section class="contenedor encabezado">
+    <div>
+      <h1>Asistente IA</h1>
+      <p class="saludo">Consulta tus datos de negocio: ventas, inventario, clientes y mas.</p>
+    </div>
+    <div class="acciones">
+      <button type="button" class="btn btn-secundario" (click)="nuevaConversacion()">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Nueva conversacion
+      </button>
+    </div>
+  </section>
+
+  <section class="contenedor bloque">
+    <div class="chat">
+      <div class="chat__zona" #zonaMensajes>
+        @if (mensajes().length === 0) {
+          <div class="vacio">
+            <div class="vacio__icono" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor"
+                   stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path d="M8 4v16M16 9h1M16 13h1M10 9H8.5M10 13H8.5" />
+              </svg>
+            </div>
+            <p class="vacio__titulo">Hola, {{ auth.usuario()?.nombre ?? 'amigo' }}.</p>
+            <p class="vacio__texto">
+              Preguntame sobre tus ventas, inventario, productos mas vendidos o clientes
+              frecuentes. Tus consultas se resuelven con el contexto de tu empresa y
+              nunca salen datos sensibles (contrasenas o tokens).
+            </p>
+          </div>
+        } @else {
+          @for (m of mensajes(); track m.id) {
+            <div class="burbuja" [class.burbuja--usuario]="esEscritor(m.rol)"
+                 [class.burbuja--error]="m.estado === 'error'">
+              <span class="burbuja__quien">{{ esEscritor(m.rol) ? 'Tu' : 'Asistente' }}</span>
+              <p class="burbuja__texto">{{ m.contenido }}</p>
+              @if (m.estado === 'error') {
+                <p class="burbuja__err">{{ m.error }}</p>
+              }
+            </div>
+          }
+        }
+        @if (cargando()) {
+          <div class="burbuja burbuja--asistente">
+            <span class="burbuja__quien">Asistente</span>
+            <p class="burbuja__texto">Escribiendo...</p>
+          </div>
+        }
+      </div>
+
+      @if (error(); as mensaje) {
+        <div class="chat__error aviso aviso-alerta">
+          {{ mensaje }}
+          <button type="button" class="btn btn-primario btn-chico" (click)="enviar()"
+                  [disabled]="cargando() || !texto().trim()">
+            Reintentar
+          </button>
+        </div>
+      }
+
+      <form class="chat__entrada" (ngSubmit)="enviar()">
+        <input
+          type="text"
+          [ngModel]="texto()"
+          (ngModelChange)="texto.set($event)"
+          name="mensaje"
+          placeholder="Escribe tu consulta..."
+          autocomplete="off"
+        />
+        <button type="submit" class="btn btn-primario" [disabled]="cargando() || !texto().trim()">
+          {{ cargando() ? 'Enviando...' : 'Enviar' }}
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </form>
+    </div>
+  </section>
+</app-panel-shell>

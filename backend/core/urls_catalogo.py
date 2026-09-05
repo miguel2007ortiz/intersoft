@@ -7,7 +7,10 @@ from . import views_catalogo
 
 urlpatterns = [
     path("clientes/", views_catalogo.ClientesView.as_view()),
+    path("clientes/generico/", views_catalogo.ClienteGenericoView.as_view()),
     path("clientes/<uuid:id>/", views_catalogo.ClienteDetalleView.as_view()),
+    path("clientes/<uuid:id>/<str:accion>/",
+         views_catalogo.ClienteEstadoView.as_view()),
 
     path("productos/", views_catalogo.ProductosView.as_view()),
     path("productos/<uuid:id>/",

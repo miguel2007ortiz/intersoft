@@ -1,0 +1,55 @@
+.encabezado {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e4);
+  padding: var(--e6) 0 var(--e5);
+}
+.encabezado h1 { margin: 0 0 var(--e1); font-size: clamp(24px, 4vw, 32px); }
+.saludo { margin: 0; color: var(--gris); font-size: 15px; }
+.acciones { display: flex; gap: var(--e3); }
+
+.bloque { padding-bottom: var(--e6); }
+
+/* -------------------------------- Filtros --------------------------------- */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e3);
+  padding: var(--e4);
+  background: var(--tarjeta);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+}
+.filtro { display: flex; flex-direction: column; gap: var(--e1); flex: 1; min-width: 140px; }
+.filtro-tipo { flex: 1.5; }
+.filtro label { font-size: 12.5px; font-weight: 600; color: var(--gris); }
+.filtro input, .filtro select {
+  font: inherit; padding: var(--e2) var(--e3);
+  border: 1px solid var(--linea); border-radius: 8px;
+  background: var(--blanco); color: var(--tinta);
+}
+.filtro input:focus, .filtro select:focus {
+  border-color: var(--primario); outline: none; box-shadow: 0 0 0 3px var(--primario-suave);
+}
+
+/* ------------------------------- Reporte ---------------------------------- */
+.reporte { display: flex; flex-direction: column; gap: var(--e3); min-height: 220px; }
+.cab-rep { display: flex; align-items: center; justify-content: space-between; gap: var(--e3); }
+.titulo-tarjeta { margin: 0; font-size: 16px; }
+.meta-rep { font-size: 12.5px; color: var(--gris); }
+.vacio-texto { margin: 0; color: var(--gris); font-size: 14px; }
+
+.tabla-scroll { overflow-x: auto; }
+.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tabla th {
+  text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--gris); font-weight: 700; padding: var(--e1) var(--e2) var(--e2);
+  border-bottom: 1px solid var(--linea); white-space: nowrap;
+}
+.tabla td { padding: var(--e2); border-bottom: 1px solid var(--linea); color: var(--tinta); white-space: nowrap; }
+.tabla tr:last-child td { border-bottom: 0; }
+.tabla tr:hover td { background: var(--fila-hover); }
+.tabla .num { text-align: right; }
+.tabla .moneda { font-weight: 600; }

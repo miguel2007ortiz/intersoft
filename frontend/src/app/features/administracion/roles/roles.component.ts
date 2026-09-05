@@ -1,10 +1,13 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { SeguridadService } from '../../../core/services/seguridad.service';
+import { programarAviso } from '../../../core/utils/temporizador.util';
 import {
   ErrorSeguridad, PermisoCatalogo, RolAdmin,
 } from '../../../core/models/seguridad.model';
+
+const CERRAR_AVISO_MS = 4000;
 
 @Component({
   selector: 'app-roles',
@@ -15,10 +18,12 @@ import {
 export class RolesComponent {
   private readonly fb = inject(FormBuilder);
   private readonly seguridad = inject(SeguridadService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly roles = signal<RolAdmin[]>([]);
   readonly permisosCatalogo = signal<PermisoCatalogo[]>([]);
   readonly cargando = signal(true);
+  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
 
@@ -97,6 +102,7 @@ export class RolesComponent {
   }
 
   enviar(): void {
+    if (this.guardando()) return;
     if (this.formulario.invalid || !this.haySeleccionados()) {
       this.formulario.markAllAsTouched();
       return;
@@ -106,6 +112,7 @@ export class RolesComponent {
       permisos: [...this.seleccionados()],
     };
     const enEdicion = this.editando();
+    this.guardando.set(true);
 
     const peticion = enEdicion
       ? this.seguridad.editarRol(enEdicion.id, datos)
@@ -113,12 +120,16 @@ export class RolesComponent {
 
     peticion.subscribe({
       next: () => {
+        this.guardando.set(false);
         this.exito.set(enEdicion ? 'Rol actualizado.' : 'Rol creado.');
         this.cerrarFormulario();
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
       },
-      error: (e: ErrorSeguridad) => this.error.set(e.detalle ?? 'Datos invalidos.'),
+      error: (e: ErrorSeguridad) => {
+        this.guardando.set(false);
+        this.error.set(e.detalle ?? 'Datos invalidos.');
+      },
     });
   }
 
@@ -127,7 +138,7 @@ export class RolesComponent {
       next: (clon) => {
         this.exito.set(`Rol clonado como "${clon.nombre}". Ajusta su nombre y permisos.`);
         this.cargar();
-        setTimeout(() => this.exito.set(null), 5000);
+        programarAviso(this.destroyRef, () => this.exito.set(null), 5000);
       },
       error: (e: ErrorSeguridad) => this.error.set(e.detalle ?? 'No se pudo clonar.'),
     });
@@ -141,7 +152,7 @@ export class RolesComponent {
       next: () => {
         this.exito.set('Rol eliminado.');
         this.cargar();
-        setTimeout(() => this.exito.set(null), 4000);
+        programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
       },
       error: (e: ErrorSeguridad) => this.error.set(e.detalle ?? 'No se pudo eliminar el rol.'),
     });
