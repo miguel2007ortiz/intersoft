@@ -1,14 +1,27 @@
+from datetime import timedelta
+from decimal import Decimal
+
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from cuentas.models import Perfil, Rol
 
 from .models import (Camara, Categoria, Carrito, Cliente,
-                     ComentarioProducto, DetalleVenta, Empresa, Envio, IAConversacion,
+                     ComentarioProducto, Cupon, DetalleVenta, Empresa, Envio, IAConversacion,
                      Favorito,
                      MovimientoInventario, Notificacion, Producto, Venta)
+
+
+def _cupon_vigente(empresa, codigo, porcentaje=10):
+    """Cupon valido (dentro de su rango de vigencia) para los tests del
+    marketplace. Los campos de fecha del modelo son requeridos."""
+    return Cupon.objects.create(
+        empresa=empresa, codigo=codigo, porcentaje=porcentaje, activo=True,
+        fecha_inicio=timezone.now() - timedelta(days=1),
+        fecha_fin=timezone.now() + timedelta(days=30))
 
 
 class BaseCoreTest(TestCase):
@@ -1723,3 +1736,526 @@ class RendimientoQueriesTest(BaseCatalogoTest):
             respuesta = api.get("/api/tienda/carrito/")
         self.assertEqual(respuesta.status_code, 200)
         self.assertLessEqual(len(contexto.captured_queries), 10)
+
+
+class CatalogoFiltrosTest(BaseMarketplaceTest):
+    def test_filtro_busqueda(self):
+        resp = APIClient().get("/api/tienda/catalogo/?busqueda=camisa")
+        emails = {r["nombre"] for r in resp.data["resultados"]}
+        self.assertIn("Camisa Roja", emails)
+        self.assertNotIn("Jeans Azules", emails)
+
+    def test_filtro_categoria_valida(self):
+        resp = APIClient().get("/api/tienda/catalogo/?categoria=00000000-0000-0000-0000-000000000000")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_filtro_categoria_invalida_400(self):
+        resp = APIClient().get("/api/tienda/catalogo/?categoria=no-es-uuid")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "CATEGORIA_INVALIDA")
+
+    def test_filtro_precio_min_max_y_orden(self):
+        resp = APIClient().get("/api/tienda/catalogo/?precio_min=100000&precio_max=200000&orden=-precio")
+        self.assertEqual(resp.status_code, 200)
+        nombres = [r["nombre"] for r in resp.data["resultados"]]
+        self.assertEqual(nombres, ["Jeans Azules"])
+
+    def test_precio_no_numerico_400(self):
+        resp = APIClient().get("/api/tienda/catalogo/?precio_min=abc")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "PRECIO_INVALIDO")
+
+    def test_con_stock_filtra_sin_unidades(self):
+        Producto.objects.create(empresa=self.vendedor_a, nombre="SinStock", sku="MP-S1",
+                                precio="15000", stock=0, activo=True)
+        resp = APIClient().get("/api/tienda/catalogo/?con_stock=true")
+        for r in resp.data["resultados"]:
+            self.assertNotEqual(r["nombre"], "SinStock")
+
+    def test_orden_reciente(self):
+        resp = APIClient().get("/api/tienda/catalogo/?orden=reciente")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_precio_max_invalido_400(self):
+        resp = APIClient().get("/api/tienda/catalogo/?precio_max=abc")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "PRECIO_INVALIDO")
+
+    def test_orden_precio_ascendente(self):
+        resp = APIClient().get("/api/tienda/catalogo/?orden=precio")
+        self.assertEqual(resp.status_code, 200)
+        nombres = [r["nombre"] for r in resp.data["resultados"]]
+        self.assertIn("Camisa Roja", nombres)
+        self.assertIn("Jeans Azules", nombres)
+
+
+class DetalleYComentarios404Test(BaseMarketplaceTest):
+    def test_detalle_id_inexistente_404(self):
+        resp = APIClient().get("/api/tienda/catalogo/00000000-0000-0000-0000-000000000000/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_detalle_producto_inactivo_404(self):
+        resp = APIClient().get(f"/api/tienda/catalogo/{self.producto_inactivo.id}/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_detalle_producto_eliminado_404(self):
+        producto = Producto.objects.create(empresa=self.vendedor_a, nombre="Eliminado",
+                                           sku="MP-E1", precio="1000", stock=1, activo=True,
+                                           deleted_at="2026-01-01 00:00:00")
+        resp = APIClient().get(f"/api/tienda/catalogo/{producto.id}/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_listar_comentarios_producto_inexistente_404(self):
+        resp = APIClient().get("/api/tienda/catalogo/00000000-0000-0000-0000-000000000000/comentarios/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_comentar_producto_inexistente_404(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/catalogo/00000000-0000-0000-0000-000000000000/comentarios/",
+                        {"calificacion": 5, "comentario": "x"}, format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_pedidos_sin_cliente_lista_vacia(self):
+        user = User.objects.create_user(username="sincliente@test.co",
+                                        email="sincliente@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=user, empresa=None, rol=Rol.de_nombre("CLIENTE"))
+        resp = self.api_como(user).get("/api/tienda/pedidos/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["total"], 0)
+
+
+class CuponesTiendaTest(BaseMarketplaceTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin = User.objects.create_user(username="sega@test.co", email="sega@test.co",
+                                             password="Clave12345")
+        Perfil.objects.create(usuario=cls.admin, empresa=cls.vendedor_a,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+
+    def _crear_cupon(self, codigo="BIENVENIDA10", empresa=None):
+        return _cupon_vigente(empresa or self.vendedor_a, codigo)
+
+    def test_listar_cupones_necesita_personal(self):
+        api = self.api_como(self.comprador)
+        resp = api.get("/api/tienda/cupones/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_listar_cupones_del_personal(self):
+        resp = self.api_como(self.admin).get("/api/tienda/cupones/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, [])
+
+    def test_crear_cupon(self):
+        resp = self.api_como(self.admin).post(
+            "/api/tienda/cupones/",
+            {"codigo": "oferta5", "porcentaje": 5,
+             "fecha_inicio": "2020-01-01T00:00:00Z",
+             "fecha_fin": "2030-01-01T00:00:00Z"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.data["codigo"], "OFERTA5")  # upper()
+
+    def test_crear_cupon_duplicado_400(self):
+        self._crear_cupon()
+        resp = self.api_como(self.admin).post(
+            "/api/tienda/cupones/",
+            {"codigo": "bienvenida10", "porcentaje": 10,
+             "fecha_inicio": "2020-01-01T00:00:00Z",
+             "fecha_fin": "2030-01-01T00:00:00Z"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "CODIGO_DUPLICADO")
+
+    def test_crear_cupon_datos_invalidos(self):
+        resp = self.api_como(self.admin).post(
+            "/api/tienda/cupones/", {"porcentaje": 120}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_validar_cupon_sin_codigo_400(self):
+        resp = self.api_como(self.comprador).post("/api/tienda/cupones/validar/", {}, format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_validar_cupon_no_en_carrito_404(self):
+        cupon = self._crear_cupon()
+        resp = self.api_como(self.comprador).post(
+            "/api/tienda/cupones/validar/", {"codigo": cupon.codigo}, format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_validar_cupon_de_carrito_vigente(self):
+        cupon = self._crear_cupon()
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/cupones/validar/", {"codigo": cupon.codigo}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["codigo"], "BIENVENIDA10")
+
+    def test_validar_cupon_vencido_400(self):
+        Cupon.objects.create(empresa=self.vendedor_a, codigo="VENCIDO",
+                             porcentaje=10, activo=True,
+                             fecha_inicio=timezone.now() - timedelta(days=2),
+                             fecha_fin=timezone.now() - timedelta(days=1))
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/cupones/validar/", {"codigo": "VENCIDO"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "CUPON_VENCIDO")
+
+
+class CarritoCuponAplicarTest(BaseMarketplaceTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin = User.objects.create_user(username="cupo@test.co", email="cupo@test.co",
+                                             password="Clave12345")
+        Perfil.objects.create(usuario=cls.admin, empresa=cls.vendedor_a,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+
+    def test_aplicar_cupon_a_carrito(self):
+        cupon = _cupon_vigente(self.vendedor_a, "PROMO")
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/carrito/cupon/", {"cupon_id": str(cupon.id)}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(Decimal(resp.data["descuento"]), Decimal("5000"))
+        carrito = Carrito.objects.get(usuario=self.comprador)
+        self.assertEqual(carrito.cupon, cupon)
+
+    def test_quitar_cupon_con_id_nulo(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/carrito/cupon/", {"cupon_id": None}, format="json")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_cupon_no_aplica_a_items_mixtos(self):
+        cupon = _cupon_vigente(self.vendedor_a, "SOLOA")
+        api = self.api_como(self.comprador)
+        # dos productos de empresas distintas
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_b.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/carrito/cupon/", {"cupon_id": str(cupon.id)}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "CUPON_NO_APLICA")
+
+    def test_cupon_inexistente_404(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/carrito/cupon/",
+                        {"cupon_id": "00000000-0000-0000-0000-000000000000"}, format="json")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.data["codigo"], "CUPON_NO_ENCONTRADO")
+
+    def test_aplicar_sin_items_carrito_vacio(self):
+        cupon = _cupon_vigente(self.vendedor_a, "PROMO2")
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/carrito/cupon/", {"cupon_id": str(cupon.id)}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "CARRITO_VACIO")
+
+    def test_delete_quita_cupon(self):
+        cupon = _cupon_vigente(self.vendedor_a, "QUITA")
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        api.post("/api/tienda/carrito/cupon/", {"cupon_id": str(cupon.id)}, format="json")
+        resp = api.delete("/api/tienda/carrito/cupon/")
+        self.assertEqual(resp.status_code, 200)
+        carrito = Carrito.objects.get(usuario=self.comprador)
+        self.assertIsNone(carrito.cupon)
+
+    def test_cupon_datos_invalidos(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/carrito/cupon/", {"cupon_id": "no-es-uuid"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+
+class CheckoutExtraTest(BaseMarketplaceTest):
+    def _llenar_carrito(self, api):
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        return api
+
+    def test_metodo_pago_invalido_400(self):
+        api = self.api_como(self.comprador)
+        self._llenar_carrito(api)
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "cripto"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "METODO_PAGO_INVALIDO")
+
+    def test_checkout_con_datos_devuelve_ventas_y_limpia_carrito(self):
+        api = self.api_como(self.comprador)
+        self._llenar_carrito(api)
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertGreaterEqual(len(resp.data["ventas"]), 1)
+        carrito_resp = api.get("/api/tienda/carrito/")
+        self.assertEqual(carrito_resp.data["items"], [])
+
+    def test_completar_comprador_cuando_ya_existe_409(self):
+        resp = self.api_como(self.comprador).post(
+            "/api/tienda/completar-comprador/",
+            {"tipo_documento": "CC", "numero_documento": "1111111111",
+             "direccion": "Av 1", "ciudad": "Medellin"}, format="json")
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["codigo"], "CLIENTE_EXISTENTE")
+
+    def test_completar_comprador_nuevo_201(self):
+        user = User.objects.create_user(username="nuevobuyer@test.co",
+                                        email="nuevobuyer@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=user, empresa=None, rol=Rol.de_nombre("CLIENTE"))
+        resp = self.api_como(user).post(
+            "/api/tienda/completar-comprador/",
+            {"tipo_documento": "CC", "numero_documento": "2222222222",
+             "direccion": "Calle Nueva", "ciudad": "Bogota"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertTrue(Cliente.objects.filter(usuario=user, deleted_at__isnull=True).exists())
+
+    def test_completar_comprador_datos_invalidos_400(self):
+        user = User.objects.create_user(username="invalido@test.co",
+                                        email="invalido@test.co", password="Clave12345")
+        Perfil.objects.create(usuario=user, empresa=None, rol=Rol.de_nombre("CLIENTE"))
+        resp = self.api_como(user).post(
+            "/api/tienda/completar-comprador/",
+            {"tipo_documento": "CC", "numero_documento": "", "direccion": "", "ciudad": ""},
+            format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+
+class NotificacionEntregaTest(BaseMarketplaceTest):
+    """Ramas de core/notificaciones.py: entrega por canal, reintento y auditoria."""
+
+    def test_crear_con_notificar_true_entrega_y_actualiza_canal(self):
+        from core.notificaciones import crear_notificacion
+        from core.services import notificador
+        with patch.object(notificador, "entregar", return_value="whatsapp"):
+            aviso = crear_notificacion(
+                empresa=self.vendedor_a, usuario=self.comprador,
+                tipo="sistema", mensaje="Hola", notificar=True)
+        self.assertEqual(aviso.canal, "whatsapp")
+        self.assertFalse(aviso.entrega_pendiente)
+        aviso.refresh_from_db()
+        self.assertEqual(aviso.canal, "whatsapp")
+
+    def test_crear_con_entrega_fallida_queda_pendiente(self):
+        from core.notificaciones import crear_notificacion
+        from core.services import notificador
+        with patch.object(notificador, "entregar", return_value="ninguno"):
+            aviso = crear_notificacion(
+                empresa=self.vendedor_a, usuario=self.comprador,
+                tipo="sistema", mensaje="Sin redes", notificar=True)
+        self.assertEqual(aviso.canal, "ninguno")
+        self.assertTrue(aviso.entrega_pendiente)
+
+    def test_crear_con_auditoria_registra_actividad(self):
+        from core.notificaciones import crear_notificacion
+        from cuentas.models import ActividadUsuario
+        aviso = crear_notificacion(
+            empresa=self.vendedor_a, usuario=self.comprador,
+            tipo="sistema", mensaje="Auditame",
+            notificar=False, auditar_usuario=self.comprador)
+        self.assertEqual(aviso.canal, "ninguno")
+        self.assertTrue(ActividadUsuario.objects.filter(
+            usuario=self.comprador, accion="NOTIFICACION_ENVIADA").exists())
+
+    def test_reintentar_entrega_sin_usuario_no_hace_nada(self):
+        from core.notificaciones import reintentar_entrega
+        aviso = Notificacion.objects.create(empresa=self.vendedor_a,
+                                            mensaje="Sin usuario")
+        devuelto = reintentar_entrega(aviso)
+        self.assertIs(devuelto, aviso)
+        self.assertEqual(aviso.canal, "ninguno")
+
+    def test_reintentar_entrega_actualiza_canal(self):
+        from core.notificaciones import reintentar_entrega
+        from core.services import notificador
+        aviso = Notificacion.objects.create(
+            usuario=self.comprador, empresa=self.vendedor_a,
+            mensaje="Reintenta", canal="ninguno", entrega_pendiente=True)
+        with patch.object(notificador, "entregar", return_value="email"):
+            resultado = reintentar_entrega(aviso)
+        self.assertEqual(resultado.canal, "email")
+        self.assertFalse(resultado.entrega_pendiente)
+        aviso.refresh_from_db()
+        self.assertEqual(aviso.canal, "email")
+        self.assertFalse(aviso.entrega_pendiente)
+
+    def test_reintentar_entrega_que_vuelve_a_fallar(self):
+        from core.notificaciones import reintentar_entrega
+        from core.services import notificador
+        aviso = Notificacion.objects.create(
+            usuario=self.comprador, empresa=self.vendedor_a,
+            mensaje="Falla de nuevo", canal="ninguno", entrega_pendiente=True)
+        with patch.object(notificador, "entregar", return_value="ninguno"):
+            reintentar_entrega(aviso)
+        aviso.refresh_from_db()
+        self.assertTrue(aviso.entrega_pendiente)
+
+    def test_destinos_unico_usuario(self):
+        from core.notificaciones import _destinos
+        wa, email = _destinos(self.comprador)
+        self.assertEqual(email, "comprador@test.co")
+        self.assertIsNone(wa)  # el perfil del comprador no tiene telefono
+        wa, email = _destinos(None)
+        self.assertIsNone(wa)
+        self.assertIsNone(email)
+
+
+class CarritoItemsAvanzadoTest(BaseMarketplaceTest):
+    """PUT/DELETE del carrito y limite de stock al agregar items."""
+
+    def test_post_item_rechaza_superar_stock(self):
+        api = self.api_como(self.comprador)
+        # stock de producto_a = 10; agregar 11 excede
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 10}, format="json")
+        resp = api.post("/api/tienda/carrito/items/",
+                        {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+
+    def test_post_item_nuevo_supera_stock_directo(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/carrito/items/",
+                        {"producto": str(self.producto_a.id), "cantidad": 999}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+
+    def test_post_datos_invalidos(self):
+        resp = self.api_como(self.comprador).post(
+            "/api/tienda/carrito/items/", {"cantidad": 0}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "DATOS_INVALIDOS")
+
+    def test_put_actualiza_cantidad(self):
+        api = self.api_como(self.comprador)
+        creado = api.post("/api/tienda/carrito/items/",
+                          {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        item_id = creado.data["items"][0]["id"]
+        resp = api.put(f"/api/tienda/carrito/items/{item_id}/",
+                       {"producto": str(self.producto_a.id), "cantidad": 5}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["total_items"], 5)
+
+    def test_put_item_no_encontrado_404(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.put("/api/tienda/carrito/items/00000000-0000-0000-0000-000000000099/",
+                       {"producto": str(self.producto_a.id), "cantidad": 3}, format="json")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.data["codigo"], "ITEM_NO_ENCONTRADO")
+
+    def test_delete_item_remueve(self):
+        api = self.api_como(self.comprador)
+        creado = api.post("/api/tienda/carrito/items/",
+                          {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        item_id = creado.data["items"][0]["id"]
+        resp = api.delete(f"/api/tienda/carrito/items/{item_id}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["items"], [])
+
+    def test_delete_item_no_encontrado_404(self):
+        api = self.api_como(self.comprador)
+        resp = api.delete("/api/tienda/carrito/items/00000000-0000-0000-0000-000000000099/")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.data["codigo"], "ITEM_NO_ENCONTRADO")
+
+
+class FavoritoToggleAvanzadoTest(BaseMarketplaceTest):
+    def test_toggle_404_producto_inexistente(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/favoritos/00000000-0000-0000-0000-000000000011/")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.data["codigo"], "NO_ENCONTRADO")
+
+    def test_toggle_crea_y_estado_true(self):
+        api = self.api_como(self.comprador)
+        resp = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(resp.status_code, 201)
+        estado = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertTrue(estado.data["es_favorito"])
+        # repetir el toggle: idempotente -> 200
+        resp2 = api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(resp2.status_code, 200)
+
+    def test_toggle_delete_y_estado_false(self):
+        api = self.api_como(self.comprador)
+        api.post(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        resp = api.delete(f"/api/tienda/favoritos/{self.producto_a.id}/")
+        self.assertEqual(resp.status_code, 204)
+        estado = api.get(f"/api/tienda/favoritos/{self.producto_a.id}/estado/")
+        self.assertFalse(estado.data["es_favorito"])
+
+    def test_toggle_delete_404(self):
+        api = self.api_como(self.comprador)
+        resp = api.delete("/api/tienda/favoritos/00000000-0000-0000-0000-000000000012/")
+        self.assertEqual(resp.status_code, 404)
+
+
+class CheckoutPagoYCuponTest(BaseMarketplaceTest):
+    def test_pago_rechazado_cuando_mock_false(self):
+        import os
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        with patch.dict(os.environ, {"PASARELA_MOCK": "false"}, clear=False):
+            resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 402)
+        self.assertEqual(resp.data["codigo"], "PAGO_RECHAZADO")
+
+    def test_checkout_con_cupon_aplica_descuento(self):
+        cupon = _cupon_vigente(self.vendedor_a, "CHECKOUT10")
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        api.post("/api/tienda/carrito/cupon/", {"cupon_id": str(cupon.id)}, format="json")
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        # descuento del 10% sobre 50000
+        self.assertEqual(Decimal(resp.data["total"]), Decimal("45000"))
+        self.assertEqual(len(resp.data["ventas"]), 1)
+        venta = Venta.objects.get(pk=resp.data["ventas"][0]["venta_id"])
+        self.assertEqual(venta.descuento, Decimal("5000"))
+
+    def test_checkout_carrito_vacio(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "CARRITO_VACIO")
+
+    def test_checkout_producto_desactivado_rechaza_stock(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        # el producto se desactiva tras agregarlo al carrito
+        Producto.objects.filter(pk=self.producto_a.pk).update(activo=False)
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+        # restaurar para no ensuciar el resto de la clase
+        Producto.objects.filter(pk=self.producto_a.pk).update(activo=True)
+
+    def test_checkout_stock_insuficiente_al_chequear(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 5}, format="json")
+        # se reduce el stock tras agregar (otra compra)
+        Producto.objects.filter(pk=self.producto_a.pk).update(stock=2)
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
+
+    def test_checkout_producto_borrado_al_chequear(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        Producto.objects.filter(pk=self.producto_a.pk).update(deleted_at=timezone.now())
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
