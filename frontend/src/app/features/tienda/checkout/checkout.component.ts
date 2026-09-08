@@ -3,7 +3,15 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
-import { Carrito, CheckoutResponse, DatosComprador, StockInsuficiente } from '../../../core/models/tienda.model';
+import {
+  Carrito,
+  CheckoutPendiente,
+  CheckoutResponse,
+  DatosComprador,
+  StockInsuficiente,
+  esCheckoutPendiente,
+} from '../../../core/models/tienda.model';
+import { CLAVE_REFERENCIA_PAGO, urlCheckoutPasarela } from '../../../core/utils/pasarela.util';
 import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicaciones';
 
 @Component({
@@ -16,8 +24,12 @@ import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicacione
         <h1>Checkout</h1>
       </header>
 
-      @if (cargando()) {
-        <div class="cargando">Procesando compra...</div>
+      @if (redirigiendo()) {
+        <div class="cargando" role="status" aria-live="polite">
+          Te estamos llevando a la pasarela de pago segura...
+        </div>
+      } @else if (cargando()) {
+        <div class="cargando" role="status" aria-live="polite">Procesando compra...</div>
       } @else if (exito()) {
         <div class="exito-box">
           <div class="exito-icono">✓</div>
@@ -256,6 +268,7 @@ export class CheckoutComponent implements OnInit {
   readonly cargando = signal(false);
   readonly error = signal('');
   readonly exito = signal<CheckoutResponse | null>(null);
+  readonly redirigiendo = signal(false);
   readonly erroresStock = signal<StockInsuficiente[]>([]);
   readonly metodoPago = signal('tarjeta');
   readonly mostrarFormComprador = signal(false);
@@ -305,7 +318,14 @@ export class CheckoutComponent implements OnInit {
     this.erroresStock.set([]);
 
     this.tienda.checkout(this.metodoPago()).subscribe({
-      next: (r) => { this.exito.set(r); this.cargando.set(false); },
+      next: (r) => {
+        if (esCheckoutPendiente(r)) {
+          this.irAPasarela(r);
+          return;
+        }
+        this.exito.set(r);
+        this.cargando.set(false);
+      },
       error: (e) => {
         if (e.codigo === 'SIN_CLIENTE') {
           this.mostrarFormComprador.set(true);
@@ -317,6 +337,18 @@ export class CheckoutComponent implements OnInit {
         this.cargando.set(false);
       },
     });
+  }
+
+  /** Sale del sitio hacia el checkout de la pasarela.
+   *
+   * El pago no queda hecho al volver: lo confirma el webhook. Por eso se
+   * guarda la referencia antes de salir, para poder consultar el estado real
+   * en la pagina de retorno en vez de creerle a la URL de vuelta. */
+  private irAPasarela(pendiente: CheckoutPendiente): void {
+    sessionStorage.setItem(CLAVE_REFERENCIA_PAGO, pendiente.referencia);
+    this.redirigiendo.set(true);
+    this.cargando.set(false);
+    window.location.assign(urlCheckoutPasarela(pendiente.datos_checkout));
   }
 
   /** Vincula al usuario (sin importar su rol) con un Cliente del

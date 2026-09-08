@@ -7,12 +7,13 @@ import {
   Carrito,
   CarritoItem,
   CategoriaTienda,
-  CheckoutResponse,
+  CheckoutResultado,
   ComentarioProducto,
   Cupon,
   DatosComentario,
   DatosComprador,
   ErrorTienda,
+  EstadoPago,
   Favorito,
   FavoritoEstado,
   Pedido,
@@ -137,10 +138,21 @@ export class TiendaService {
   }
 
   // ---- Checkout ----
-  checkout(metodoPago: string): Observable<CheckoutResponse> {
+  /** Con la pasarela mock devuelve la compra ya hecha (201). Con una pasarela
+   * real devuelve 202 y los datos para abrir su checkout: el pago se confirma
+   * despues por webhook, no en esta respuesta. */
+  checkout(metodoPago: string): Observable<CheckoutResultado> {
     return this.http
-      .post<CheckoutResponse>(`${this.api}/checkout/`, { metodo_pago: metodoPago })
-      .pipe(capturarError<CheckoutResponse>());
+      .post<CheckoutResultado>(`${this.api}/checkout/`, { metodo_pago: metodoPago })
+      .pipe(capturarError<CheckoutResultado>());
+  }
+
+  /** Estado del intento de pago. Es lo que se consulta al volver de la
+   * pasarela: el resultado real lo fija el webhook, no la URL de retorno. */
+  estadoPago(referencia: string): Observable<EstadoPago> {
+    return this.http
+      .get<EstadoPago>(`${this.api}/pagos/estado/`, { params: { referencia } })
+      .pipe(capturarError<EstadoPago>());
   }
 
   // ---- Comprador ----

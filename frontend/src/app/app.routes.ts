@@ -164,6 +164,16 @@ export const routes: Routes = [
       import('./features/tienda/checkout/checkout.component').then((m) => m.CheckoutComponent),
   },
   {
+    // Adonde devuelve la pasarela al comprador tras pagar (WOMPI_REDIRECT_URL).
+    path: 'pago/retorno',
+    title: 'Resultado del pago — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/tienda/pago-retorno/pago-retorno.component').then(
+        (m) => m.PagoRetornoComponent,
+      ),
+  },
+  {
     path: 'pedidos',
     title: 'Mis pedidos — InterSoft',
     canActivate: [authGuard],

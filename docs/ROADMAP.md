@@ -50,6 +50,15 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   `core/tests_dian.py` (19).
 - **D2. IA con proveedor real**: `ia_engine.py` cae a `_mock` sin `IA_API_KEY`. Definir prompt de
   sistema con contexto de empresa + rate-limit y timeout con fallback.
+- **D3. Pasarela de pago real (Wompi)**: `services/pasarela_adapter.py` con el mismo patrón que
+  DIAN (`PASARELA_MOCK=True` por defecto). Con `PASARELA_MOCK=False` el cobro pasa a ser asíncrono:
+  el checkout responde 202 con el enlace firmado del Web Checkout y el resultado llega al webhook
+  `POST /api/tienda/pagos/webhook/wompi/`, que valida la firma de eventos, reconsulta la
+  transacción contra la API y confirma o revierte la reserva de stock. El frontend redirige y luego
+  consulta `/api/tienda/pagos/estado/` desde `/pago/retorno`.
+  **Hecho**: flujo completo, idempotente frente a reintentos del webhook. Tests en
+  `core/tests_fase4.py` (53) y `core/tests_pasarela.py` (10). Detalle en `docs/PASARELA_PAGOS.md`.
+  Pendiente solo de credenciales reales de comercio para probar contra el sandbox.
 
 ---
 
