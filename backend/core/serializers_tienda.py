@@ -224,4 +224,8 @@ class PedidoCompradorSerializer(serializers.ModelSerializer):
         model = Venta
         fields = ["id", "numero_factura", "fecha", "empresa_nombre",
                   "subtotal", "descuento", "total", "estado",
-                  "metodo_pago", "detalles", "created_at"]
+                  "metodo_pago", "estado_pago", "pasarela", "pagado_en",
+                  "detalles", "created_at"]
+        # El comprador ve el estado de su pago y la pasarela, pero NO el
+        # transaccion_id (identificador interno de la pasarela que no se le
+        # debe filtrar).

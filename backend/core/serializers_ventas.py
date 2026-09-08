@@ -46,6 +46,7 @@ class VentaLecturaSerializer(serializers.ModelSerializer):
         fields = ["id", "numero_factura", "fecha", "cliente", "cliente_nombre",
                   "cliente_documento", "vendedor", "vendedor_nombre",
                   "subtotal", "descuento", "total", "estado", "metodo_pago",
+                  "transaccion_id", "estado_pago", "pasarela", "pagado_en",
                   "notas", "motivo_anulacion", "anulada_en", "detalles",
                   "total_items", "created_at"]
 

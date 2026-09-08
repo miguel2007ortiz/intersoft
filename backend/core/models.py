@@ -235,6 +235,27 @@ class Venta(TimeStampedModel):
     motivo_anulacion = models.TextField(blank=True)
     anulada_en = models.DateTimeField(null=True, blank=True)
 
+    # ---- Auditoria del pago (Fase 1: pasarela) ----
+    # Identificador de la transaccion devuelto por la pasarela; se cruza con
+    # los webhooks para confirmar/reversar un cobro (indexado para traza).
+    transaccion_id = models.CharField(max_length=100, blank=True, db_index=True)
+    ESTADO_PAGO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aprobado', 'Aprobado'),
+        ('rechazado', 'Rechazado'),
+        ('reversado', 'Reversado'),
+    ]
+    estado_pago = models.CharField(
+        max_length=20, choices=ESTADO_PAGO_CHOICES, default='pendiente')
+    # Proveedor que proceso el cobro ('mock' por ahora; luego Wompi/Mercado Pago).
+    pasarela = models.CharField(max_length=30, blank=True)
+    pagado_en = models.DateTimeField(null=True, blank=True)
+    # Vinculo directo al intento de pago que origino la venta (Fase 4); se usa
+    # para confirmar/reversar la venta desde el webhook de la pasarela.
+    intento_pago = models.ForeignKey(
+        'IntentoPago', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ventas')
+
     class Meta:
         ordering = ['-fecha']
         indexes = [models.Index(fields=['empresa', '-fecha']),
@@ -576,3 +597,46 @@ class Camara(TimeStampedModel):
 
     def __str__(self):
         return f"{self.nombre} ({self.ubicacion or 'Sin ubicacion'})"
+
+
+# ----------------------- Fase 3: Intento de pago ---------------------------
+
+class IntentoPago(TimeStampedModel):
+    """Registro durable de un intento de cobro (idempotencia + auditoria).
+
+    Cada POST de checkout crea/recupera un ``IntentoPago`` por su clave de
+    idempotencia. De este modo:
+    - Un checkout reintentado tras un timeout de red reutiliza el intento
+      previo (y su respuesta) sin volver a cobrar ni duplicar la venta.
+    - Se conserva la traza del cobro (transaccion_id, estado, respuesta cruda)
+      para conciliar con la pasarela real (Fase 4) via webhooks.
+
+    A diferencia de guardar solo la clave en cache (que se pierde al reiniciar
+    el proceso o ante fallos), esta tabla es durable y apta para auditoria.
+    """
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aprobado', 'Aprobado'),
+        ('rechazado', 'Rechazado'),
+    ]
+
+    # Clave derivada del carrito del comprador: garantiza que dos requests
+    # con la misma clave se deduplican (unique) y no cobran dos veces.
+    idempotencia_clave = models.CharField(max_length=64, unique=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='intentos_pago')
+    monto_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    moneda = models.CharField(max_length=10, default='COP')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES,
+                              default='pendiente')
+    transaccion_id = models.CharField(max_length=100, blank=True, default='')
+    pasarela = models.CharField(max_length=30, blank=True, default='')
+    respuesta_cruda = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['usuario', '-created_at'])]
+
+    def __str__(self):
+        estado = self.get_estado_display()
+        return f"IntentoPago {self.transaccion_id or self.idempotencia_clave} [{estado}]"

@@ -9,7 +9,7 @@ Reglas clave:
 
 from decimal import Decimal
 import hashlib
-import os
+import json
 import uuid as uuid_mod
 
 from django.core.cache import cache
@@ -25,8 +25,8 @@ from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
-                     Cupon, DetalleVenta, Empresa, Favorito, MovimientoInventario,
-                     Producto, Venta)
+                     Cupon, DetalleVenta, Empresa, Favorito, IntentoPago,
+                     MovimientoInventario, Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
                                   ComentarioProductoEscrituraSerializer,
@@ -35,6 +35,7 @@ from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CuponValidarSerializer, FavoritoSerializer,
                                   PedidoCompradorSerializer,
                                   ProductoTiendaSerializer)
+from .services import cobrar
 
 
 def _obtener_empresa(request):
@@ -619,16 +620,35 @@ class CheckoutView(APIView):
     """POST convierte el carrito en ventas (checkout tipo marketplace).
 
     El carrito puede llevar productos de varias empresas. Se genera UNA
-    venta por cada empresa vendedora, todas dentro de una misma transaccion.
+    venta por cada empresa vendedora.
 
-    Flujo:
-    1. Valida stock de cada item con select_for_update.
-    2. Si stock_insuficiente, rechaza con la lista de productos afectados.
-    3. Agrupa los items por empresa vendedora y crea una venta por cada una,
-       descontando stock y registrando movimientos (transaction.atomic).
-    4. Aplica descuento del cupon solo si pertenece a la empresa vendedora.
-    5. Simula pasarela de pago (mock configurable por env).
-    6. Limpia el carrito.
+    Flujo (Fase 2 - reservar -> cobrar -> confirmar) en TRES tramos:
+
+    1. RESERVA (transaction.atomic con locks cortos):
+       valida stock de cada item con select_for_update; si hay stock
+       insuficiente rechaza SIN cobrar ni tocar la pasarela. Crea las ventas
+       en estado 'pendiente' / estado_pago 'pendiente', descuenta stock y
+       registra los movimientos. NO vacia el carrito todavia. Termina y suelta
+       los locks ANTES de llamar a la pasarela: asi no se mantiene ningun lock
+       durante la latencia de un proveedor real.
+
+    2. COBRO (FUERA de cualquier transaction.atomic y de los locks):
+       llama al adaptador de pasarela (mock hoy). Una llamada de red a un
+       proveedor externo nunca debe ejecutarse con filas bloqueadas por
+       select_for_update, porque el lock quedaria tomado todo el tiempo de
+       latencia del proveedor. Por eso la reserva y la confirmacion son dos
+       transacciones separadas y el cobro corre entre ambas, sin locks.
+
+    3. CONFIRMACION (transaction.atomic):
+       - aprobado: ventas -> estado 'completada' / estado_pago 'aprobado',
+         se fijan pasarela, transaccion_id y pagado_en; se vacia el carrito.
+       - rechazado: se revierte la reserva (stock y movimientos), las ventas
+         quedan estado_pago 'reversado' (registro de auditoria, NO cobrable),
+         el carrito NO se vacia y se responde 402 PAGO_RECHAZADO.
+
+    Idempotencia (Fase 3): el checkout acepta una 'idempotencia_clave'. Si ya
+    existe un IntentoPago con esa clave y resolucion, se devuelve el resultado
+    previo sin volver a cobrar (no se duplica el cobro ni la venta).
     """
     permission_classes = [IsAuthenticated]
 
@@ -641,29 +661,24 @@ class CheckoutView(APIView):
                  "opciones": [c for c, _ in Venta.METODO_PAGO_CHOICES]},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
-        if mock_habilitado:
-            pasarelarespuesta = {
-                'aprobada': True,
-                'transaccion_id': f"MOCK-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-                'mensaje': 'Pago aprobado (mock)',
-            }
-        else:
-            pasarelarespuesta = {
-                'aprobada': False,
-                'transaccion_id': None,
-                'mensaje': 'Pasarela no configurada',
-            }
+        # Clave de idempotencia: la aporta el cliente o se deriva del contenido
+        # del carrito, de modo que un checkout reintentado no cobre dos veces.
+        idempotencia_clave = (request.data.get('idempotencia_clave', '')
+                              or self._clave_de_carrito(request))
 
-        if not pasarelarespuesta['aprobada']:
-            return Response(
-                {"codigo": "PAGO_RECHAZADO",
-                 "detalle": pasarelarespuesta['mensaje']},
-                status=status.HTTP_402_PAYMENT_REQUIRED)
+        # ---------------- 0. Deduplicacion por clave ----------------
+        # Solo cortamos (sin volver a cobrar) cuando el intento previo con la
+        # misma clave ya fue APROBADO: asi un reintento no cobra ni crea venta
+        # dos veces. Un pago rechazado/pendiente permite reintentar (Fase 2:
+        # el carrito NO se vacia y el comprador puede corregir el metodo).
+        intento_previo = IntentoPago.objects.filter(
+            usuario=request.user, idempotencia_clave=idempotencia_clave,
+        ).first()
+        if intento_previo and intento_previo.estado == 'aprobado':
+            return self._respuesta_desde_intento(intento_previo)
 
-        # Transaccion unica: bloquea el carrito del comprador (evita doble
-        # checkout concurrente), los productos y la fila de cada empresa
-        # vendedora (serializa el correlativo de numero_factura).
+        # ---------------- 1. Reserva (locks cortos) ----------------
+        referencias_empresa = []
         with transaction.atomic():
             carrito = _carrito_de(request, bloquear=True)
 
@@ -699,9 +714,6 @@ class CheckoutView(APIView):
                     })
                     continue
                 if not producto.activo:
-                    # Se pudo agregar al carrito cuando estaba activo, pero
-                    # el vendedor lo desactivo antes del checkout: no se
-                    # vende, se reporta igual que stock insuficiente.
                     fallidos.append({
                         'producto': str(producto.id),
                         'producto_nombre': producto.nombre,
@@ -720,6 +732,7 @@ class CheckoutView(APIView):
                 item.producto = producto
 
             if fallidos:
+                # La pasarela NUNCA fue llamada (stock agotado).
                 return Response(
                     {"codigo": "STOCK_INSUFICIENTE",
                      "detalle": "Algunos productos no tienen stock suficiente.",
@@ -732,8 +745,40 @@ class CheckoutView(APIView):
                 por_vendedor.setdefault(item.producto.empresa_id, []).append(item)
 
             cupon = carrito.cupon if (carrito.cupon and carrito.cupon.esta_vigente) else None
+            monto_total = Decimal('0')
 
-            ventas = []
+            # Serializacion de la reserva por clave de idempotencia: se bloquea
+            # el carrito (select_for_update) al inicio. Dos checkouts
+            # concurrentes del MISMO carrito quedan serializados por ese lock.
+            # Al entrar el segundo tras el commit del primero, detecta si ya
+            # existe un IntentoPago para esta clave y actua en consecuencia.
+            intento = IntentoPago.objects.filter(
+                usuario=request.user,
+                idempotencia_clave=idempotencia_clave,
+            ).first()
+            if intento:
+                if intento.estado == 'aprobado':
+                    return self._respuesta_desde_intento(intento)
+                if intento.estado == 'pendiente':
+                    # Ya hay un cobro en curso con esta misma clave: no se
+                    # reserva de nuevo ni se vuelve a cobrar.
+                    return Response(
+                        {"codigo": "PAGO_EN_CURSO",
+                         "detalle": "Ya hay un pago en proceso para este "
+                                    "carrito. Espera unos segundos."},
+                        status=status.HTTP_409_CONFLICT)
+                # estado 'rechazado': reintento legitimo -> volver a intentar.
+                intento.estado = 'pendiente'
+                intento.save(update_fields=['estado'])
+            else:
+                intento = IntentoPago.objects.create(
+                    usuario=request.user,
+                    idempotencia_clave=idempotencia_clave,
+                    monto_total=Decimal('0'),
+                    moneda='COP',
+                    estado='pendiente',
+                )
+
             for empresa_id, lineas in por_vendedor.items():
                 empresa = Empresa.objects.select_for_update().filter(
                     pk=empresa_id).first()
@@ -745,6 +790,7 @@ class CheckoutView(APIView):
                 if cupon and cupon.empresa_id == empresa_id:
                     descuento = subtotal * cupon.porcentaje / Decimal('100')
                 total = max(subtotal - descuento, Decimal('0'))
+                monto_total += total
 
                 venta = Venta.objects.create(
                     empresa=empresa,
@@ -753,11 +799,10 @@ class CheckoutView(APIView):
                     subtotal=subtotal,
                     descuento=descuento,
                     total=total,
-                    estado='completada',
+                    estado='pendiente',          # se confirma al cobrar
+                    estado_pago='pendiente',     # se confirma al cobrar
                     metodo_pago=metodo_pago,
-                    notas=(f"Checkout tienda - Transaccion: "
-                           f"{pasarelarespuesta['transaccion_id']}"
-                           + (f" - Cupon: {cupon.codigo}" if cupon and cupon.empresa_id == empresa_id else '')),
+                    intento_pago=intento,
                 )
 
                 for item in lineas:
@@ -771,17 +816,80 @@ class CheckoutView(APIView):
                     item.producto.save(update_fields=['stock'])
                     _registrar_movimiento(
                         item.producto, request.user, 'salida', item.cantidad,
-                        f"Checkout tienda {venta.numero_factura}")
+                        f"Reserva checkout tienda {venta.numero_factura}")
 
-                ventas.append(venta)
+                referencias_empresa.append(
+                    f"{empresa.nombre}:{venta.numero_factura}")
 
-            carrito.items.all().delete()
-            carrito.cupon = None
-            carrito.save(update_fields=['cupon'])
+            # Persistimos el monto real de la reserva en el intento ya creado.
+            intento.monto_total = monto_total
+            intento.save(update_fields=['monto_total'])
+
+
+
+        # ---------------- 2. Cobro (FUERA de locks) ----------------
+        try:
+            resultado = cobrar(
+                monto=monto_total,
+                moneda='COP',
+                metodo_pago=metodo_pago,
+                referencia="|".join(referencias_empresa),
+                idempotencia_clave=idempotencia_clave,
+            )
+        except Exception:  # pragma: no cover - defensivo
+            return Response(
+                {"codigo": "PAGO_ERROR",
+                 "detalle": "No se pudo procesar el pago. Intenta de nuevo."},
+                status=status.HTTP_502_BAD_GATEWAY)
+
+        # ---------------- 3. Confirmacion / Reversion ----------------
+        if not resultado.aprobada:
+            self._revertir_reserva(request, idempotencia_clave, resultado)
+            return Response(
+                {"codigo": "PAGO_RECHAZADO",
+                 "detalle": resultado.mensaje},
+                status=status.HTTP_402_PAYMENT_REQUIRED)
+
+        with transaction.atomic():
+            # Solo las ventas reservadas por ESTE intento: filtrar por usuario
+            # y estado barreria tambien pendientes de checkouts anteriores y
+            # las marcaria pagadas con una transaccion que no les corresponde.
+            ventas = list(Venta.objects.filter(
+                intento_pago=intento,
+                estado_pago='pendiente',
+            ).order_by('created_at'))
+            for v in ventas:
+                v.estado = 'completada'
+                v.estado_pago = 'aprobado'
+                v.pasarela = resultado.pasarela
+                v.transaccion_id = resultado.transaccion_id
+                v.pagado_en = timezone.now()
+                v.save(update_fields=[
+                    'estado', 'estado_pago', 'pasarela',
+                    'transaccion_id', 'pagado_en',
+                ])
+
+            # cerrar el intento de pago
+            IntentoPago.objects.filter(
+                idempotencia_clave=idempotencia_clave,
+                usuario=request.user,
+            ).update(
+                estado='aprobado',
+                transaccion_id=resultado.transaccion_id,
+                pasarela=resultado.pasarela,
+                respuesta_cruda=json.dumps(resultado.crudo, default=str),
+            )
+
+            # solo vaciamos el carrito al confirmar el cobro
+            carrito_confirmado = _carrito_de(request, bloquear=True)
+            carrito_confirmado.items.all().delete()
+            carrito_confirmado.cupon = None
+            carrito_confirmado.save(update_fields=['cupon'])
 
             ActividadUsuario.registrar(
                 request.user, "CHECKOUT_MARKETPLACE",
-                f"{len(ventas)} venta(s) - Total ${sum(v.total for v in ventas)}")
+                f"{len(ventas)} venta(s) aprobada(s) - Total "
+                f"${sum(v.total for v in ventas)} - {resultado.transaccion_id}")
 
         return Response({
             "codigo": "EXITO",
@@ -794,8 +902,89 @@ class CheckoutView(APIView):
                 "total": str(v.total),
             } for v in ventas],
             "total": str(sum(v.total for v in ventas)),
-            "transaccion_id": pasarelarespuesta['transaccion_id'],
+            "transaccion_id": resultado.transaccion_id,
         }, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _clave_de_carrito(request):
+        """Deriva una clave de idempotencia estable a partir del carrito.
+
+        Combina el usuario y un hash del contenido (producto|cantidad|cupon),
+        de modo que dos checkouts con exactamente el mismo contenido comparten
+        clave (deduplicacion), y al cambiar el carrito cambia la clave.
+        """
+        carrito = _carrito_de(request)
+        items = sorted(
+            (str(i.producto_id), i.cantidad) for i in carrito.items.all())
+        cupon = str(carrito.cupon_id) if carrito.cupon_id else ''
+        material = f"{request.user.id}|{items}|{cupon}"
+        return hashlib.sha256(material.encode('utf-8')).hexdigest()[:32]
+
+    def _respuesta_desde_intento(self, intento):
+        """Reutiliza el resultado de un intento ya resuelto (idempotencia)."""
+        if intento.estado == 'aprobado':
+            ventas = list(Venta.objects.filter(
+                cliente__usuario=self.request.user,
+                transaccion_id=intento.transaccion_id,
+            ))
+            return Response({
+                "codigo": "EXITO",
+                "detalle": "Compra ya registrada (checkout reiterado).",
+                "ventas": [{
+                    "venta_id": str(v.id),
+                    "numero_factura": v.numero_factura,
+                    "empresa_id": str(v.empresa_id),
+                    "empresa_nombre": v.empresa.nombre,
+                    "total": str(v.total),
+                } for v in ventas],
+                "total": str(sum(v.total for v in ventas)),
+                "transaccion_id": intento.transaccion_id,
+            }, status=status.HTTP_200_OK)
+        return Response(
+            {"codigo": "PAGO_RECHAZADO",
+             "detalle": "El pago fue rechazado previamente."},
+            status=status.HTTP_402_PAYMENT_REQUIRED)
+
+    def _revertir_reserva(self, request, idempotencia_clave, resultado):
+        """Revierte la reserva de stock de un pago rechazado (Fase 2).
+
+        - Restaura las unidades reservadas de cada producto.
+        - Registra un movimiento de reversion (entrada) por cada linea.
+        - Marca las ventas pendientes como estado_pago 'reversado' (auditoria,
+          NO cobrables; no cuentan en analitica ni en total_compras).
+        - NO vacia el carrito: el comprador puede reintentar o modificar.
+        """
+        intento = IntentoPago.objects.filter(
+            usuario=request.user, idempotencia_clave=idempotencia_clave,
+        ).first()
+        # Acotado al intento por el mismo motivo que la confirmacion: revertir
+        # por usuario+estado devolveria stock de ventas de otros checkouts.
+        ventas = list(Venta.objects.filter(
+            intento_pago=intento,
+            estado='pendiente',
+            estado_pago='pendiente',
+        )) if intento else []
+        with transaction.atomic():
+            for v in ventas:
+                for detalle in v.detalles.select_related('producto'):
+                    p = detalle.producto
+                    p.stock += detalle.cantidad
+                    p.save(update_fields=['stock'])
+                    _registrar_movimiento(
+                        p, request.user, 'entrada', detalle.cantidad,
+                        f"Reversion pago rechazado {v.numero_factura}")
+                v.estado = 'pendiente'
+                v.estado_pago = 'reversado'
+                v.save(update_fields=['estado', 'estado_pago'])
+            IntentoPago.objects.filter(
+                idempotencia_clave=idempotencia_clave,
+                usuario=request.user,
+            ).update(
+                estado='rechazado',
+                transaccion_id=resultado.transaccion_id,
+                pasarela=resultado.pasarela,
+                respuesta_cruda=json.dumps(resultado.crudo, default=str),
+            )
 
 
 # ------------------------------ Pedidos del comprador ---------------------

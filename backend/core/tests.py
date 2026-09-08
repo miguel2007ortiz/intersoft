@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -7,8 +9,9 @@ from cuentas.models import Perfil, Rol
 
 from .models import (Camara, Categoria, Carrito, Cliente,
                      ComentarioProducto, DetalleVenta, Empresa, IAConversacion,
-                     Favorito,
+                     Favorito, IntentoPago,
                      MovimientoInventario, Notificacion, Producto, Venta)
+from .services import RespuestaPago
 
 
 class BaseCoreTest(TestCase):
@@ -661,8 +664,6 @@ class DashboardReportesTest(BaseCatalogoTest):
 
 
 # ============================ FASE 8: Asistente IA ===========================
-
-from unittest.mock import patch  # noqa: E402
 
 from core.ia_engine import IAError  # noqa: E402
 
@@ -1346,6 +1347,249 @@ class MarketplaceCheckoutTest(BaseMarketplaceTest):
         # El stock no se toco: la venta nunca se creo.
         self.producto_a.refresh_from_db()
         self.assertEqual(self.producto_a.stock, 10)
+
+
+class MarketplaceCheckoutPersistenciaPagoTest(BaseMarketplaceTest):
+    """Fase 1: persistencia de campos de pago en Venta tras checkout exitoso."""
+
+    def _checkout_exitoso(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_b.id), "cantidad": 1}, format="json")
+        return api.post("/api/tienda/checkout/",
+                        {"metodo_pago": "tarjeta"}, format="json")
+
+    def test_venta_tiene_estado_pago_aprobado(self):
+        resp = self._checkout_exitoso()
+        self.assertEqual(resp.status_code, 201)
+        for v in Venta.objects.all():
+            self.assertEqual(v.estado_pago, 'aprobado')
+
+    def test_venta_tiene_pasarela_mock(self):
+        self._checkout_exitoso()
+        for v in Venta.objects.all():
+            self.assertEqual(v.pasarela, 'mock')
+
+    def test_venta_tiene_transaccion_id(self):
+        self._checkout_exitoso()
+        for v in Venta.objects.all():
+            self.assertTrue(v.transaccion_id, 'transaccion_id vacio')
+            self.assertTrue(v.transaccion_id.startswith('MOCK-'))
+
+    def test_venta_tiene_pagado_en(self):
+        self._checkout_exitoso()
+        for v in Venta.objects.all():
+            self.assertIsNotNone(v.pagado_en)
+
+    def test_venta_estado_completada(self):
+        self._checkout_exitoso()
+        for v in Venta.objects.all():
+            self.assertEqual(v.estado, 'completada')
+
+    def test_intentopago_registrado(self):
+        self._checkout_exitoso()
+        intentos = IntentoPago.objects.all()
+        self.assertEqual(intentos.count(), 1)
+        self.assertEqual(intentos.first().estado, 'aprobado')
+        self.assertTrue(intentos.first().transaccion_id)
+
+    def test_respuesta_checkout_no_expone_transaccion_id(self):
+        resp = self._checkout_exitoso()
+        self.assertEqual(resp.status_code, 201)
+        # La respuesta del POST checkout expone el transaccion_id a nivel
+        # top-level (para conciliacion) pero NO dentro de cada venta.
+        for venta_resp in resp.data['ventas']:
+            self.assertNotIn('transaccion_id', venta_resp)
+
+    def test_pedidos_comprador_expone_estado_oculta_transaccion(self):
+        # El serializer del comprador (PedidosView) expone los campos de pago
+        # pero NO transaccion_id.
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1},
+                 format="json")
+        api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"},
+                 format="json")
+        pedidos = api.get("/api/tienda/pedidos/")
+        self.assertEqual(pedidos.status_code, 200)
+        resultado = pedidos.data['resultados'][0]
+        self.assertEqual(resultado['estado_pago'], 'aprobado')
+        self.assertEqual(resultado['pasarela'], 'mock')
+        self.assertIsNotNone(resultado['pagado_en'])
+        self.assertNotIn('transaccion_id', resultado)
+
+
+class MarketplaceCheckoutRechazoTest(BaseMarketplaceTest):
+    """Fase 2: rechazo de pago.
+
+    El rechazo se provoca mockeando el adaptador de pasarela, no con un flag
+    en el request: forzar el rechazo nunca puede ser algo que el cliente pida
+    por la API.
+    """
+
+    @staticmethod
+    def _pasarela_rechaza():
+        """Parchea la pasarela para que rechace el cobro."""
+        return patch('core.views_tienda.cobrar', return_value=RespuestaPago(
+            aprobada=False,
+            transaccion_id='MOCK-RECHAZADO',
+            estado='rechazado',
+            mensaje='Pago rechazado (mock forzado).',
+            crudo={'resuelto': 'RECHAZADO'},
+            pasarela='mock',
+        ))
+
+    def test_forzar_rechazo_devuelve_402(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        with self._pasarela_rechaza():
+            resp = api.post("/api/tienda/checkout/",
+                            {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 402)
+        self.assertEqual(resp.data['codigo'], 'PAGO_RECHAZADO')
+
+    def test_forzar_rechazo_restaura_stock(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 3}, format="json")
+        with self._pasarela_rechaza():
+            api.post("/api/tienda/checkout/",
+                     {"metodo_pago": "tarjeta"}, format="json")
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, 10)
+
+    def test_forzar_rechazo_no_vacia_carrito(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        with self._pasarela_rechaza():
+            api.post("/api/tienda/checkout/",
+                     {"metodo_pago": "tarjeta"}, format="json")
+        carrito = Carrito.objects.get(usuario=self.comprador)
+        self.assertEqual(carrito.items.count(), 1)
+
+    def test_forzar_rechazo_venta_esta_reversado(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+        with self._pasarela_rechaza():
+            api.post("/api/tienda/checkout/",
+                     {"metodo_pago": "tarjeta"}, format="json")
+        ventas = Venta.objects.all()
+        self.assertEqual(ventas.count(), 1)
+        self.assertEqual(ventas.first().estado_pago, 'reversado')
+        self.assertEqual(ventas.first().estado, 'pendiente')
+
+    def test_forzar_rechazo_intentopago_rechazado(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        with self._pasarela_rechaza():
+            api.post("/api/tienda/checkout/",
+                     {"metodo_pago": "tarjeta"}, format="json")
+        intento = IntentoPago.objects.first()
+        self.assertEqual(intento.estado, 'rechazado')
+
+    def test_rechazo_stock_insuficiente_no_llama_pasarela(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1},
+                 format="json")
+        # El producto se desactiva antes del checkout -> el reservado lo
+        # rechaza ANTES de llamar a la pasarela.
+        self.producto_a.activo = False
+        self.producto_a.save(update_fields=["activo"])
+        resp = api.post("/api/tienda/checkout/",
+                        {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data['codigo'], 'STOCK_INSUFICIENTE')
+        # La pasarela nunca fue llamada: no hay IntentoPago ni venta creados.
+        self.assertEqual(IntentoPago.objects.count(), 0)
+        self.assertEqual(Venta.objects.count(), 0)
+
+    def test_reintento_tras_rechazo_permite_nuevo_checkout(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        # Primer intento rechazado
+        with self._pasarela_rechaza():
+            api.post("/api/tienda/checkout/",
+                     {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(Venta.objects.first().estado_pago, 'reversado')
+        # Segundo intento exitoso con el mismo carrito
+        resp = api.post("/api/tienda/checkout/",
+                        {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(Venta.objects.filter(estado_pago='aprobado').count(), 1)
+
+    def test_confirmacion_no_toca_ventas_de_otro_intento(self):
+        """Regresion: confirmar solo alcanza las ventas de ESTE intento.
+
+        Si un checkout anterior dejo una venta pendiente (por ejemplo, un
+        cobro que quedo colgado), un checkout posterior no puede marcarla
+        aprobada ni asignarle su transaccion_id.
+        """
+        api = self.api_como(self.comprador)
+        # Venta pendiente huerfana, de un intento distinto (intento_pago nulo).
+        huerfana = Venta.objects.create(
+            empresa=self.vendedor_a, cliente=self.cliente_comprador,
+            vendedor=self.comprador, subtotal=1000, total=1000,
+            estado='pendiente', estado_pago='pendiente', metodo_pago='tarjeta')
+
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1},
+                 format="json")
+        resp = api.post("/api/tienda/checkout/",
+                        {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201)
+
+        huerfana.refresh_from_db()
+        self.assertEqual(huerfana.estado_pago, 'pendiente')
+        self.assertEqual(huerfana.estado, 'pendiente')
+        self.assertEqual(huerfana.transaccion_id, '')
+        self.assertEqual(Venta.objects.filter(estado_pago='aprobado').count(), 1)
+
+    def test_reversion_no_toca_ventas_de_otro_intento(self):
+        """Regresion: un rechazo no devuelve stock de ventas ajenas."""
+        api = self.api_como(self.comprador)
+        huerfana = Venta.objects.create(
+            empresa=self.vendedor_a, cliente=self.cliente_comprador,
+            vendedor=self.comprador, subtotal=1000, total=1000,
+            estado='pendiente', estado_pago='pendiente', metodo_pago='tarjeta')
+        DetalleVenta.objects.create(venta=huerfana, producto=self.producto_b,
+                                    cantidad=2, precio_unitario=120000)
+        stock_b = self.producto_b.stock
+
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1},
+                 format="json")
+        with self._pasarela_rechaza():
+            resp = api.post("/api/tienda/checkout/",
+                            {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 402)
+
+        # El stock del producto de la venta huerfana no se toco.
+        self.producto_b.refresh_from_db()
+        self.assertEqual(self.producto_b.stock, stock_b)
+        huerfana.refresh_from_db()
+        self.assertEqual(huerfana.estado_pago, 'pendiente')
+
+    def test_idempotencia_checkout_exitoso_duplica_no_cobra_dos_veces(self):
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp1 = api.post("/api/tienda/checkout/",
+                         {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp1.status_code, 201)
+        # Segundo POST con mismo carrito ya vacio -> CARRITO_VACIO
+        resp2 = api.post("/api/tienda/checkout/",
+                         {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp2.status_code, 400)
+        self.assertEqual(resp2.data['codigo'], 'CARRITO_VACIO')
+        self.assertEqual(Venta.objects.count(), 1)
 
 
 class RegistroCompradorTest(TestCase):
