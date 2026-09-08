@@ -130,6 +130,13 @@ export const routes: Routes = [
       import('./features/ventas/ventas.component').then((m) => m.VentasComponent),
   },
   {
+    path: 'envios',
+    title: 'Envios — InterSoft',
+    canActivate: [authGuard, personalGuard],
+    loadComponent: () =>
+      import('./features/envios/envios.component').then((m) => m.EnviosComponent),
+  },
+  {
     path: 'inventario',
     title: 'Inventario — InterSoft',
     canActivate: [authGuard, personalGuard],

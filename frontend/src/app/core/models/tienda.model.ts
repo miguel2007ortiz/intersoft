@@ -139,5 +139,67 @@ export interface Pedido {
   estado: string;
   metodo_pago: string;
   detalles: DetallePedido[];
+  envio: EnvioSeguimiento | null;
   created_at: string;
+}
+
+/** Estado del despacho de una venta del marketplace (Envio.ESTADO_CHOICES
+ * del backend). `entregado`/`devuelto` son terminales. */
+export type EnvioEstado =
+  | 'pendiente'
+  | 'preparando'
+  | 'despachado'
+  | 'en_transito'
+  | 'entregado'
+  | 'no_entregado'
+  | 'devuelto';
+
+export const ENVIO_ESTADOS: { valor: EnvioEstado; etiqueta: string }[] = [
+  { valor: 'pendiente', etiqueta: 'Pendiente de preparacion' },
+  { valor: 'preparando', etiqueta: 'Preparando pedido' },
+  { valor: 'despachado', etiqueta: 'Despachado' },
+  { valor: 'en_transito', etiqueta: 'En transito' },
+  { valor: 'entregado', etiqueta: 'Entregado' },
+  { valor: 'no_entregado', etiqueta: 'Intento fallido' },
+  { valor: 'devuelto', etiqueta: 'Devuelto al vendedor' },
+];
+
+/** Transiciones validas entre estados (Envio.TRANSICIONES_VALIDAS): desde el
+ * estado actual solo se puede pasar a los listados aqui; el backend rechaza
+ * cualquier otra con TRANSICION_INVALIDA. */
+export const ENVIO_TRANSICIONES: Record<EnvioEstado, EnvioEstado[]> = {
+  pendiente: ['preparando', 'despachado'],
+  preparando: ['despachado'],
+  despachado: ['en_transito', 'entregado', 'no_entregado'],
+  en_transito: ['entregado', 'no_entregado'],
+  no_entregado: ['en_transito', 'devuelto'],
+  entregado: [],
+  devuelto: [],
+};
+
+/** Seguimiento visible para el comprador (EnvioSeguimientoSerializer): solo
+ * lo necesario para rastrear, sin datos internos del vendedor. */
+export interface EnvioSeguimiento {
+  direccion: string;
+  ciudad: string;
+  departamento: string;
+  transportadora: string;
+  numero_guia: string;
+  estado: EnvioEstado;
+  estado_display: string;
+  fecha_despacho: string | null;
+  fecha_entrega_estimada: string | null;
+  fecha_entrega_real: string | null;
+}
+
+/** Envio completo para el personal interno (EnvioLecturaSerializer): el
+ * seguimiento del comprador mas los datos de gestion de la empresa. */
+export interface Envio extends EnvioSeguimiento {
+  id: string;
+  venta: string;
+  numero_factura: string;
+  cliente_nombre: string;
+  notas: string;
+  created_at: string;
+  updated_at: string;
 }

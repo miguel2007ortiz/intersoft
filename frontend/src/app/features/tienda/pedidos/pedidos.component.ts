@@ -49,6 +49,21 @@ import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.
                 }
               </ul>
 
+              @if (p.envio; as envio) {
+                <div class="envio-seguimiento">
+                  <span class="envio-badge" [class]="'badge-' + envio.estado">{{ envio.estado_display }}</span>
+                  <div class="envio-detalle">
+                    @if (envio.transportadora || envio.numero_guia) {
+                      <span class="envio-guia">{{ envio.transportadora }} &middot; Guia {{ envio.numero_guia }}</span>
+                    }
+                    @if (envio.fecha_entrega_estimada) {
+                      <span class="envio-fecha">Entrega estimada: {{ envio.fecha_entrega_estimada | date: 'd MMM y' }}</span>
+                    }
+                    <span class="envio-dir">{{ envio.direccion }}, {{ envio.ciudad }}</span>
+                  </div>
+                </div>
+              }
+
               <footer class="pedido-pie">
                 @if (Number(p.descuento) > 0) {
                   <span class="pedido-descuento">Descuento: -{{ p.descuento | number }} COP</span>
@@ -115,6 +130,28 @@ import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.
     .pedido-pie { display: flex; justify-content: flex-end; gap: var(--e4); font-size: 14px; }
     .pedido-descuento { color: #b42318; }
     .pedido-total { font-weight: 700; }
+
+    .envio-seguimiento {
+      display: flex; align-items: flex-start; gap: var(--e3);
+      margin: 0 0 var(--e3); padding: var(--e3);
+      background: var(--primario-suave); border-radius: 10px;
+    }
+    .envio-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+      white-space: nowrap;
+    }
+    .envio-badge.badge-pendiente { background: #fef9ec; color: #b54708; }
+    .envio-badge.badge-preparando { background: #eff6ff; color: #1d4ed8; }
+    .envio-badge.badge-despachado { background: #f5f3ff; color: #6d28d9; }
+    .envio-badge.badge-en_transito { background: #eef2ff; color: #4338ca; }
+    .envio-badge.badge-entregado { background: #ecfdf3; color: #067647; }
+    .envio-badge.badge-no_entregado { background: #fef3f2; color: #b42318; }
+    .envio-badge.badge-devuelto { background: #f1f5f9; color: #475569; }
+    .envio-detalle { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+    .envio-detalle span { color: var(--tinta); }
+    .envio-guia { font-weight: 600; font-size: 13.5px; }
+    .envio-fecha, .envio-dir { color: var(--gris); }
   `],
 })
 export class PedidosComponent implements OnInit {

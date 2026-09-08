@@ -76,4 +76,12 @@ describe('SidebarComponent', () => {
     fixture.destroy();
     expect(mql.removeEventListener).toHaveBeenCalledTimes(listenersAntes + 1);
   });
+
+  it('muestra el enlace de Envios para personal interno (no CLIENTE)', () => {
+    const fixture = TestBed.createComponent(SidebarComponent);
+    fixture.detectChanges();
+    const enlace = (fixture.nativeElement as HTMLElement).querySelector('a[routerLink="/envios"]');
+    expect(enlace).not.toBeNull();
+    expect(enlace?.textContent ?? '').toContain('Envios');
+  });
 });
