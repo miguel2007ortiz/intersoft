@@ -65,9 +65,14 @@ ninguna es un bug critico abierto que bloquee la entrega.
 3. **Sin CSP en cabeceras**: el backend no emite `Content-Security-Policy`
    (sí `X-FRAME_OPTIONS=DENY` y HSTS). Añadir CSP en nginx mitigaría XSS
    defensivamente.
-4. **Sin e2e del frontend**: la cobertura es unitaria (guard, interceptor,
-   servicios, componentes clave). Un e2e (Playwright) sobre happy path
-   (login → venta → check) cerraría el ciclo.
+4. **Sin e2e del frontend**: la cobertura era unitaria (guard, interceptor,
+   servicios, componentes clave). **Resuelto**: suite Playwright
+   (`frontend/e2e/tienda-flujo.spec.ts`, `npm run test:e2e`) cubre el happy
+   path login → carrito → checkout (crea el `Envio`) → seguimiento en "Mis
+   pedidos", más el panel de Envios del personal (`/envios`). Requiere backend local en
+   `127.0.0.1:8000` con BD `intersoft1_db` migrada y `seed_demo`; levanta
+   `ng serve` solo. Queda como mejora: un e2e del flujo POS con rol personal
+   (requiere cuenta demo de personal con contraseña, hoy solo existe Ana).
 5. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
    optimizadas para el volumen actual; para volumen alto convendría
    materializar/archivar ventas viejas.

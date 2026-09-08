@@ -99,12 +99,18 @@ class Command(BaseCommand):
                 defaults={'nombre': nombre, 'email': email})
             clientes.append(c)
 
-        # Cliente vinculado a Ana (para su historial de pedidos).
+        # Cliente vinculado a Ana (para su historial de pedidos). Con
+        # direccion: el checkout del marketplace exige destino de envio.
         cliente_ana, _ = Cliente.objects.get_or_create(
             usuario=ana,
             defaults={'empresa': empresa, 'nombre': 'Ana Torres',
                       'tipo_documento': 'CC', 'numero_documento': '99990001122',
-                      'email': ana.email})
+                      'email': ana.email,
+                      'direccion': 'Calle 10 # 20-30, Apto 502', 'ciudad': 'Bogota'})
+        if not cliente_ana.direccion:
+            cliente_ana.direccion = 'Calle 10 # 20-30, Apto 502'
+            cliente_ana.ciudad = 'Bogota'
+            cliente_ana.save()
 
         # --- Pedidos demo normalizados (los totales se recalculan por senal).
         p_zapatos = Producto.objects.get(empresa=empresa, sku='SKU-001')
