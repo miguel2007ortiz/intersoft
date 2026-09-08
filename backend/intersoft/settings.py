@@ -170,6 +170,26 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'EXCEPTION_HANDLER': 'core.exceptions.manejador_excepciones',
+    # Throttling por IP (core/throttling.py) en endpoints sensibles de
+    # autenticacion: refresh, recuperacion y registro. La vista solo limita si
+    # declara `throttle_scope`; el resto de la API no se ve afectada. Las
+    # tasas son ajustables via env (ver .env.example).
+    'DEFAULT_THROTTLE_CLASSES': (
+        'core.throttling.IPScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_refresh': config('THROTTLE_REFRESH', default='120/hour'),
+        'auth_recuperacion': config('THROTTLE_RECUPERACION', default='20/10min'),
+        'auth_registro': config('THROTTLE_REGISTRO', default='10/hour'),
+    } if 'test' not in sys.argv else {
+        # Bajo el runner de tests las tasas se relajan: LocMemCache persiste
+        # entre tests del mismo proceso y suites que llaman mucho a estos
+        # endpoints llenarian el bucket de produccion. La verificacion real
+        # del throttle vive en cuentas/tests_throttling.py via override.
+        'auth_refresh': '10000/hour',
+        'auth_recuperacion': '10000/hour',
+        'auth_registro': '10000/hour',
+    },
 }
 
 SIMPLE_JWT = {

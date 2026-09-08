@@ -39,7 +39,8 @@ publicar. Refleja exactamente lo que el proyecto ya implementa (verificado en
 - [ ] `python manage.py test` → suite completa en verde (241 tests).
 - [ ] Autenticación: JWT `ACCESS_TOKEN_LIFETIME=30m`, `REFRESH=7d`; bloqueo de
       login tras 5 intentos (`MAX_INTENTOS_LOGIN`) por 15 min
-      (`MINUTOS_BLOQUEO`); reset de password expira en 30 min.
+      (`MINUTOS_BLOQUEO`); throttle por IP en refresh/recuperación/registro
+      (429 `{codigo: THROTTLED}`); reset de password expira en 30 min.
 - [ ] Maniobras de seguridad HTTP activas con o sin HTTPS: cookies
       `HttpOnly` + `SameSite=Lax`, `X_FRAME_OPTIONS=DENY`, manejador de
       excepciones global sin tracebacks.

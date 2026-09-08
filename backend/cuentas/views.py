@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import ActividadUsuario, Perfil, RolPermiso, TokenRecuperacion
 from .serializers import (
@@ -146,9 +147,17 @@ class CambiarPasswordView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
+class TokenRefreshThrottleView(TokenRefreshView):
+    """Refresh con limite por IP (scope `auth_refresh`). Prevencion de fuerza
+    bruta sobre tokens de sesion desde una misma IP."""
+
+    throttle_scope = 'auth_refresh'
+
+
 class RegistroEmpresaView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = 'auth_registro'
 
     def post(self, request):
         entrada = RegistroSerializer(data=request.data)
@@ -163,6 +172,7 @@ class RegistroEmpresaView(APIView):
 class RegistroCompradorView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = 'auth_registro'
 
     def post(self, request):
         entrada = RegistroCompradorSerializer(data=request.data)
@@ -189,6 +199,7 @@ class EmailDisponibleView(APIView):
 class SolicitarRecuperacionView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = 'auth_recuperacion'
 
     def post(self, request):
         entrada = SolicitarRecuperacionSerializer(data=request.data)
@@ -254,6 +265,7 @@ class SolicitarRecuperacionView(APIView):
 class ConfirmarRecuperacionView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = 'auth_recuperacion'
 
     def post(self, request):
         entrada = ConfirmarRecuperacionSerializer(data=request.data)

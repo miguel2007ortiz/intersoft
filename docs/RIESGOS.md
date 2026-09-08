@@ -24,6 +24,7 @@ ninguna es un bug critico abierto que bloquee la entrega.
 | `url_stream` inyectable (`javascript:`, etc.) | Solo `http(s)`, `rtsp`, `rtmp`; vacío permitido (cámara sin video). |
 | Listados sin tope (DoS por filas) | Paginación acotada a 200 (default 50) en productos, usuarios, pedidos, inventario. |
 | Login por fuerza bruta | Bloqueo tras 5 intentos (`MAX_INTENTOS_LOGIN`) por 15 min (`MINUTOS_BLOQUEO`). |
+| Fuerza bruta por IP en endpoints públicos | Throttle por IP de DRF (`core/throttling.py`) en refresh, recuperación y creación de cuenta; 429 unificado con `{codigo: THROTTLED, detalle, errores}`; scopes independientes y a prueba de spoofing de `X-Forwarded-For` (`cuentas/tests_throttling.py`). |
 | Fuga multi-tenant por `Rol` global (hallazgo AUDITORIA) | `Rol.empresa` (FK) + unicidad por empresa + `roles_visibles()`; pruebas de aislamiento entre empresas (roles no se ven/clonan/asignan transfrontera). |
 | Config insegura en producción | Fail-fast: sin `SECRET_KEY` real o con `ALLOWED_HOSTS=*` la app **no arranca** con `DEBUG=False`; cookies/HSTS/HTTPS se endurecen solas. |
 | Reset de password con token eterno | Tokens expiran (30 min); pruebas con token expirado/inexistente. |
@@ -54,18 +55,15 @@ ninguna es un bug critico abierto que bloquee la entrega.
 
 ## Riesgos pendientes (mejoras conocidas, no bloqueantes)
 
-1. **Throttling por IP**: solo hay bloqueo por cuenta (login). No hay
-   `DRF throttles` por IP en endpoints sensibles (refresh, recuperación,
-   creación de cuenta). Recomendado antes de exponer a internet.
-2. **Módulo de cámaras**: es un "lienzo" deliberado — no hay streaming en
+1. **Módulo de cámaras**: es un "lienzo" deliberado — no hay streaming en
    vivo, no hay paginación en `CamarasView`, y las grabaciones se resuelven
    contra disco (sin BD). El campo `url_stream` ya valida protocolo
    (fase 5), pero el alcance completo de video queda para una iteración
    posterior.
-3. **Sin CSP en cabeceras**: el backend no emite `Content-Security-Policy`
+2. **Sin CSP en cabeceras**: el backend no emite `Content-Security-Policy`
    (sí `X-FRAME_OPTIONS=DENY` y HSTS). Añadir CSP en nginx mitigaría XSS
    defensivamente.
-4. **Sin e2e del frontend**: la cobertura era unitaria (guard, interceptor,
+3. **Sin e2e del frontend**: la cobertura era unitaria (guard, interceptor,
    servicios, componentes clave). **Resuelto**: suite Playwright
    (`frontend/e2e/tienda-flujo.spec.ts`, `npm run test:e2e`) cubre el happy
    path login → carrito → checkout (crea el `Envio`) → seguimiento en "Mis
@@ -73,12 +71,12 @@ ninguna es un bug critico abierto que bloquee la entrega.
    `127.0.0.1:8000` con BD `intersoft1_db` migrada y `seed_demo`; levanta
    `ng serve` solo. Queda como mejora: un e2e del flujo POS con rol personal
    (requiere cuenta demo de personal con contraseña, hoy solo existe Ana).
-5. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
+4. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
    optimizadas para el volumen actual; para volumen alto convendría
    materializar/archivar ventas viejas.
-6. **Media en disco local**: `MEDIA_ROOT` local; en multi-servidor se
+5. **Media en disco local**: `MEDIA_ROOT` local; en multi-servidor se
    recomienda almacenar en object storage.
-7. **Backups y monitoring**: son operativos, no implementados en la app.
+6. **Backups y monitoring**: son operativos, no implementados en la app.
    El checklist de despliegue (`docs/CHECKLIST-SEGURIDAD.md`,
    `docs/DESPLIEGUE.md`) los exige como paso manual/agendado.
 
