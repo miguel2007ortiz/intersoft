@@ -54,6 +54,7 @@ class Command(BaseCommand):
         # Personal de la tienda (para las ventas del historial).
         cuentas_data = [('Ana Torres', 'ana@elprogreso.co'),
                         ('Luis Perez', 'luis@elprogreso.co')]
+        password_demo = 'demo12345'
         usuarios = []
         for nombre, email in cuentas_data:
             user, _ = User.objects.get_or_create(
@@ -61,6 +62,15 @@ class Command(BaseCommand):
                 defaults={'first_name': nombre.split(' ', 1)[0],
                           'last_name': nombre.split(' ', 1)[1] if ' ' in nombre else '',
                           'email': email})
+            if not user.password or not user.has_usable_password():
+                # Las cuentas de personal demo deben poder iniciar sesion
+                # (flujo POS en la UI y e2e). Sin password (vacia) o con
+                # password inusable ('!' -> set_unusable_password) se les
+                # asigna el demo; si ya tienen una propia, no se pisa
+                # (idempotente y no destructivo). Nota: en Django 5.2 una
+                # password vacia cuenta como "usable", de ahi el primer check.
+                user.set_password(password_demo)
+                user.save(update_fields=['password'])
             perfil, _ = Perfil.objects.get_or_create(
                 usuario=user,
                 defaults={'empresa': empresa, 'rol': _rol('EMPLEADO')})

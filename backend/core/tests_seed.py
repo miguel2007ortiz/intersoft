@@ -25,6 +25,29 @@ class SeedDemoGuardTest(TestCase):
         with override_settings(DEBUG=True):
             call_command(SeedDemo())
 
+    def test_personal_demo_queda_con_password_usable(self):
+        from django.contrib.auth.models import User
+
+        with override_settings(DEBUG=True):
+            call_command(SeedDemo())
+        luis = User.objects.get(username='luis@elprogreso.co')
+        self.assertTrue(luis.has_usable_password())
+        self.assertTrue(luis.check_password('demo12345'))
+        self.assertEqual(luis.perfil.empresa.nit, '900123456')
+
+    def test_rerun_no_pisa_una_password_ya_configurada(self):
+        from django.contrib.auth.models import User
+
+        with override_settings(DEBUG=True):
+            call_command(SeedDemo())
+        luis = User.objects.get(username='luis@elprogreso.co')
+        luis.set_password('Cambiada123')
+        luis.save(update_fields=['password'])
+        with override_settings(DEBUG=True):
+            call_command(SeedDemo())
+        luis.refresh_from_db()
+        self.assertTrue(luis.check_password('Cambiada123'))
+
 
 class SeedMasivoGuardTest(TestCase):
     def test_rechaza_en_produccion(self):
