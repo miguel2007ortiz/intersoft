@@ -26,6 +26,9 @@ export class ProductosComponent {
   readonly categorias = signal<Categoria[]>([]);
   readonly cargando = signal(true);
   readonly guardando = signal(false);
+  /** Error al cargar el listado (estado-vacio + reintento, igual que
+   * ventas/tienda). `error()` queda para errores de formulario/acciones. */
+  readonly errorCarga = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Producto | null>(null);
@@ -57,6 +60,7 @@ export class ProductosComponent {
 
   cargar(): void {
     this.cargando.set(true);
+    this.errorCarga.set(null);
     const activo = this.filtroEstado() === 'todos' ? undefined
       : this.filtroEstado() === 'activos';
     this.catalogo.listarProductos({ busqueda: this.busqueda(), activo }).subscribe({
@@ -65,7 +69,7 @@ export class ProductosComponent {
         this.cargando.set(false);
       },
       error: (e) => {
-        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+        this.errorCarga.set(e.detalle ?? 'No se pudo cargar la lista.');
         this.cargando.set(false);
       },
     });
@@ -83,6 +87,12 @@ export class ProductosComponent {
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {
     this.filtroEstado.set(estado);
+    this.cargar();
+  }
+
+  limpiarFiltros(): void {
+    this.busqueda.set('');
+    this.filtroEstado.set('todos');
     this.cargar();
   }
 

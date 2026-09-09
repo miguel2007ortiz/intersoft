@@ -118,6 +118,14 @@
     <div class="tarjeta sin-relleno">
       @if (cargando()) {
         <p class="gris centrado">Cargando productos...</p>
+      } @else if (errorCarga()) {
+        <app-estado-vacio tipo="error" [titulo]="'No pudimos cargar los productos'"
+                          [mensaje]="errorCarga()" accionTexto="Reintentar"
+                          (accion)="cargar()"></app-estado-vacio>
+      } @else if (!productos().length && (busqueda() || filtroEstado() !== 'todos')) {
+        <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
+                          mensaje="No se encontraron productos para esa busqueda o filtro."
+                          accionTexto="Limpiar filtros" (accion)="limpiarFiltros()"></app-estado-vacio>
       } @else if (!productos().length) {
         <app-estado-vacio tipo="vacio" titulo="Aun no hay productos"
                           mensaje="Crea tu primer producto para comenzar a facturar."

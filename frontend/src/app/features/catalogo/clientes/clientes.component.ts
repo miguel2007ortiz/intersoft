@@ -31,6 +31,9 @@ export class ClientesComponent {
   readonly usuarios = signal<UsuarioAdmin[]>([]);
   readonly cargando = signal(true);
   readonly guardando = signal(false);
+  /** Error al cargar el listado (se muestra con estado-vacio + reintento,
+   * igual que ventas/tienda). `error()` queda para errores de formulario. */
+  readonly errorCarga = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly exito = signal<string | null>(null);
   readonly editando = signal<Cliente | null>(null);
@@ -69,6 +72,7 @@ export class ClientesComponent {
 
   cargar(): void {
     this.cargando.set(true);
+    this.errorCarga.set(null);
     this.catalogo.listarClientes({
       busqueda: this.busqueda(), estado: this.estado(), pagina: this.pagina(),
     }).subscribe({
@@ -79,7 +83,7 @@ export class ClientesComponent {
         this.cargando.set(false);
       },
       error: (e) => {
-        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+        this.errorCarga.set(e.detalle ?? 'No se pudo cargar la lista.');
         this.cargando.set(false);
       },
     });

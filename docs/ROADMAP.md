@@ -21,10 +21,18 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 - **Tests**: `backend/core/tests_integridad.py` (crear/eliminar/sin detalles, descuento preservado,
   clamp, invocación manual).
 
-### A2. Estados vacíos y manejo de errores en el panel interno
-- **Dónde**: componentes del panel (`clientes`, `productos`, `ventas`, `pedidos`).
+### A2. Estados vacíos y manejo de errores en el panel interno **(hecho)**
+- **Dónde**: componentes del panel (`clientes`, `productos`, `ventas`, `pedidos`,
+  `envios`, tienda).
 - **Qué**: unificar componente de "estado vacío" (sin resultados) y de "error" con reintento,
-  consistente con la tienda.
+  consistente con la tienda (`app-estado-vacio`, tipos `vacio|busqueda|error`,
+  `frontend/src/app/shared/estado-vacio/`). Ventas/tienda/envios ya lo tenían; se completó
+  `clientes` y `productos`: el fallo de carga ya no muestra el falso vacío "Todavía no hay X"
+  sino `<app-estado-vacio tipo="error">` con Reintentar (señal `errorCarga` separada del `error`
+  de formularios), y `productos` gana el estado "Sin resultados" para búsqueda/filtro con
+  acción "Limpiar filtros" (`limpiarFiltros()`).
+- **Tests**: `clientes.component.spec.ts` y `productos.component.spec.ts` (error de carga +
+  reintento que recarga, vacío inicial, sin resultados de búsqueda/filtro).
 
 ### A3. Aislamiento de datos de demo
 - **Dónde**: management commands de seed + datos de prueba sembrados durante desarrollo.
@@ -96,7 +104,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | E2 PDF/XML comprobantes | Medio | Bajo | 3 |
 | B1 Caché | Alto | Medio | 4 |
 | C2 CI endurecido | Medio | Medio | 5 |
-| A2 Estados vacíos | Medio | Bajo | 6 |
+| A2 Estados vacíos | Medio | Bajo | — (hecho) |
 | C1 Docker | Medio-Alto | Medio | 7 |
 | A3 Aislamiento demo | Medio | Bajo | 8 |
 | E1 Design system | Medio | Medio | 9 |
