@@ -6,12 +6,20 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 
 ## Fase A — Estabilidad y calidad de datos
 
-### A1. Integridad financiera: validar `Venta.total` vs suma de `DetalleVenta`
-- **Dónde**: `backend/core/models.py` (`Venta`, `DetalleVenta`) y señales en `core/signals.py`.
-- **Qué**: `DetalleVenta.subtotal` ya es property calculada (buen patrón). Falta garantizar que
-  `Venta.total == sum(detalle.subtotal)` tras guardar/editar y que `descuento <= subtotal`.
-  Señal `post_save`/`post_delete` en `DetalleVenta` que recalcula y persiste el total de la venta padre.
-- **Beneficio**: evita facturas/pedidos con totales inconsistentes (crítico para reportes y DIAN).
+### A1. Integridad financiera: validar `Venta.total` vs suma de `DetalleVenta` **(hecho)**
+- **Dónde**: `backend/core/models.py` (`Venta`, `DetalleVenta`) y `backend/core/signals.py`.
+- **Qué**: `recalcular_totales_venta` (señal `mantener_totales_venta`, `post_save`/`post_delete`
+  de `DetalleVenta`) reconstruye `subtotal`/`total` = suma de `cantidad * precio_unitario` en un
+  único `UPDATE` vía `Subquery` (evita snapshot stale de MySQL REPEATABLE READ); borrado de línea
+  siempre por instancia (queryset batch no dispara post_delete). Validación de entrada:
+  `VentaPOSView` rechaza `descuento > subtotal` (`DESCUENTO_INVALIDO`) y el `CuponSerializer`
+  limita `porcentaje` a 0-100.
+- **Decisión registrada**: `descuento > subtotal` NO es rechazo estricto a nivel de BD; la señal
+  aplana `total` a 0 (clamp) conservando el descuento. Garantizar `descuento <= subtotal` como
+  `CheckConstraint` exigiría cambiar ese comportamiento (ver `tests_integridad.py`,
+  `test_descuento_mayor_al_subtotal_total_queda_en_cero`).
+- **Tests**: `backend/core/tests_integridad.py` (crear/eliminar/sin detalles, descuento preservado,
+  clamp, invocación manual).
 
 ### A2. Estados vacíos y manejo de errores en el panel interno
 - **Dónde**: componentes del panel (`clientes`, `productos`, `ventas`, `pedidos`).
@@ -83,7 +91,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ## Matriz de prioridad (impacto vs esfuerzo)
 | Ítem | Impacto | Esfuerzo | Prioridad |
 |------|---------|----------|-----------|
-| A1 Integridad financiera | Alto | Bajo | 1 |
+| A1 Integridad financiera | Alto | Bajo | — (hecho) |
 | B2 Paginación catálogo | Alto | Bajo | 2 |
 | E2 PDF/XML comprobantes | Medio | Bajo | 3 |
 | B1 Caché | Alto | Medio | 4 |
