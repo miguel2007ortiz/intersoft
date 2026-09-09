@@ -5,7 +5,7 @@ import { environment } from '../../../environments/environment';
 import { capturarErrorDjango } from '../utils/django-error.util';
 import {
   Camara, CamaraEscritura, GrabacionCamara,
-  Notificacion, ResultadoListaMonitoreo,
+  Notificacion, ResultadoGrabaciones, ResultadoListaMonitoreo,
 } from '../models/monitoreo.model';
 
 /** Servicio de la fase 9: monitoreo de camaras y notificaciones.
@@ -45,6 +45,15 @@ export class MonitoreoService {
   grabacion(id: string, fecha: string, hora: string): Observable<GrabacionCamara> {
     return this.http.get<GrabacionCamara>(
       `${this.api}/camaras/${id}/grabacion/`, { params: { fecha, hora } })
+      .pipe(capturarErrorMonitoreo());
+  }
+
+  grabacionesCamera(id: string, opts?: { fecha?: string; pagina?: number }): Observable<ResultadoGrabaciones> {
+    const params: Record<string, string> = {};
+    if (opts?.fecha) params['fecha'] = opts.fecha;
+    if (opts?.pagina) params['pagina'] = String(opts.pagina);
+    return this.http.get<ResultadoGrabaciones>(
+      `${this.api}/camaras/${id}/grabaciones/`, { params })
       .pipe(capturarErrorMonitoreo());
   }
 

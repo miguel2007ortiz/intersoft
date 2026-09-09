@@ -129,6 +129,42 @@
             }
           </div>
         }
+
+        <div class="grabadora-lista">
+          <h3>Grabaciones disponibles</h3>
+          @if (grabacionesCargando()) {
+            <p class="vacio-texto">Cargando grabaciones...</p>
+          } @else if (grabaciones().length === 0) {
+            <p class="vacio-texto">No hay grabaciones registradas para esta camara. Ejecuta <code>sincronizar_grabaciones</code> en el servidor.</p>
+          } @else {
+            <ul class="lista-grabaciones">
+              @for (g of grabaciones(); track g.id) {
+                <li>
+                  <span class="gra-fecha">{{ g.fecha }}</span>
+                  <span class="gra-hora">{{ g.hora.slice(0, 5) }}</span>
+                  <span class="gra-meta">{{ duracionLegible(g.duracion_segundos) }} · {{ tamanoLegible(g.tamano_bytes) }}</span>
+                  <button type="button" class="btn btn-secundario btn-chico"
+                          [disabled]="!g.disponible" (click)="reproducir(g)">
+                    {{ g.disponible ? 'Ver' : 'Sin archivo' }}
+                  </button>
+                </li>
+              }
+            </ul>
+            @if (totalPaginas() > 1) {
+              <div class="paginacion">
+                <button type="button" class="btn btn-secundario btn-chico"
+                        [disabled]="paginaGrabaciones() <= 1" (click)="irPagina(paginaGrabaciones() - 1)">
+                  Anterior
+                </button>
+                <span class="paginacion-info">Página {{ paginaGrabaciones() }} de {{ totalPaginas() }} · {{ totalGrabaciones() }} registros</span>
+                <button type="button" class="btn btn-secundario btn-chico"
+                        [disabled]="paginaGrabaciones() >= totalPaginas()" (click)="irPagina(paginaGrabaciones() + 1)">
+                  Siguiente
+                </button>
+              </div>
+            }
+          }
+        </div>
       </div>
     </section>
   }

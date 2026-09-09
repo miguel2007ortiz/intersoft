@@ -28,6 +28,26 @@ export interface GrabacionCamara {
   detalle?: string;
 }
 
+export interface Grabacion {
+  id: string;
+  camara: string;
+  fecha: string;
+  hora: string;
+  duracion_segundos: number;
+  tamano_bytes: number;
+  disponible: boolean;
+  url?: string;
+  created_at: string;
+}
+
+export interface ResultadoGrabaciones {
+  resultados: Grabacion[];
+  total: number;
+  pagina: number;
+  por_pagina: number;
+  total_paginas: number;
+}
+
 export type TipoNotificacion = 'stock' | 'factura' | 'camara' | 'sistema';
 export type EstadoNotificacion = 'nueva' | 'revisada' | 'resuelta';
 export type CanalNotificacion = 'ninguno' | 'whatsapp' | 'email';

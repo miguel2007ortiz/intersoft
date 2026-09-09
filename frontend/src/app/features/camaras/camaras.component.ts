@@ -1,12 +1,13 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MonitoreoService } from '../../core/services/monitoreo.service';
-import { Camara, CamaraEscritura, ErrorMonitoreo, GrabacionCamara } from '../../core/models/monitoreo.model';
+import { Camara, CamaraEscritura, ErrorMonitoreo, Grabacion, GrabacionCamara } from '../../core/models/monitoreo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 
 /** Fase 9: panel de camaras de vigilancia (solo ADMINISTRADOR).
- * Muestra el video en vivo y permite consultar grabaciones historicas
- * por fecha/hora desde el servidor de almacenamiento. */
+ * Muestra el video en vivo, el catalogo de grabaciones historicas
+ * (metadatos sincronizados por `sincronizar_grabaciones`) y permite
+ * consultar una sesion por fecha/hora. */
 @Component({
   selector: 'app-camaras',
   imports: [FormsModule, PanelShellComponent],
@@ -33,6 +34,13 @@ export class CamarasComponent implements OnInit {
   readonly hora = signal('12:00');
   readonly grabacion = signal<GrabacionCamara | null>(null);
   readonly consultando = signal(false);
+
+  // Catalogo de grabaciones de la camara activa
+  readonly grabaciones = signal<Grabacion[]>([]);
+  readonly grabacionesCargando = signal(false);
+  readonly totalGrabaciones = signal(0);
+  readonly paginaGrabaciones = signal(1);
+  readonly totalPaginas = signal(1);
 
   ngOnInit(): void {
     this.cargarCamaras();
@@ -89,9 +97,56 @@ export class CamarasComponent implements OnInit {
   seleccionar(c: Camara): void {
     this.camaraActiva.set(c);
     this.grabacion.set(null);
+    this.paginaGrabaciones.set(1);
+    this.cargarGrabaciones();
   }
 
   cerrarGrabadora(): void { this.camaraActiva.set(null); this.grabacion.set(null); }
+
+  cargarGrabaciones(): void {
+    const c = this.camaraActiva();
+    if (!c) return;
+    this.grabacionesCargando.set(true);
+    this.monitoreo.grabacionesCamera(c.id, { pagina: this.paginaGrabaciones() }).subscribe({
+      next: (r) => {
+        this.grabaciones.set(r.resultados);
+        this.totalGrabaciones.set(r.total);
+        this.totalPaginas.set(r.total_paginas);
+        this.grabacionesCargando.set(false);
+      },
+      error: (e: ErrorMonitoreo) => {
+        this.error.set(e.detalle ?? 'No se pudo cargar el catalogo de grabaciones.');
+        this.grabacionesCargando.set(false);
+      },
+    });
+  }
+
+  irPagina(pagina: number): void {
+    if (pagina < 1 || pagina > this.totalPaginas()) return;
+    this.paginaGrabaciones.set(pagina);
+    this.cargarGrabaciones();
+  }
+
+  reproducir(g: Grabacion): void {
+    if (!g.disponible) return;
+    this.fecha.set(g.fecha);
+    this.hora.set(g.hora.slice(0, 5));
+    this.consultarGrabacion();
+  }
+
+  tamanoLegible(bytes: number): string {
+    if (bytes >= 1 << 30) return `${(bytes / (1 << 30)).toFixed(1)} GB`;
+    if (bytes >= 1 << 20) return `${(bytes / (1 << 20)).toFixed(1)} MB`;
+    if (bytes >= 1 << 10) return `${(bytes / (1 << 10)).toFixed(0)} KB`;
+    return `${bytes} B`;
+  }
+
+  duracionLegible(segundos: number): string {
+    if (!segundos) return 'Duracion no registrada';
+    const m = Math.floor(segundos / 60);
+    const s = segundos % 60;
+    return `${m} min ${s.toString().padStart(2, '0')} s`;
+  }
 
   consultarGrabacion(): void {
     const c = this.camaraActiva();
