@@ -57,22 +57,22 @@ ninguna es un bug critico abierto que bloquee la entrega.
 ## Riesgos pendientes (mejoras conocidas, no bloqueantes)
 
 1. **Módulo de cámaras**: es un "lienzo" deliberado — no hay streaming en
-   vivo, no hay paginación en `CamarasView`, y las grabaciones se resuelven
-   contra disco (sin BD). El campo `url_stream` ya valida protocolo
-   (fase 5), pero el alcance completo de video queda para una iteración
-   posterior.
+   vivo y las grabaciones se resuelven contra disco (sin BD). El listado sí
+   está paginado (`CamarasView`, 100/page) y `url_stream` valida protocolo
+   (fase 5); el alcance completo de video queda para una iteración posterior.
 2. ~~Sin CSP en cabeceras~~ **Resuelto**: el backend no emitía
    `Content-Security-Policy` (sí `X-FRAME_OPTIONS=DENY` y HSTS). Ahora se
    emite desde `backend/core/csp.py` (toda respuesta) y desde nginx para la
    SPA (`frontend/nginx.conf`, `docs/DESPLIEGUE.md`).
 3. **Sin e2e del frontend**: la cobertura era unitaria (guard, interceptor,
    servicios, componentes clave). **Resuelto**: suite Playwright
-   (`frontend/e2e/tienda-flujo.spec.ts`, `npm run test:e2e`) cubre el happy
-   path login → carrito → checkout (crea el `Envio`) → seguimiento en "Mis
-   pedidos", más el panel de Envios del personal (`/envios`). Requiere backend local en
-   `127.0.0.1:8000` con BD `intersoft1_db` migrada y `seed_demo`; levanta
-   `ng serve` solo. Queda como mejora: un e2e del flujo POS con rol personal
-   (requiere cuenta demo de personal con contraseña, hoy solo existe Ana).
+   (`frontend/e2e/tienda-flujo.spec.ts` + `frontend/e2e/pos-flujo.spec.ts`,
+   `npm run test:e2e`, 3/3) cubre el happy path login → carrito → checkout
+   (crea el `Envio`) → seguimiento en "Mis pedidos", el panel de Envios del
+   personal (`/envios`) y el flujo POS de mostrador con rol personal
+   (`luis@elprogreso.co`, EMPLEADO demo con password que `seed_demo`
+   garantiza usable). Requiere backend local en `127.0.0.1:8000` con BD
+   `intersoft1_db` migrada y `seed_demo`; levanta `ng serve` solo.
 4. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
    optimizadas para el volumen actual; para volumen alto convendría
    materializar/archivar ventas viejas.

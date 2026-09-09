@@ -43,8 +43,14 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   base del sistema, bootstrap funcional — no demo, y su edición está vedada por invariante).
   **Flag anti-producción**: `seed_demo` y `seed_masivo` abortan con `CommandError`
   si `DEBUG=False`; `--force` los habilita solo con riesgo asumido.
+  **Personal demo con password usable**: las cuentas EMPLEADO del seed
+  (`ana@`/`luis@elprogreso.co`) se crean/actualizan con `demo12345` si no
+  tienen password propia (vacía o `!`), sin pisar una ya configurada —
+  habilita el login real en la UI y el e2e POS. Nota: en Django 5.2 una
+  password vacía cuenta como "usable", por eso el seed comprueba también
+  `user.password` vacío.
 - **Tests**: `backend/core/tests_seed.py` (guards de producción para ambos commands,
-  `--force` y `DEBUG=True`).
+  `--force` y `DEBUG=True`; password del personal usable e idempotente).
 
 ---
 
@@ -81,6 +87,18 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   Tests: `backend/core/tests_fase5.py` (corte a 24, total real, sin duplicados entre
   páginas, página inválida) y `frontend/src/app/core/services/tienda.service.spec.ts`
   (envía `pagina` y lee `total_paginas`).
+- **B3. Robustez del POS (hecho)**: dos huecos encontrados al escribir el
+  e2e del flujo POS y corregidos con tests de regresión:
+  - `notas` vacío: el POS siempre envía `notas: ""` y el `VentaPOSInputSerializer`
+    lo rechazaba ("Este campo no puede estar en blanco.") → ahora
+    `allow_blank=True`.
+  - línea sin `cantidad`: el frontend agrega la línea enviando solo el producto
+    y el `DetalleVentaEscrituraSerializer` lo rechazaba → ahora `required=False`
+    con `default=1` (la vista ya consumía `cantidad` del `validated_data`).
+  - **e2e**: `frontend/e2e/pos-flujo.spec.ts` (login como EMPLEADO demo,
+    búsqueda por SKU, agregar, confirmar, exito-box). Suite `npm run test:e2e`
+    3/3.
+  - Tests: `core/tests_fase5.py::test_venta_pos_linea_sin_cantidad_default_a_1`.
 
 ---
 
