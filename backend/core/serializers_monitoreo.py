@@ -9,7 +9,8 @@ from urllib.parse import urlsplit
 
 from rest_framework import serializers
 
-from .models import Camara, Notificacion
+from .models import Camara, Grabacion, Notificacion
+from .services import camaras as servicio_camaras
 
 
 # ------------------------------ Camaras ------------------------------------
@@ -41,6 +42,31 @@ class CamaraSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "La URL del stream debe ser http(s), rtsp o rtmp.")
         return valor
+
+
+# ---------------------------- Grabaciones ----------------------------------
+
+class GrabacionSerializer(serializers.ModelSerializer):
+    """Listado de grabaciones de una camara (metadatos + disponibilidad).
+
+    `disponible`/`url` se recalculan contra disco en cada item
+    (`servicios/camaras.disponible_y_url`), para marcar las sesiones
+    reproducibles sin guardar el estado del almacenamiento en la BD.
+    """
+    disponible = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Grabacion
+        fields = ["id", "camara", "fecha", "hora", "duracion_segundos",
+                  "tamano_bytes", "disponible", "url", "created_at"]
+        read_only_fields = fields
+
+    def get_disponible(self, obj):
+        return servicio_camaras.disponible_y_url(obj)[0]
+
+    def get_url(self, obj):
+        return servicio_camaras.disponible_y_url(obj)[1]
 
 
 # ---------------------------- Notificaciones -------------------------------

@@ -1,21 +1,23 @@
-"""Servicio de camaras (fase 9): resolucion de grabaciones historicas.
+"""Servicio de camaras (fase 9): resolucion y catalogo de grabaciones.
 
-Las grabaciones historicas no estan en la base de datos: se buscan en el
-servidor de almacenamiento por empresa/camara/fecha/hora y se devuelve la URL
-para reproducirlas en el panel.
+Las grabaciones historicas viven en disco bajo
+`{MEDIA_URL}streams/{empresa_id.hex}/{camara_id.hex}/{fecha}/{hora}.mp4`.
+Por si solas se buscan por fecha/hora (`resolver_grabacion`); `Grabacion`
+mantiene en BD el catalogo por camara (metadatos para listar y paginar) que
+`sincronizar_grabaciones` reconstruye escaneando ese mismo directorio.
 
-El camino canónico es:
-   {MEDIA_URL}streams/{empresa_id.hex}/{camara_id.hex}/{fecha}/{hora}.mp4
-
-Si la grabación no existe (o en entornos sin servidor de almacenamiento
-real) se devuelve `disponible=False` y el panel mostrara un aviso en lugar de
-un reproductor roto.
+Si el archivo no existe (o no hay servidor de almacenamiento real) se
+devuelve `disponible=False` y el panel mostrara un aviso en lugar de un
+reproductor roto.
 """
 
 import os
 from datetime import datetime
 
 from django.conf import settings
+from django.db.models import Q
+
+from ..models import Camara, Grabacion
 
 
 def _ruta_archivo(camara, empresa, fecha, hora):
@@ -59,3 +61,82 @@ def resolver_grabacion(camara, empresa, fecha_iso, hora_iso):
         'nombre': camara.nombre,
         'ubicacion': camara.ubicacion,
     }
+
+
+def disponible_y_url(grabacion):
+    """True + URL si el archivo de la grabacion sigue existiendo en disco."""
+    archivo = _ruta_archivo(
+        grabacion.camara, grabacion.camara.empresa,
+        grabacion.fecha, grabacion.hora)
+    if os.path.isfile(archivo):
+        return True, _resolver_url(
+            grabacion.camara, grabacion.camara.empresa,
+            grabacion.fecha, grabacion.hora)
+    return False, ''
+
+
+def sincronizar_grabaciones(camara=None, empresa=None):
+    """Escanea `streams/` y hace upsert de los metadatos en `Grabacion`.
+
+    Por cada archivo `{fecha}/{HH_MM}.mp4` se crea la fila (camara, fecha,
+    hora) con su tamano; las filas cuyo archivo ya no existe se eliminan
+    (video movido o purgado). Idempotente. Filtrable por empresa y/o camara
+    para sincronizaciones parciales (command `sincronizar_grabaciones`).
+
+    Devuelve {'creadas': n, 'existentes': n, 'eliminadas': n, 'camaras': n}.
+    """
+    qs = Camara.objects.filter(deleted_at__isnull=True).order_by('id')
+    if empresa is not None:
+        qs = qs.filter(empresa=empresa)
+    if camara is not None:
+        qs = qs.filter(id=camara.id)
+
+    creadas = existentes = eliminadas = camaras = 0
+    for cam in qs:
+        camaras += 1
+        base = os.path.join(
+            str(settings.MEDIA_ROOT), 'streams',
+            cam.empresa_id.hex, cam.id.hex)
+        if not os.path.isdir(base):
+            continue
+
+        vistos = []
+        for nombre_fecha in os.listdir(base):
+            dir_fecha = os.path.join(base, nombre_fecha)
+            if not os.path.isdir(dir_fecha):
+                continue
+            try:
+                fecha = datetime.strptime(nombre_fecha, '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            for nombre_hora in sorted(os.listdir(dir_fecha)):
+                if not nombre_hora.endswith('.mp4'):
+                    continue
+                try:
+                    hora = datetime.strptime(nombre_hora, '%H_%M.mp4').time()
+                except ValueError:
+                    continue
+                vistos.append((fecha, hora))
+                tamano = os.path.getsize(os.path.join(dir_fecha, nombre_hora))
+                _, creado = Grabacion.objects.get_or_create(
+                    camara=cam, fecha=fecha, hora=hora,
+                    defaults={'archivo': _ruta_archivo(cam, cam.empresa, fecha, hora),
+                              'tamano_bytes': tamano})
+                if creado:
+                    creadas += 1
+                else:
+                    Grabacion.objects.filter(camara=cam, fecha=fecha, hora=hora)\
+                        .update(tamano_bytes=tamano)
+                    existentes += 1
+
+        obsoletas = Grabacion.objects.filter(camara=cam)
+        if vistos:
+            condicion = Q(fecha=vistos[0][0], hora=vistos[0][1])
+            for fecha, hora in vistos[1:]:
+                condicion = condicion | Q(fecha=fecha, hora=hora)
+            obsoletas = obsoletas.exclude(condicion)
+        eliminadas += obsoletas.count()
+        obsoletas.delete()
+
+    return {'creadas': creadas, 'existentes': existentes,
+            'eliminadas': eliminadas, 'camaras': camaras}

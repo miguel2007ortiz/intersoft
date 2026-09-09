@@ -4,6 +4,8 @@ Exclusivo del ADMINISTRADOR (EsAdministrador). Multi-tenancy: todo se filtra
 por `request.user.perfil.empresa`.
 """
 
+from datetime import datetime
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,8 +14,9 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsAdministrador
 
-from .models import Camara, Notificacion
+from .models import Camara, Grabacion, Notificacion
 from .serializers_monitoreo import (CamaraSerializer,
+                                    GrabacionSerializer,
                                     NotificacionLecturaSerializer)
 from .services import camaras as servicio_camaras
 
@@ -133,6 +136,52 @@ class CamaraGrabacionView(APIView):
         if not grabacion.get('disponible'):
             return Response(grabacion, status=status.HTTP_404_NOT_FOUND)
         return Response(grabacion)
+
+
+class CamaraGrabacionesView(APIView):
+    """GET lista las grabaciones de una camara (catalogo en BD, paginado).
+
+    Filtros: `fecha=YYYY-MM-DD`. Cada item trae `disponible` (su archivo
+    sigue en disco) para marcar las sesiones reproducibles.
+    """
+    permission_classes = [IsAuthenticated, EsAdministrador]
+    POR_PAGINA = 50
+
+    def get(self, request, id):
+        camara = Camara.objects.filter(
+            empresa=_obtener_empresa(request), id=id,
+            deleted_at__isnull=True).first()
+        if not camara:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        qs = Grabacion.objects.filter(camara=camara)
+        fecha = request.query_params.get('fecha')
+        if fecha:
+            try:
+                qs = qs.filter(fecha=datetime.strptime(fecha, '%Y-%m-%d').date())
+            except ValueError:
+                return Response(
+                    {"codigo": "DATOS_INVALIDOS",
+                     "detalle": "El filtro 'fecha' requiere formato YYYY-MM-DD.",
+                     "errores": {"fecha": ["Formato esperado: YYYY-MM-DD."]}},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+        qs = qs.order_by('-fecha', '-hora')
+        total = qs.count()
+        try:
+            pagina = max(int(request.query_params.get('pagina', 1)), 1)
+        except (TypeError, ValueError):
+            pagina = 1
+        inicio = (pagina - 1) * self.POR_PAGINA
+        datos = GrabacionSerializer(
+            qs[inicio:inicio + self.POR_PAGINA], many=True).data
+        return Response({
+            "resultados": datos,
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": self.POR_PAGINA,
+            "total_paginas": max((total + self.POR_PAGINA - 1) // self.POR_PAGINA, 1),
+        })
 
 
 # --------------------------- Notificaciones --------------------------------

@@ -644,3 +644,32 @@ class Camara(TimeStampedModel):
 
     def __str__(self):
         return f"{self.nombre} ({self.ubicacion or 'Sin ubicacion'})"
+
+
+class Grabacion(TimeStampedModel):
+    """Metadatos de una grabacion de camara; los archivos quedan en disco.
+
+    Catalogo por camara de lo que esta grabado, para listar y paginar sin
+    depender del listado del servidor de videos. `sincronizar_grabaciones`
+    escanea `streams/{empresa}/{camara}/{fecha}/`, hace upsert por
+    (camara, fecha, hora) y elimina las filas cuyo archivo ya no existe.
+    `disponible`/`url` se recalculan contra disco al serializar.
+    """
+    camara = models.ForeignKey('Camara', on_delete=models.CASCADE,
+                               related_name='grabaciones')
+    fecha = models.DateField()
+    hora = models.TimeField()
+    archivo = models.CharField(max_length=500)
+    duracion_segundos = models.PositiveIntegerField(default=0)
+    tamano_bytes = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-fecha', '-hora']
+        constraints = [
+            models.UniqueConstraint(fields=['camara', 'fecha', 'hora'],
+                                    name='unica_grabacion_camara_fecha_hora'),
+        ]
+        indexes = [models.Index(fields=['camara', 'fecha'])]
+
+    def __str__(self):
+        return f"{self.camara.nombre} - {self.fecha} {self.hora:%H:%M}"
