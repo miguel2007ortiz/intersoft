@@ -26,6 +26,8 @@ import urllib.request
 from django.conf import settings
 from django.core.cache import cache
 
+from .cache_key import generacion
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,7 +100,8 @@ def construir_contexto(empresa, request) -> ContextoEmpresa:
     qp = request.query_params
     material = (str(empresa.id) + '|' + qp.get('fecha_inicio', '') + '|' +
                 qp.get('fecha_fin', '') + '|' + qp.get('categoria', ''))
-    clave = 'ia-contexto:' + hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest()
+    clave = ('ia-contexto:' + generacion('ia', str(empresa.id)) + ':' +
+             hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest())
     datos = cache.get(clave)
     if datos is None:
         resumen = _resumen_seguro(request)

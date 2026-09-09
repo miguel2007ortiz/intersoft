@@ -6,9 +6,10 @@ from django.db.models.functions import Coalesce, Greatest
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import DetalleVenta, Producto, Venta
+from .models import (Categoria, DetalleVenta, MovimientoInventario, Producto,
+                     Venta)
 
-from .analytics import invalidar_analitica
+from .cache_key import invalidar_catalogo, invalidar_empresa
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +26,36 @@ def alertar_stock_bajo(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Producto)
 def invalidar_cache_al_guardar_producto(sender, instance, created, **kwargs):
-    invalidar_analitica()
+    invalidar_empresa(instance.empresa_id)
+    invalidar_catalogo()
 
 
 @receiver([post_save, post_delete], sender=Venta)
 def invalidar_cache_al_guardar_venta(sender, instance, **kwargs):
-    invalidar_analitica()
+    invalidar_empresa(instance.empresa_id)
+
+
+@receiver([post_save, post_delete], sender=DetalleVenta)
+def invalidar_cache_al_guardar_linea(sender, instance, **kwargs):
+    try:
+        invalidar_empresa(instance.venta.empresa_id)
+    except Venta.DoesNotExist:
+        # La venta padre pudo eliminarse en cascada junto con sus detalles.
+        return
+
+
+@receiver([post_save, post_delete], sender=MovimientoInventario)
+def invalidar_cache_al_guardar_movimiento(sender, instance, **kwargs):
+    try:
+        invalidar_empresa(instance.producto.empresa_id)
+    except Producto.DoesNotExist:
+        return
+
+
+@receiver([post_save, post_delete], sender=Categoria)
+def invalidar_cache_al_guardar_categoria(sender, instance, **kwargs):
+    invalidar_empresa(instance.empresa_id)
+    invalidar_catalogo()
 
 
 def recalcular_totales_venta(venta: Venta) -> None:

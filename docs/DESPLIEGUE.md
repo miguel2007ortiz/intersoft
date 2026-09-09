@@ -50,15 +50,19 @@ mysql -uroot -p -e "CREATE DATABASE intersoft1_db CHARACTER SET utf8mb4 COLLATE 
 # 5. Migraciones (si hay una BD existente: backup + migrate --plan primero)
 python manage.py migrate
 
-# 6. Datos demo (SOLO si no es produccion real)
+# 6. Tabla del cache por base de datos (B1). Necesaria SIEMPRE que
+#    CACHE_BACKEND sea el de BD (default). Idempotente.
+python manage.py crear_cache
+
+# 7. Datos demo (SOLO si no es produccion real)
 python manage.py seed_demo
 
-# 7. Verificacion
+# 8. Verificacion
 python manage.py check
 python manage.py makemigrations --check --dry-run   # "No changes detected"
-python manage.py test                               # 241 tests (opcional en prod)
+python manage.py test                               # 490 tests (opcional en prod)
 
-# 8. WSGI en production
+# 9. WSGI en production
 python manage.py collectstatic --noinput            # si Django sirve statics
 ```
 

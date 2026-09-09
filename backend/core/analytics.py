@@ -21,6 +21,8 @@ from django.core.cache import cache as dj_cache
 from django.db import connection
 from django.utils import timezone
 
+from .cache_key import generacion
+
 
 class FiltrosDashboard:
     """Filtros comunes de fecha y categoria para las consultas de analitica."""
@@ -106,16 +108,30 @@ def ejecutar(sql, params):
 
 # ----------------------------- Dashboard ----------------------------------
 
+def _alcance_analitica(args):
+    """Empresa a la que pertenecen las claves, segun el primer argumento de
+    la funcion decorada (un FiltrosDashboard o el empresa_id directo)."""
+    for a in args:
+        if isinstance(a, FiltrosDashboard):
+            return str(a.empresa_id)
+        if isinstance(a, int):
+            return str(a)
+    return 'global'
+
+
 def cache_analitica(ttl=60):
     """Cachea el resultado de una agregacion del dashboard por el valor de
-    sus argumentos (empresa y filtros). TTL corto (60s) para que el panel se
+    sus argumentos (empresa y filtros) y por la generacion vigente de esa
+    empresa (ver core/cache_key.py). TTL corto (60s) para que el panel se
     sienta instantaneo al recargar sin quedar con datos obsoletos por mucho
-    tiempo. Se invalida globalmente al crear/modificar ventas o productos."""
+    tiempo. Se invalida al crear/modificar ventas, lineas, movimientos o
+    productos (las señales solo incrementan la generacion de la empresa)."""
     def decorador(fn):
         @functools.wraps(fn)
         def envuelto(*args, **kwargs):
             material = pickle.dumps((fn.__name__, args, tuple(sorted(kwargs.items()))))
-            clave = 'analitica:' + hashlib.blake2b(material, digest_size=16).hexdigest()
+            clave = ('analitica:' + generacion('analitica', _alcance_analitica(args))
+                     + ':' + hashlib.blake2b(material, digest_size=16).hexdigest())
             valor = dj_cache.get(clave)
             if valor is not None:
                 return valor
@@ -124,22 +140,6 @@ def cache_analitica(ttl=60):
             return resultado
         return envuelto
     return decorador
-
-
-def invalidar_analitica():
-    """Limpia todo el cache de analitica del dashboard.
-
-    Se invoca al crear/modificar ventas o productos para que el panel no
-    muestre datos viejos. El volumen de claves es bajo (unas decenas por
-    empresa y filtro) y el TTL es corto, asi que una invalidacion amplia
-    del cache (prefijo de analitica, o el cache completo cuando el backend
-    no soporta delete_pattern, p. ej. LocMemCache en tests) es aceptable.
-    """
-    borrar = getattr(dj_cache, 'delete_pattern', None)
-    if borrar is not None:
-        borrar('analitica:*')
-    else:
-        dj_cache.clear()
 
 @cache_analitica(60)
 def resumen(f):

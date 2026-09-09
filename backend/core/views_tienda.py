@@ -24,6 +24,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
+from . import cache_key
+
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
                      Cupon, DetalleVenta, Empresa, Envio, Favorito, MovimientoInventario,
                      Producto, Venta)
@@ -88,7 +90,8 @@ class CatalogoPublicoView(APIView):
             params.get('con_stock', '') + '|' + params.get('orden', '') + '|' +
             params.get('pagina', '1')
         )
-        clave = 'cat:' + hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest()
+        clave = ('cat:' + cache_key.generacion('cat', 'global') + ':' +
+                 hashlib.blake2b(material.encode('utf-8'), digest_size=16).hexdigest())
         if cache.get(clave) is not None:
             return Response(cache.get(clave))
 

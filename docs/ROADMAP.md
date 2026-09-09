@@ -49,8 +49,26 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ---
 
 ## Fase B — Rendimiento
-- **B1. Caché (Redis o DB)**: `settings.py` sin `CACHES`. Cachear dashboard/tarjetas de
-  `analytics.py`, contexto de IA y catálogo. TTL 60-300s, invalidar al crear ventas/productos.
+- **B1. Caché por versión por empresa **(hecho)****: cache de negocio en
+  `backend/core/cache_key.py` con invalidación por **generación** (namespace
+  + alcance; O(1), no borra el cache completo). El bug que resuelve: con el
+  backend de BD MySQL no existe `delete_pattern` y la invalidación anterior
+  hacía `cache.clear()` (borraba contexto IA, rate-limit del chat y datos de
+  otros tenants en cada guardado). Ahora las claves se prefijan con la
+  generación vigente y las señales incrementan solo el bucket tocado:
+  - `analitica:*` (dashboard, TTL 60s) e `ia:*` (contexto IA, TTL 60s) se
+    invalidan por empresa al guardar/borrar `Venta`, `DetalleVenta`,
+    `MovimientoInventario`, `Producto` y `Categoria`.
+  - `cat:*` (catálogo público en `views_tienda.py`, TTL 60s) se invalida
+    globalmente al guardar/borrar `Producto`/`Categoria`.
+  - `CACHES` ya era configurable (`CACHE_BACKEND`, default BD;
+    Redis solo cambiando la var de entorno), con LocMem bajo el runner de
+    tests. Falta operativa cubierta: command idempotente `crear_cache`
+    (crea la tabla `intersoft_cache`) + paso añadido a `docs/DESPLIEGUE.md`
+    y a `backend/entrypoint.sh` (Docker).
+- **Tests**: `backend/core/tests_cache.py` (unidades del generador de
+  claves: aislamiento por bucket/empresa; señales de invalidación de
+  venta/línea/movimiento/producto/categoría; idempotencia de `crear_cache`).
 - **B2. Paginación en el catálogo público **(hecho)**: `CatalogoPublicoView`
   (`backend/core/views_tienda.py`) filtra/ordena sin cortar página: devuelve
   `pagina`/`por_pagina` (24)/`total` (conteo real del filtro)/`total_paginas`,
@@ -119,7 +137,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | A1 Integridad financiera | Alto | Bajo | — (hecho) |
 | B2 Paginación catálogo | Alto | Bajo | — (hecho) |
 | E2 PDF/XML comprobantes | Medio | Bajo | 3 |
-| B1 Caché | Alto | Medio | 4 |
+| B1 Caché | Alto | Medio | — (hecho) |
 | C2 CI endurecido | Medio | Medio | 5 |
 | A2 Estados vacíos | Medio | Bajo | — (hecho) |
 | C1 Docker | Medio-Alto | Medio | 7 |

@@ -25,6 +25,9 @@ done
 echo "Ejecutando migraciones..."
 python manage.py migrate --noinput
 
+echo "Creando la tabla del cache (si no existe)..."
+python manage.py crear_cache 2>/dev/null || true
+
 echo "Recolectando archivos estaticos..."
 python manage.py collectstatic --noinput 2>/dev/null || true
 
