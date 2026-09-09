@@ -78,8 +78,13 @@ ninguna es un bug critico abierto que bloquee la entrega.
 4. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
    optimizadas para el volumen actual; para volumen alto convendría
    materializar/archivar ventas viejas.
-5. **Media en disco local**: `MEDIA_ROOT` local; en multi-servidor se
-   recomienda almacenar en object storage.
+5. **Media en disco local**: `MEDIA_ROOT`/`MEDIA_URL` ahora configurables por
+   env (`MEDIA_ROOT` apuntable a un disco compartido/volumen en multi-servidor)
+   y `python manage.py monitor` verifica que el directorio de media exista y
+   sea escribible (mismo chequeo que BD/no/cache/disco). El salto a object
+   storage (S3/cloud) queda como seguimiento: requiere `django-storages`
+   (dependencia nueva — gate de supervisor antes de tocar
+   `requirements.txt`).
 6. ~~**Backups y monitoreo**~~ **Resuelto**: eran operativos, no implementados
    en la app. Ahora existe `python manage.py backup_db` (dump `.sql` consistente
    con `--single-transaction`, rotación por antigüedad en `BACKUP_DIR`,

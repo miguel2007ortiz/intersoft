@@ -91,6 +91,20 @@ class Command(BaseCommand):
             fallos += 1
             self._fallo("Disco", f"{backup_dir}: {exc}")
 
+        try:
+            media_dir = settings.MEDIA_ROOT
+            if not os.path.isdir(media_dir):
+                fallos += 1
+                self._fallo("Media", f"{media_dir} no existe (MEDIA_ROOT).")
+            elif not os.access(media_dir, os.W_OK):
+                fallos += 1
+                self._fallo("Media", f"{media_dir} no es escribible.")
+            else:
+                self._ok(f"Media: {media_dir} existe y es escribible")
+        except OSError as exc:
+            fallos += 1
+            self._fallo("Media", exc)
+
         nombre_db = settings.DATABASES["default"]["NAME"]
         fallos += self._revisar_respaldo(backup_dir, nombre_db)
 

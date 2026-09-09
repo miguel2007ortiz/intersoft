@@ -143,7 +143,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-MEDIA_URL = '/media/'
+# Media configurable por env: en multi-servidor apunta MEDIA_ROOT a un disco
+# compartido/volumen. Object storage (S3) requiere django-storages (dependencia
+# nueva -> change gateado por el supervisor; ver docs/RIESGOS.md #5).
+MEDIA_URL = config('MEDIA_URL', default='/media/')
 # `manage.py test` escribe comprobantes DIAN reales (Fase 4) en disco; usar un
 # directorio temporal evita ensuciar media/ del repo en cada corrida de tests.
 if 'test' in sys.argv:
@@ -157,7 +160,8 @@ if 'test' in sys.argv:
         }
     }
 else:
-    MEDIA_ROOT = BASE_DIR / 'media'
+    MEDIA_ROOT = Path(config('MEDIA_ROOT',
+                             default=str(BASE_DIR / 'media')))
 
 # -- Backups y monitoreo (ops) -----------------------------------
 # Directorio de respaldos de BD generados por `manage.py backup_db`

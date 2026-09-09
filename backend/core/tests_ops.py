@@ -178,3 +178,10 @@ class MonitorTest(TestCase):
         with self.assertRaises(SystemExit) as ctx:
             call_command("monitor", **{"backup_dir": str(self.tmp)})
         self.assertEqual(ctx.exception.code, 1)
+
+    def test_media_inexistente_sale_con_codigo_1(self):
+        inexistente = self.tmp / "media_no_existe"
+        with patch.object(settings, "MEDIA_ROOT", str(inexistente)):
+            with self.assertRaises(SystemExit) as ctx:
+                call_command("monitor")
+        self.assertEqual(ctx.exception.code, 1)

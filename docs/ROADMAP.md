@@ -143,6 +143,14 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   conviene fijar `MYSQLDUMP_BIN`/`MYSQL_BIN` en `.env` (ver `.env.example`).
   Tests: `backend/core/tests_ops.py` (8/8, con mysqldump/mysql mockeados).
   Verificación real en dev: restore de 43 tablas OK, monitor exit 0.
+- **C5. Media configurable para multi-servidor **(hecho)**: `MEDIA_ROOT` y
+  `MEDIA_URL` leen de env (default: `backend/media` y `/media/`), para apuntar
+  a un disco compartido/volumen sin tocar código; `manage.py monitor` añadió el
+  chequeo de que el directorio de media exista y sea escribible (mismo patrón
+  que BD/cache/disco/respaldo). El salto a object storage (S3/cloud) se deja
+  documentado como seguimiento en `docs/RIESGOS.md` #5: requiere
+  `django-storages` (dependencia nueva, gate del supervisor). Test adicional en
+  `backend/core/tests_ops.py` (media inexistente → exit 1).
 
 ---
 
