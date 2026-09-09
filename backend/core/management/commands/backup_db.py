@@ -11,7 +11,7 @@ proceso hijo (nunca en la linea de comandos, donde quedaria visible).
 
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -91,7 +91,8 @@ class Command(BaseCommand):
         ]
         try:
             with open(ruta, "wb") as salida:
-                subprocess.run(comando, env=entorno, check=True, stdout=salida)
+                subprocess.run(  # nosec B603
+                    comando, env=entorno, check=True, stdout=salida)
         except FileNotFoundError as exc:
             raise CommandError(f"No se pudo ejecutar '{mysqldump}': {exc}") from exc
         except subprocess.CalledProcessError as exc:
@@ -115,7 +116,7 @@ class Command(BaseCommand):
         usuario = str(db.get("USER", "root"))
         base = [mysql, "--host", host, "--port", puerto, "--user", usuario]
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 base
                 + [
                     "-e",
@@ -128,14 +129,14 @@ class Command(BaseCommand):
                 capture_output=True,
             )
             with open(ruta, "rb") as dump:
-                subprocess.run(
+                subprocess.run(  # nosec B603
                     base + [temporal],
                     env=entorno,
                     check=True,
                     stdin=dump,
                     capture_output=True,
                 )
-            conteo = subprocess.run(
+            conteo = subprocess.run(  # nosec B603
                 base
                 + [
                     "-N",
@@ -160,7 +161,7 @@ class Command(BaseCommand):
                 )
             )
         finally:
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 base + ["-e", f"DROP DATABASE IF EXISTS {temporal};"],
                 env=entorno,
                 capture_output=True,

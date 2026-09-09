@@ -10,7 +10,7 @@ Cubren sin tocar MySQL real:
 """
 
 import os
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from datetime import datetime
 from pathlib import Path
