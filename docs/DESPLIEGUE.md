@@ -141,12 +141,32 @@ server {
     ssl_certificate     /etc/letsencrypt/live/app.tudominio.co/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/app.tudominio.co/privkey.pem;
 
+    # Content-Security-Policy de la SPA. connect-src incluye el dominio real
+    # del API (si el frontend llama a https://api.tudominio.co/api) y hay que
+    # ajustarlo al dominio real de produccion. style-src 'unsafe-inline' es
+    # obligatorio (Angular inyecta estilos en runtime). La politica exacta es
+    # la misma que emite el backend en /api (core/csp.py), sin las directivas
+    # de conexion al API aqui repetidas por claridad.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.tudominio.co; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
     location / {
         try_files $uri $uri/ /index.html;   # SPA fallback
     }
     location ~* \.(js|css|png|jpe?g|gif|ico|svg|woff2?)$ {
         expires 30d;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, immutable";   # re-declarar cabeceras
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.tudominio.co; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+    # Imagenes de productos (media del backend) servidas por este mismo
+    # nginx para que img-src 'self' las permita.
+    location /media/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```

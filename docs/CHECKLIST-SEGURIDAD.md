@@ -59,6 +59,13 @@ publicar. Refleja exactamente lo que el proyecto ya implementa (verificado en
 - [ ] `npm run lint` (Prettier) en verde.
 - [ ] Guards de ruta: `authGuard` (sesión), `adminGuard` (ADMINISTRADOR),
       `personalGuard` (personal interno), `permisoGuard(codigo)` (permiso fino).
+- [ ] Content-Security-Policy emitida en la SPA por nginx
+      (`frontend/nginx.conf`, `docs/DESPLIEGUE.md`): `default-src 'self'`,
+      `script-src 'self'` (sin `unsafe-eval`), `style-src 'self' 'unsafe-inline'`,
+      `connect-src 'self'` (+ dominio del API si va separado), `frame-ancestors
+      'none'`. El backend repite la cabecera en `/api` (`core/csp.py`) como
+      defensa en profundidad. Verificar con `curl -I` que aparece en index.html
+      y en una respuesta del API.
 - [ ] Interceptor reenvía/renueva JWT automáticamente; el login valida el
       destino de `redirigir` (sin open redirect) y redirige por rol.
 - [ ] El sidebar solo muestra menús según rol/permiso (no hay botones

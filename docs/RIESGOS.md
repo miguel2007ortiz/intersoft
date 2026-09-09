@@ -42,6 +42,7 @@ ninguna es un bug critico abierto que bloquee la entrega.
 | Fugas de `setTimeout`/debounce al destruir | `programarAviso(destroyRef, ...)` + `ngOnDestroy` en componentes con timers. |
 | Accesibilidad de errores | `role="alert"` en 39 mensajes de validación + banners; `aria-label` en buscadores; `autocomplete` en formularios. |
 | Bundle fuera de presupuesto | `ng build` con budgets (500 kB initial / 6 kB por estilo) — pasa en 311 kB. |
+| Sin CSP en cabeceras | `backend/core/csp.py`: o **Content-Security-Policy** emitida por el backend (toda respuesta, defensa en profundidad) y declarada en nginx para la SPA (`frontend/nginx.conf` en Docker y `docs/DESPLIEGUE.md`). Directivas: `default-src 'self'`, `script-src 'self'` (sin `unsafe-eval`), `style-src 'self' 'unsafe-inline'` (Angular inyecta estilos), `img-src 'self' data: blob:`, `connect-src 'self'` (mismo-origen; en despliegue separado se abre al dominio del API), `frame-ancestors 'none'`, `object-src 'none'`. Tests en `core/tests_csp.py`. |
 
 ### Entrega / repo
 | Riesgo | Resolución |
@@ -60,9 +61,10 @@ ninguna es un bug critico abierto que bloquee la entrega.
    contra disco (sin BD). El campo `url_stream` ya valida protocolo
    (fase 5), pero el alcance completo de video queda para una iteración
    posterior.
-2. **Sin CSP en cabeceras**: el backend no emite `Content-Security-Policy`
-   (sí `X-FRAME_OPTIONS=DENY` y HSTS). Añadir CSP en nginx mitigaría XSS
-   defensivamente.
+2. ~~Sin CSP en cabeceras~~ **Resuelto**: el backend no emitía
+   `Content-Security-Policy` (sí `X-FRAME_OPTIONS=DENY` y HSTS). Ahora se
+   emite desde `backend/core/csp.py` (toda respuesta) y desde nginx para la
+   SPA (`frontend/nginx.conf`, `docs/DESPLIEGUE.md`).
 3. **Sin e2e del frontend**: la cobertura era unitaria (guard, interceptor,
    servicios, componentes clave). **Resuelto**: suite Playwright
    (`frontend/e2e/tienda-flujo.spec.ts`, `npm run test:e2e`) cubre el happy

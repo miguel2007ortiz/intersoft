@@ -83,6 +83,7 @@ MIDDLEWARE = [
     'cuentas.middleware.AuditoriaMiddleware',  # auditoria de escrituras (fase 1)
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.csp.csp_middleware',  # cabecera Content-Security-Policy (defensa en profundidad)
 ]
 
 ROOT_URLCONF = 'intersoft.urls'

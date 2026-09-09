@@ -88,6 +88,21 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 - **C1. Docker**: no hay `Dockerfile`/`docker-compose`. Añadir `docker-compose`
   (MySQL 8 + backend Py3.12 + frontend Node 22 [+ Redis para B1]).
 - **C2. Endurecer CI**: gate de cobertura mínima, `ruff`/`bandit` para Python y `npm audit`.
+- **C3. CSP en nginx/backend **(hecho)**: Content-Security-Policy emitida por
+  el backend (`backend/core/csp.py`, middleware en toda respuesta) y por nginx
+  para la SPA (`frontend/nginx.conf` y `docs/DESPLIEGUE.md`, incluida en los
+  assets cacheados). Directivas: `default-src 'self'`, `script-src 'self'`
+  (sin `unsafe-eval`), `style-src 'self' 'unsafe-inline'` (Angular inyecta
+  estilos en runtime), `img-src 'self' data: blob:` (preview de imagen al
+  subir producto), `font-src 'self' data:`, `connect-src 'self'` (en
+  despliegue separado se abre al dominio del API), `object-src 'none'`,
+  `frame-src 'none'`, `frame-ancestors 'none'` (refuerza `X-FRAME_OPTIONS`),
+  `base-uri 'self'`, `form-action 'self'`. La SPA no usa recursos externos
+  (índice sin CDN, cámara solo como `<a target="_blank">`), por lo que la
+  política no abre excepciones. Configuración del despliegue real: la directiva
+  `connect-src` se ajusta al dominio real del API y las imágenes de producto se
+  sirven desde el mismo nginx (`location /media/` proxied). Tests:
+  `backend/core/tests_csp.py`.
 
 ---
 
@@ -145,6 +160,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | E1 Design system | Medio | Medio | — (hecho) |
 | D1 DIAN real | Alto | Alto | — (hecho, transmisión real pendiente habilitación) |
 | D2 IA real | Alto | Alto | — (hecho) |
+| C3 CSP nginx/backend | Medio | Bajo | — (hecho) |
 | F1 Envíos backend | Alto | Medio | — (hecho) |
 | F2 Envíos frontend | Alto | Bajo | — (hecho) |
 
