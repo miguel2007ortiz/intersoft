@@ -69,10 +69,14 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   `/api/ventas/<id>/envio/`, `EsPersonal`, aislada por empresa) y de
   seguimiento para el comprador (`/api/tienda/pedidos/` incluye `envio`).
   Tests en `core/tests.py` (`EnvioCreacionTest`, `EnvioGestionTest`).
-- **F2. Panel de envíos (frontend, pendiente)**: vista de seguimiento en el
-  historial de pedidos del comprador + panel de gestión para personal
-  interno (lista filtrable + cambio de estado/transportadora/guía). Detalle
-  de la tarea en `AGENTS.md` §6.2.
+- **F2. Panel de envíos (frontend, hecho)**: seguimiento de despacho en el
+  historial del comprador (`features/tienda/pedidos`) + panel de gestión para
+  personal interno (`features/envios`, ruta `/envios` con `personalGuard` y
+  enlace en el sidebar): cola filtrable por estado y modal para cambiar
+  transportadora, guía, fecha estimada, notas y estado (solo transiciones
+  válidas, validadas por el backend). Servicio `core/services/envios.service.ts`
+  (`listarEnvios`, `obtenerEnvio`, `actualizarEnvio`). Tests Vitest del panel,
+  servicio, pedidos y sidebar + e2e Playwright (`npm run test:e2e`, 2/2).
 
 ---
 
@@ -91,7 +95,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | D1 DIAN real | Alto | Alto | 10 |
 | D2 IA real | Alto | Alto | 11 |
 | F1 Envíos backend | Alto | Medio | — (hecho) |
-| F2 Envíos frontend | Alto | Bajo | 12 |
+| F2 Envíos frontend | Alto | Bajo | — (hecho) |
 
 ---
 

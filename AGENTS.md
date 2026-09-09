@@ -185,32 +185,28 @@ llegue a producción.
   roto). Suite completa: 243/243 verde, `ruff`/`bandit` limpios, cobertura
   86% (gate 70%).
 
-### 6.2. Tarea abierta para OpenCode (frontend — próxima tarea, no bloqueante)
+### 6.2. Frontend (ya implementado — commit `6c0d6a3`)
 
-El backend queda completo y probado; falta la parte visual. Alcance de UNA
-tarea (sección 2 de este archivo), no varias mezcladas:
+Panel y seguimiento de Envíos terminados y probados:
 
-1. `frontend/src/app/core/models/tienda.model.ts`: agregar tipo `Envio`
-   (campos de `EnvioSeguimientoSerializer`) y anexarlo a `Pedido`.
-2. `frontend/src/app/core/services/tienda.service.ts`: el `envio` ya viaja
-   dentro de `Pedido` (no requiere endpoint nuevo del lado comprador).
-3. `frontend/src/app/features/tienda/pedidos/`: mostrar estado de envío
-   (`estado_display`, transportadora, número de guía, fecha estimada) en
-   cada pedido del historial del comprador.
-4. Servicio nuevo o extensión de un servicio de ventas ya existente:
-   `listarEnvios(estado?)`, `obtenerEnvio(ventaId)`,
-   `actualizarEnvio(ventaId, datos)` contra `/api/envios/` y
-   `/api/ventas/<id>/envio/`.
-5. `frontend/src/app/features/ventas/` (o una carpeta `envios/` nueva junto
-   a ella, mismo nivel que `alertas/`/`inventario/`): panel para personal
-   interno — lista filtrable por estado, acción para cambiar
-   transportadora/guía/estado. Reusar el patrón visual ya usado en
-   `features/alertas`.
-6. Tests: Vitest para el componente nuevo + el server ya cubierto por
-   backend (no duplicar ahí).
+1. `frontend/src/app/core/models/tienda.model.ts`: tipos `Envio`/`EnvioSeguimiento`,
+   `ENVIO_ESTADOS` y `ENVIO_TRANSICIONES`; `Pedido` ya incluye `envio`.
+2. `frontend/src/app/core/services/envios.service.ts` (personal interno):
+   `listarEnvios(estado?)`, `obtenerEnvio(ventaId)`, `actualizarEnvio(ventaId,
+   datos)` contra `/api/envios/` y `/api/ventas/<id>/envio/`. El comprador
+   sigue viendo el envío dentro de su `Pedido` (sin endpoint aparte).
+3. `frontend/src/app/features/tienda/pedidos/`: seguimiento de despacho
+   (`estado_display`, transportadora, guía, fecha estimada, dirección) en
+   cada pedido con envío.
+4. `frontend/src/app/features/envios/` (ruta `/envios`, `personalGuard`,
+   enlace en el sidebar): cola filtrable por estado + modal para cambiar
+   transportadora/guía/fecha/notas/estado (solo transiciones válidas).
+5. Tests: Vitest (`envios.component.spec.ts`, `envios.service.spec.ts`,
+   `pedidos`/`sidebar`) + e2e Playwright (`frontend/e2e/tienda-flujo.spec.ts`,
+   cubre el panel `/envios`).
 
-Gate de esta tarea: sección 4 de este archivo (`npm run lint`,
-`npm run build`, `npm run test:ci`) antes de reportar terminado.
+Gate superado: `npm run lint`, `npm run build`, `npm run test:ci` (63/63) en
+la sesión de cierre del módulo.
 
 ---
 
