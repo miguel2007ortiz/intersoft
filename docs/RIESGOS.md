@@ -72,7 +72,9 @@ ninguna es un bug critico abierto que bloquee la entrega.
    personal (`/envios`) y el flujo POS de mostrador con rol personal
    (`luis@elprogreso.co`, EMPLEADO demo con password que `seed_demo`
    garantiza usable). Requiere backend local en `127.0.0.1:8000` con BD
-   `intersoft1_db` migrada y `seed_demo`; levanta `ng serve` solo.
+   `intersoft1_db` migrada y `seed_demo`; levanta `ng serve` solo. Además
+   corre como regresión en CI (`.github/workflows/ci.yml`, job `e2e`: MySQL
+   limpia + migraciones + `seed_demo` + API en segundo plano).
 4. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
    optimizadas para el volumen actual; para volumen alto convendría
    materializar/archivar ventas viejas.

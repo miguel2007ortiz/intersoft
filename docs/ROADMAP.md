@@ -105,7 +105,14 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ## Fase C — Ingeniería / DevOps
 - **C1. Docker**: no hay `Dockerfile`/`docker-compose`. Añadir `docker-compose`
   (MySQL 8 + backend Py3.12 + frontend Node 22 [+ Redis para B1]).
-- **C2. Endurecer CI**: gate de cobertura mínima, `ruff`/`bandit` para Python y `npm audit`.
+- **C2. Endurecer CI **(hecho)**: gates de calidad del `AGENTS.md` §4 ya en el
+  pipeline (`.github/workflows/ci.yml`): `ruff`, `bandit`, `django check`,
+  `makemigrations --check`, suite completa sobre MySQL 8, cobertura mínima 70%,
+  y en frontend `npm ci`, `lint`, `build` (budgets), `test:ci` y `npm audit`.
+  Ampliado además con un job **`e2e`**: levanta MySQL limpia, migra, corre
+  `crear_cache` + `seed_demo` y la API en segundo plano, y ejecuta la suite
+  Playwright (`frontend/e2e/`, RIESGOS #3) contra el navegador real — así los
+  flujos de tienda/Envíos/POS también son regresión en CI, no solo local.
 - **C3. CSP en nginx/backend **(hecho)**: Content-Security-Policy emitida por
   el backend (`backend/core/csp.py`, middleware en toda respuesta) y por nginx
   para la SPA (`frontend/nginx.conf` y `docs/DESPLIEGUE.md`, incluida en los
