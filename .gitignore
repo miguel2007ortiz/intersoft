@@ -25,6 +25,7 @@ media/
 staticfiles/
 logs/
 *.log
+backend/backups/
 
 # ---------- Node / Angular ----------
 node_modules/

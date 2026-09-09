@@ -159,6 +159,19 @@ if 'test' in sys.argv:
 else:
     MEDIA_ROOT = BASE_DIR / 'media'
 
+# -- Backups y monitoreo (ops) -----------------------------------
+# Directorio de respaldos de BD generados por `manage.py backup_db`
+# (nunca versionado; ver .gitignore) y retencion en dias.
+BACKUP_DIR = Path(config('BACKUP_DIR', default=str(BASE_DIR / 'backups')))
+BACKUP_RETENER_DIAS = config('BACKUP_RETENER_DIAS', default=7, cast=int)
+# Antiguedad maxima (horas) del ultimo respaldo antes de que
+# `manage.py monitor` lo marque como fallo.
+MONITOR_ALERTA_BACKUP_HORAS = config('MONITOR_ALERTA_BACKUP_HORAS',
+                                     default=24, cast=int)
+# Rutas a mysqldump/mysql si no estan en el PATH (usa `manage.py backup_db`).
+MYSQLDUMP_BIN = config('MYSQLDUMP_BIN', default='')
+MYSQL_BIN = config('MYSQL_BIN', default='')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
