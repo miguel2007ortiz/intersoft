@@ -284,7 +284,7 @@ class BasePagoAsincronoTest(TestCase):
         cls.cliente = Cliente.objects.create(
             usuario=cls.comprador, empresa=None, nombre="F4 Buyer",
             tipo_documento="CC", numero_documento="44444444",
-            email="f4@test.co")
+            email="f4@test.co", direccion="Calle 10 # 5-20", ciudad="Bogota")
 
     def api(self, usuario=None):
         cliente_api = APIClient()

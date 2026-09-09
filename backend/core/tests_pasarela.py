@@ -91,7 +91,7 @@ class MarketplaceCheckoutIdempotenciaTest(TestCase):
         cls.cliente = Cliente.objects.create(
             usuario=cls.comprador, empresa=None, nombre="Idem Buyer",
             tipo_documento="CC", numero_documento="88888888",
-            email="idem@test.co")
+            email="idem@test.co", direccion="Calle 10 # 5-20", ciudad="Bogota")
 
     def _api(self):
         api = APIClient()

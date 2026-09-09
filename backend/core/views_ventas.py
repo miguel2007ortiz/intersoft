@@ -26,11 +26,12 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
-from .models import (Cliente, DetalleVenta, Empresa,
+from .models import (Cliente, DetalleVenta, Empresa, Envio,
                      MovimientoInventario, Notificacion, Producto, Venta)
 from .serializers_monitoreo import NotificacionLecturaSerializer
 from .serializers_ventas import (AjusteInventarioSerializer,
                                  AlertaReabastecerSerializer, AnulacionSerializer,
+                                 EnvioEstadoInputSerializer, EnvioLecturaSerializer,
                                  MovimientoInventarioLecturaSerializer,
                                  VentaLecturaSerializer, VentaPOSInputSerializer)
 
@@ -360,6 +361,89 @@ class VentaDetalleView(APIView):
                 f"Motivo: {venta.motivo_anulacion}")
 
         return Response(VentaLecturaSerializer(venta).data)
+
+
+# ------------------------------ Envios (fase 10) ---------------------------
+
+class EnviosView(APIView):
+    """GET lista los envios de la empresa (personal interno), opcionalmente
+    filtrada por estado. Ordenada por antiguedad (los mas viejos primero):
+    es una cola de trabajo, no un historial."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request):
+        empresa = _obtener_empresa(request)
+        envios = Envio.objects.select_related('venta', 'venta__cliente').filter(
+            venta__empresa=empresa)
+
+        estado = request.query_params.get('estado')
+        if estado:
+            if estado not in dict(Envio.ESTADO_CHOICES):
+                return Response(
+                    {"codigo": "ESTADO_INVALIDO",
+                     "detalle": "Estado de envio no valido.",
+                     "opciones": [c for c, _ in Envio.ESTADO_CHOICES]},
+                    status=status.HTTP_400_BAD_REQUEST)
+            envios = envios.filter(estado=estado)
+
+        envios = envios.order_by('created_at')
+        limite = _limite_paginacion(request.query_params.get('limite', 50))
+        datos = EnvioLecturaSerializer(envios[:limite], many=True).data
+        return Response({"resultados": datos, "total": len(datos)})
+
+
+class EnvioDetalleView(APIView):
+    """GET detalle del envio de una venta / PATCH actualiza transportadora,
+    numero de guia, notas y/o estado (con validacion de transicion)."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request, id):
+        empresa = _obtener_empresa(request)
+        envio = Envio.objects.select_related('venta').filter(
+            venta__empresa=empresa, venta_id=id).first()
+        if not envio:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(EnvioLecturaSerializer(envio).data)
+
+    def patch(self, request, id):
+        empresa = _obtener_empresa(request)
+        entrada = EnvioEstadoInputSerializer(data=request.data)
+        if not entrada.is_valid():
+            return Response(
+                {"codigo": "DATOS_INVALIDOS", "detalle": "Revisa los datos del envio.",
+                 "errores": entrada.errors}, status=status.HTTP_400_BAD_REQUEST)
+        datos = entrada.validated_data
+
+        # select_for_update: serializa cambios de estado concurrentes sobre
+        # el mismo envio (mismo criterio que anular venta / ajustar stock).
+        with transaction.atomic():
+            envio = Envio.objects.select_for_update().select_related('venta').filter(
+                venta__empresa=empresa, venta_id=id).first()
+            if not envio:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+
+            campos_planos = [c for c in
+                             ('transportadora', 'numero_guia', 'fecha_entrega_estimada', 'notas')
+                             if c in datos]
+            for campo in campos_planos:
+                setattr(envio, campo, datos[campo])
+            if campos_planos:
+                envio.save(update_fields=campos_planos + ['updated_at'])
+
+            nuevo_estado = datos.get('estado')
+            if nuevo_estado:
+                try:
+                    envio.cambiar_estado(nuevo_estado)
+                except Envio.TransicionInvalida as exc:
+                    return Response(
+                        {"codigo": "TRANSICION_INVALIDA", "detalle": str(exc)},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+            ActividadUsuario.registrar(
+                request.user, "ENVIO_ACTUALIZADO",
+                f"Envio de {envio.venta.numero_factura} -> {envio.get_estado_display()}")
+
+        return Response(EnvioLecturaSerializer(envio).data)
 
 
 # ------------------------------ Inventario --------------------------------

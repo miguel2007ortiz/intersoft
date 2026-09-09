@@ -25,7 +25,7 @@ from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
-                     Cupon, DetalleVenta, Empresa, Favorito, IntentoPago,
+                     Cupon, DetalleVenta, Empresa, Envio, Favorito, IntentoPago,
                      MovimientoInventario, Producto, Venta)
 from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
@@ -848,6 +848,17 @@ class CheckoutView(APIView):
                                 "(Registrate como cliente) para poder comprar."},
                     status=status.HTTP_400_BAD_REQUEST)
 
+            # Cada venta del marketplace genera un Envio (fase 10): sin
+            # direccion/ciudad no hay a donde despachar, se rechaza antes de
+            # tocar stock (mismo criterio que SIN_CLIENTE: pedir el dato
+            # faltante en vez de crear un envio inutilizable).
+            if not cliente.direccion.strip() or not cliente.ciudad.strip():
+                return Response(
+                    {"codigo": "SIN_DIRECCION_ENVIO",
+                     "detalle": "Completa tu direccion y ciudad de envio "
+                                "antes de finalizar la compra."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
             items = list(carrito.items.select_related('producto').all())
 
             fallidos = []
@@ -967,6 +978,12 @@ class CheckoutView(APIView):
                     _registrar_movimiento(
                         item.producto, request.user, 'salida', item.cantidad,
                         f"Reserva checkout tienda {venta.numero_factura}")
+
+                Envio.objects.create(
+                    venta=venta,
+                    direccion=cliente.direccion,
+                    ciudad=cliente.ciudad,
+                )
 
                 referencias_empresa.append(
                     f"{empresa.nombre}:{venta.numero_factura}")
@@ -1231,7 +1248,7 @@ class MisPedidosView(APIView):
             return Response({"resultados": [], "total": 0})
 
         pedidos = (Venta.objects.filter(cliente=cliente)
-                   .select_related('empresa')
+                   .select_related('empresa', 'envio')
                    .prefetch_related('detalles__producto')
                    .order_by('-created_at'))
         # Lista acotada (nunca ilimitada).

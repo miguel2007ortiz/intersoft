@@ -1,0 +1,43 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md",
+    "docs/RIESGOS.md",
+    "docs/CHECKLIST-SEGURIDAD.md",
+    "docs/DESPLIEGUE.md"
+  ],
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "*": "ask",
+      "ruff check*": "allow",
+      "bandit*": "allow",
+      "python manage.py check*": "allow",
+      "python manage.py makemigrations --check*": "allow",
+      "python manage.py test*": "allow",
+      "coverage run*": "allow",
+      "coverage report*": "allow",
+      "npm run lint*": "allow",
+      "npm run build*": "allow",
+      "npm run test:ci*": "allow",
+      "npm ci*": "allow",
+      "pip install -r requirements*": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git add*": "allow",
+      "git commit*": "allow",
+      "git checkout -b*": "allow",
+      "git push*": "ask",
+      "git merge*": "ask",
+      "git push origin main*": "deny",
+      "git push origin develop*": "ask",
+      "python manage.py migrate*": "ask",
+      "python manage.py flush*": "deny",
+      "docker*": "ask",
+      "docker-compose*": "ask",
+      "rm -rf*": "deny"
+    },
+    "webfetch": "ask"
+  }
+}

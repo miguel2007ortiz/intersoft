@@ -554,7 +554,8 @@ class ConcurrenciaCheckout(TransactionTestCase):
                               rol=Rol.de_nombre("CLIENTE"))
         self.cliente = Cliente.objects.create(
             usuario=self.comprador, empresa=None, nombre="Comprador",
-            tipo_documento="CC", numero_documento="9033333333")
+            tipo_documento="CC", numero_documento="9033333333",
+            direccion="Carrera 1 # 2-30", ciudad="Medellin")
         # Un solo item en el carrito compartido, antes de lanzar los hilos.
         self.carrito = Carrito.objects.create(usuario=self.comprador)
         CarritoItem.objects.create(carrito=self.carrito,
