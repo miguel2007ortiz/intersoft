@@ -136,15 +136,15 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 |------|---------|----------|-----------|
 | A1 Integridad financiera | Alto | Bajo | — (hecho) |
 | B2 Paginación catálogo | Alto | Bajo | — (hecho) |
-| E2 PDF/XML comprobantes | Medio | Bajo | 3 |
+| E2 PDF/XML comprobantes | Medio | Bajo | — (hecho) |
 | B1 Caché | Alto | Medio | — (hecho) |
-| C2 CI endurecido | Medio | Medio | 5 |
+| C2 CI endurecido | Medio | Medio | — (hecho) |
 | A2 Estados vacíos | Medio | Bajo | — (hecho) |
-| C1 Docker | Medio-Alto | Medio | 7 |
+| C1 Docker | Medio-Alto | Medio | — (hecho) |
 | A3 Aislamiento demo | Medio | Bajo | — (hecho) |
-| E1 Design system | Medio | Medio | 9 |
-| D1 DIAN real | Alto | Alto | 10 |
-| D2 IA real | Alto | Alto | 11 |
+| E1 Design system | Medio | Medio | — (hecho) |
+| D1 DIAN real | Alto | Alto | — (hecho, transmisión real pendiente habilitación) |
+| D2 IA real | Alto | Alto | — (hecho) |
 | F1 Envíos backend | Alto | Medio | — (hecho) |
 | F2 Envíos frontend | Alto | Bajo | — (hecho) |
 
