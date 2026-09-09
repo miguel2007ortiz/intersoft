@@ -51,8 +51,18 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ## Fase B — Rendimiento
 - **B1. Caché (Redis o DB)**: `settings.py` sin `CACHES`. Cachear dashboard/tarjetas de
   `analytics.py`, contexto de IA y catálogo. TTL 60-300s, invalidar al crear ventas/productos.
-- **B2. Paginación en el catálogo público**: `CatalogoPublicoView` (views_tienda.py) filtra/ordena
-  sin cortar página. Añadir `pagina`/`por_pagina` + `total`; frente con infinite scroll.
+- **B2. Paginación en el catálogo público **(hecho)**: `CatalogoPublicoView`
+  (`backend/core/views_tienda.py`) filtra/ordena sin cortar página: devuelve
+  `pagina`/`por_pagina` (24)/`total` (conteo real del filtro)/`total_paginas`,
+  página inválida cae a 1, y cachea 60s por clave que incluye filtros+orden+página.
+  Frente (`frontend/src/app/features/tienda/catalogo/`) con **paginador por botones**
+  (Anterior/Siguiente + "Página X de Y", vuelve a página 1 en cada búsqueda/filtro),
+  en vez de infinite scroll: decisión tomada porque el catálogo público ya está
+  cacheado (60s) y el grid de 24 permite navegación predecible; el scroll infinito
+  encaja mejor con datos mutando rápido y sin paginador, no es el caso aquí.
+  Tests: `backend/core/tests_fase5.py` (corte a 24, total real, sin duplicados entre
+  páginas, página inválida) y `frontend/src/app/core/services/tienda.service.spec.ts`
+  (envía `pagina` y lee `total_paginas`).
 
 ---
 
@@ -107,7 +117,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | Ítem | Impacto | Esfuerzo | Prioridad |
 |------|---------|----------|-----------|
 | A1 Integridad financiera | Alto | Bajo | — (hecho) |
-| B2 Paginación catálogo | Alto | Bajo | 2 |
+| B2 Paginación catálogo | Alto | Bajo | — (hecho) |
 | E2 PDF/XML comprobantes | Medio | Bajo | 3 |
 | B1 Caché | Alto | Medio | 4 |
 | C2 CI endurecido | Medio | Medio | 5 |

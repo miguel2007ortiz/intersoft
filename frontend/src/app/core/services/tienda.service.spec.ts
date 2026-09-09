@@ -31,6 +31,14 @@ describe('TiendaService', () => {
     req.flush({ resultados: [{}], total: 1 });
   });
 
+  it('listarCatalogo envia la pagina y lee total_paginas', () => {
+    service.listarCatalogo({ pagina: '3' }).subscribe((r) => expect(r.total_paginas).toBe(5));
+    const req = http.expectOne((r) => r.url === `${environment.apiUrl}/tienda/catalogo/`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('pagina')).toBe('3');
+    req.flush({ resultados: [], total: 1, total_paginas: 5 });
+  });
+
   it('misPedidos devuelve los pedidos del comprador', () => {
     const pedido = {
       id: 'p1',
