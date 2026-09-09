@@ -116,6 +116,23 @@ class FormaErroresTest(BaseFase5Test):
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "CLIENTE_NO_ENCONTRADO")
 
+    def test_venta_pos_linea_sin_cantidad_default_a_1(self):
+        # El frontend del POS omite `cantidad` en la linea recien agregada
+        # (solo envia el producto); el serializer debe aplicar el default 1
+        # en vez de rechazar con "This field may not be blank".
+        api = self.api_como(self.empleado)
+        respuesta = api.post("/api/ventas/pos/", {
+            "cliente": str(self.cliente.id),
+            "detalles": [{"producto": str(self.producto.id)}],
+            "metodo_pago": "efectivo",
+            "descuento": "0",
+        }, format="json")
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        venta = Venta.objects.get(id=respuesta.data["id"])
+        self.assertEqual(venta.detalles.count(), 1)
+        detalle = venta.detalles.get()
+        self.assertEqual(detalle.cantidad, 1)
+
 
 # -------------------- Validacion de filtros -------------------------------
 

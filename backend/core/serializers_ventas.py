@@ -31,7 +31,10 @@ class DetalleVentaLecturaSerializer(serializers.ModelSerializer):
 
 class DetalleVentaEscrituraSerializer(serializers.Serializer):
     producto = serializers.UUIDField()
-    cantidad = serializers.IntegerField(min_value=1)
+    # `cantidad` opcional: el frontend del POS la omite en la linea recien
+    # agregada y la vista aplica el default de 1. Explicita de modo que no
+    # dependa de un valor enviado que puede no existir.
+    cantidad = serializers.IntegerField(min_value=1, required=False, default=1)
 
 
 class VentaLecturaSerializer(serializers.ModelSerializer):
@@ -71,7 +74,7 @@ class VentaPOSInputSerializer(serializers.Serializer):
                                           default='efectivo')
     descuento = serializers.DecimalField(max_digits=12, decimal_places=2,
                                          default=Decimal('0'), min_value=0)
-    notas = serializers.CharField(required=False, default='')
+    notas = serializers.CharField(required=False, allow_blank=True, default='')
     detalles = DetalleVentaEscrituraSerializer(many=True, min_length=1)
 
 
