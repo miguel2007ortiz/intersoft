@@ -78,9 +78,16 @@ ninguna es un bug critico abierto que bloquee la entrega.
    materializar/archivar ventas viejas.
 5. **Media en disco local**: `MEDIA_ROOT` local; en multi-servidor se
    recomienda almacenar en object storage.
-6. **Backups y monitoring**: son operativos, no implementados en la app.
-   El checklist de despliegue (`docs/CHECKLIST-SEGURIDAD.md`,
-   `docs/DESPLIEGUE.md`) los exige como paso manual/agendado.
+6. ~~**Backups y monitoreo**~~ **Resuelto**: eran operativos, no implementados
+   en la app. Ahora existe `python manage.py backup_db` (dump `.sql` consistente
+   con `--single-transaction`, rotación por antigüedad en `BACKUP_DIR`,
+   password por `MYSQL_PWD`, y `--verify` que restaura el dump en una BD
+   temporal y la elimina — comprueba que el respaldo sirve) y
+   `python manage.py monitor` (BD, migraciones al día, cache, disco libre y
+   antigüedad del último respaldo; exit 1 si falla, para cron/CI). Backup real
+   verificado en dev (restore de 43 tablas OK). El checklist de despliegue
+   (`docs/CHECKLIST-SEGURIDAD.md`, `docs/DESPLIEGUE.md`) ya referencia estos
+   comandos; el agendado (cron/systemd) sigue siendo operativo del servidor.
 
 > Documentación cruzada: requisitos e instalación en `README.md` raíz;
 > especificos de backend en `backend/README.md`; calidad frontend en

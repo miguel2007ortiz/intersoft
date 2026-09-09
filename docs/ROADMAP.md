@@ -121,6 +121,21 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   `connect-src` se ajusta al dominio real del API y las imágenes de producto se
   sirven desde el mismo nginx (`location /media/` proxied). Tests:
   `backend/core/tests_csp.py`.
+- **C4. Backups y monitoreo operativos **(hecho)**: aterrizado en el repo para
+  dejar de ser solo un "paso manual". `python manage.py backup_db` genera el
+  dump `.sql` de la BD en `BACKUP_DIR` (default `backend/backups/`, ignorado en
+  git) con `mysqldump --single-transaction` (consistente, sin bloquear
+  escrituras), rotación por antigüedad (`BACKUP_RETENER_DIAS`, default 7) y
+  password pasada por `MYSQL_PWD` (nunca visible en argv). `--verify` restaura
+  el dump en una BD temporal, comprueba que carga tablas y la elimina al
+  terminar (valida que el respaldo sirve, no solo que el archivo existe).
+  `python manage.py monitor` verifica BD (`SELECT 1`), migraciones al día,
+  cache (set/get de prueba), disco libre (mín. 1 GiB) y antigüedad del último
+  respaldo (`MONITOR_ALERTA_BACKUP_HORAS`, default 24); sale con código 1 si
+  algo falla (usable desde cron/CI) y nunca imprime secretos. En Windows/Laragon
+  conviene fijar `MYSQLDUMP_BIN`/`MYSQL_BIN` en `.env` (ver `.env.example`).
+  Tests: `backend/core/tests_ops.py` (8/8, con mysqldump/mysql mockeados).
+  Verificación real en dev: restore de 43 tablas OK, monitor exit 0.
 
 ---
 

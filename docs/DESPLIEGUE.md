@@ -43,6 +43,8 @@ cp .env.example .env
 #   - CSRF_TRUSTED_ORIGINS=https://app.tudominio.co
 #   - FRONTEND_URL=https://app.tudominio.co
 #   - EMAIL_* / WA_* / IA_* segun corresponda
+#   - BACKUP_DIR / MYSQLDUMP_BIN / MYSQL_BIN si necesitas fijar rutas del
+#     respaldo (ver .env.example)
 
 # 4. Base de datos (crear una vez)
 mysql -uroot -p -e "CREATE DATABASE intersoft1_db CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci; CREATE USER 'intersoft'@'localhost' IDENTIFIED BY '<password>'; GRANT ALL PRIVILEGES ON intersoft1_db.* TO 'intersoft'@'localhost'; FLUSH PRIVILEGES;"
@@ -173,10 +175,40 @@ server {
 
 Renovación Let's Encrypt: `sudo certbot --nginx`.
 
-## 6. Checklist post-despliegue
+## 6. Backups y monitoreo (operativo)
+
+```bash
+# 1. Respaldo de la BD (consistente, sin bloquear escrituras). Con --verify
+#    restaura el dump en una BD temporal, comprueba tablas y la elimina.
+#    Nota: si mysqldump/mysql no estan en el PATH (p. ej. Laragon) fija
+#    MYSQLDUMP_BIN/MYSQL_BIN en .env (ver .env.example).
+python manage.py backup_db
+python manage.py backup_db --verify   # prueba REAL de que el respaldo sirve
+
+# 2. Chequeo de salud (exit 0 OK / exit 1 problema) — agendable con cron:
+#    BD, migraciones al dia, cache, disco libre (min 1 GiB) y antiguedad
+#    del ultimo respaldo (alerta > 24 h, configura en MONITOR_ALERTA_BACKUP_HORAS).
+python manage.py monitor
+```
+
+Ejemplo de agendado (cron diario):
+
+```cron
+# Respaldo a las 02:00 y verificacion + monitor a las 02:30 (exit != 0 se loguea)
+0 2 * * *  cd /srv/intersoft/backend && /srv/intersoft/backend/venv/bin/python manage.py backup_db >> /var/log/intersoft-backup.log 2>&1
+30 2 * * * cd /srv/intersoft/backend && /srv/intersoft/backend/venv/bin/python manage.py monitor >> /var/log/intersoft-monitor.log 2>&1 || echo "MONITOR FALLO" >> /var/log/intersoft-monitor.log
+```
+
+> Los respaldos quedan en `BACKUP_DIR` (default `backend/backups/`, ignorado
+> por git) con rotación automática (`BACKUP_RETENER_DIAS`, default 7). El
+> checklist (`docs/CHECKLIST-SEGURIDAD.md`) obliga a probar el restore con
+> `--verify` antes de confiar en un respaldo.
+
+## 7. Checklist post-despliegue
 
 - [ ] `curl -I https://api.tudominio.co/api/auth/me` → 401/403 (JWT exigido), no 500.
 - [ ] `https://app.tudominio.co` carga la SPA y refresca con F5 en rutas internas.
 - [ ] Login real OK; refrescar JWT OK; logout limpia cookies.
 - [ ] Correr el checklist de seguridad (`docs/CHECKLIST-SEGURIDAD.md`).
-- [ ] Backup de BD agendado + prueba de restore.
+- [ ] `python manage.py backup_db --verify` y `python manage.py monitor` en
+      verde (exit 0) tras el primer despliegue; agendar ambos en cron.

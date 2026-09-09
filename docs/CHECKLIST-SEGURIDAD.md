@@ -82,8 +82,17 @@ publicar. Refleja exactamente lo que el proyecto ya implementa (verificado en
       automático y `Restart=on-failure`.
 - [ ] Logs con rotación (ya configurada: `RotatingFileHandler`, 5 MB × 3) y
       sin excepciones sensibles; revisión periódica.
-- [ ] Copias de seguridad de la BD agendadas (mysqldump) y probadas con
-      restore; media/ respaldado si aplica.
+- [ ] Copias de seguridad de la BD agendadas con
+      `python manage.py backup_db` (dump `.sql` consistente + rotación en
+      `BACKUP_DIR`) y **probadas** con `--verify` (restaura en una BD temporal
+      y la elimina; en la última verificación: 43 tablas OK). Edad máxima
+      alertada por `python manage.py monitor`
+      (`MONITOR_ALERTA_BACKUP_HORAS`, default 24). Si `mysqldump`/`mysql` no
+      están en el PATH (p. ej. Laragon), fija `MYSQLDUMP_BIN`/`MYSQL_BIN` en
+      `.env` (ver `.env.example`). Media/ respaldado si aplica.
+- [ ] `python manage.py monitor` en verde (exit 0): BD, migraciones al día,
+      cache, disco (mín. 1 GiB libre) y antigüedad del último respaldo.
+      Agendable con cron/systemd; exit 1 en caso de problema.
 - [ ] Plan de rollback: conservar el build anterior de `dist/` y backups de BD
       previos a cada release.
 
