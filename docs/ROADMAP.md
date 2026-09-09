@@ -194,6 +194,31 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 
 ---
 
+## Fase G — Cámaras (vigilancia)
+- **G1. Catálogo de grabaciones (backend, hecho)**: modelo `Grabacion`
+  (metadatos en BD: fecha/hora/duración/tamaño, `UniqueConstraint`
+  (camara, fecha, hora)) + migración aditiva `core/0019_grabacion.py`.
+  `python manage.py sincronizar_grabaciones` escanea
+  `streams/{empresa}/{camara}/{fecha}/` y hace upsert idempotente por
+  (camara, fecha, hora), actualiza `tamano_bytes` y borra filas cuyo archivo
+  desapareció (detección de archivos offline). Endpoint
+  `GET /api/camaras/<id>/grabaciones/` (`CamaraGrabacionesView`): listado
+  paginado (50/page, filtro `fecha`), solo ADMINISTRADOR y aislado por
+  tenant; cada fila recalcula `disponible`/`url` contra disco al serializar
+  (`GrabacionSerializer` + `services/camaras.disponible_y_url`). Los archivos
+  de video siguen en disco (sin transcodificación ni streaming en vivo).
+  Tests: `backend/core/tests_grabaciones.py` (15).
+- **G2. Catálogo de grabaciones (frontend, hecho)**: al seleccionar una
+  cámara en `features/camaras` se carga su listado de grabaciones
+  ("Grabaciones disponibles") con paginador Anterior/Siguiente, formateo de
+  tamaño/duración (`tamanoLegible`/`duracionLegible`), reproducción (setea
+  `fecha`/`hora` de la sesión y llama `consultarGrabacion`) y marcado "Sin
+  archivo" cuando el archivo no está en disco. Servicio
+  `core/services/monitoreo.service.ts` → `grabacionesCamera(id, {fecha, pagina})`.
+  Tests: `frontend/src/app/features/camaras/camaras.component.spec.ts` (8).
+
+---
+
 ## Matriz de prioridad (impacto vs esfuerzo)
 | Ítem | Impacto | Esfuerzo | Prioridad |
 |------|---------|----------|-----------|
@@ -211,6 +236,8 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | C3 CSP nginx/backend | Medio | Bajo | — (hecho) |
 | F1 Envíos backend | Alto | Medio | — (hecho) |
 | F2 Envíos frontend | Alto | Bajo | — (hecho) |
+| G1 Grabaciones backend | Medio | Medio | — (hecho) |
+| G2 Grabaciones frontend | Medio | Bajo | — (hecho) |
 
 ---
 

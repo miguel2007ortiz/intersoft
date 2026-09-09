@@ -56,10 +56,18 @@ ninguna es un bug critico abierto que bloquee la entrega.
 
 ## Riesgos pendientes (mejoras conocidas, no bloqueantes)
 
-1. **Módulo de cámaras**: es un "lienzo" deliberado — no hay streaming en
-   vivo y las grabaciones se resuelven contra disco (sin BD). El listado sí
-   está paginado (`CamarasView`, 100/page) y `url_stream` valida protocolo
-   (fase 5); el alcance completo de video queda para una iteración posterior.
+1. **Módulo de cámaras**: sigue siendo un "lienzo" deliberado en cuanto a
+   video: no hay streaming en vivo real y los archivos se guardan en disco
+   (`services/camaras.py`). **Parcialmente resuelto**: ahora hay un **catálogo
+   de grabaciones** en BD (`Grabacion`, metadatos: fecha/hora/tamaño/duracion)
+   que `python manage.py sincronizar_grabaciones` reconstruye escaneando
+   `streams/{empresa}/{camara}/{fecha}/` (idempotente, filtra por empresa y/o
+   cámara, agenda por cron), con listado paginado
+   `GET /api/camaras/<id>/grabaciones/` (50/page, filtro `fecha`, aislado por
+   tenant, solo ADMINISTRADOR; cada fila recalcula `disponible`/`url` contra
+   disco) e integración en el panel (`features/camaras`: listado de sesiones,
+   paginador y reproducción). El alcance completo de video (streaming en vivo,
+   transcodificación, retención) queda para una iteración posterior.
 2. ~~Sin CSP en cabeceras~~ **Resuelto**: el backend no emitía
    `Content-Security-Policy` (sí `X-FRAME_OPTIONS=DENY` y HSTS). Ahora se
    emite desde `backend/core/csp.py` (toda respuesta) y desde nginx para la
