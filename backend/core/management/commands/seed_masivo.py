@@ -1,6 +1,7 @@
 """Genera un volumen grande de productos de prueba (con imagen y
 descripcion) para probar el catalogo, el POS y el dashboard con datos
-reales en desarrollo local. NO usar en produccion.
+reales en desarrollo local. NO se ejecuta en produccion salvo --force
+(mismo criterio que seed_demo).
 
 Uso:
     python manage.py seed_masivo
@@ -8,10 +9,11 @@ Uso:
 """
 import random
 
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from PIL import Image, ImageDraw
 
 from core.models import Categoria, Empresa, Producto
@@ -66,15 +68,21 @@ class Command(BaseCommand):
         parser.add_argument('--cantidad', type=int, default=1000)
         parser.add_argument('--nit', type=str, default=NIT_DEMO,
                             help='NIT de la empresa a poblar (por defecto la demo).')
+        parser.add_argument('--force', action='store_true',
+                            help='Ejecuta el seed incluso con DEBUG=False.')
 
     def handle(self, *args, **options):
+        if not settings.DEBUG and not options['force']:
+            raise CommandError(
+                'seed_masivo solo debe ejecutarse en desarrollo (DEBUG=True). '
+                'Usa --force si entiendes los riesgos.')
         cantidad = options['cantidad']
         nit = options['nit']
 
         empresa = Empresa.objects.filter(nit=nit).first()
         if empresa is None:
             self.stdout.write('Empresa demo no encontrada, corriendo seed_demo primero...')
-            call_command('seed_demo')
+            call_command('seed_demo', force=options['force'])
             empresa = Empresa.objects.get(nit=nit)
 
         categorias = {}

@@ -34,10 +34,17 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 - **Tests**: `clientes.component.spec.ts` y `productos.component.spec.ts` (error de carga +
   reintento que recarga, vacío inicial, sin resultados de búsqueda/filtro).
 
-### A3. Aislamiento de datos de demo
+### A3. Aislamiento de datos de demo **(hecho)**
 - **Dónde**: management commands de seed + datos de prueba sembrados durante desarrollo.
-- **Qué**: meter todo seed de demostración en management commands (`seed_demo`) y **no** en
-  migraciones; flag para no correr en producción.
+- **Qué**: todo seed de demostración vive en commands — `seed_demo`
+  (`backend/core/management/commands/seed_demo.py`, data de negocio demo) y
+  `seed_masivo` (`--cantidad`, `--nit`, volumen para catalog/pos/dashboard).
+  Ninguna migración siembra datos demo (solo `cuentas/0003_seed_rbac` siembra los roles
+  base del sistema, bootstrap funcional — no demo, y su edición está vedada por invariante).
+  **Flag anti-producción**: `seed_demo` y `seed_masivo` abortan con `CommandError`
+  si `DEBUG=False`; `--force` los habilita solo con riesgo asumido.
+- **Tests**: `backend/core/tests_seed.py` (guards de producción para ambos commands,
+  `--force` y `DEBUG=True`).
 
 ---
 
@@ -106,7 +113,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | C2 CI endurecido | Medio | Medio | 5 |
 | A2 Estados vacíos | Medio | Bajo | — (hecho) |
 | C1 Docker | Medio-Alto | Medio | 7 |
-| A3 Aislamiento demo | Medio | Bajo | 8 |
+| A3 Aislamiento demo | Medio | Bajo | — (hecho) |
 | E1 Design system | Medio | Medio | 9 |
 | D1 DIAN real | Alto | Alto | 10 |
 | D2 IA real | Alto | Alto | 11 |
