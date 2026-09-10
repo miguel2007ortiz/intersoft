@@ -4,14 +4,14 @@ Bitácora de estado al corte para retomar sesión. **Supervisor (Claude) y
 ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 `vault/INDICE.md` (regla 1.1 de `AGENTS.md`).
 
-Última actualización: 2026-09-10 (sesión de corte por límite de Claude).
+Última actualización: 2026-09-10 (actualizado tras cierre de #13 por Claude).
 
 ---
 
 ## Rama y repositorio
 
 - Rama de trabajo: `intersoft_miguel`, **en sync con `origin/intersoft_miguel`**
-  (último push `20ad718..23a1dae`).
+  (HEAD `3c0ae5f`, último push de Claude).
 - `origin/main` en `1c2f2f4`; ya integrado (merge `d9494c5`). No hay `develop`
   (el flujo usa `main` + ramas por dev).
 
@@ -25,7 +25,7 @@ ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 | Frontend: `npm run build` | ✅ OK (budgets intactos) |
 | Frontend: `npm run test:ci` | ✅ 96 tests OK |
 | Frontend: e2e Playwright | ✅ 3/3 |
-| Frontend: `npm run lint` | 🔴 **ROJO — #13 a medio hacer (ver abajo)** |
+| Frontend: `npm run lint` | ✅ verde — ESLint real resuelto (commit `197ba99`, #13 cerrado) |
 | Servidores | API `127.0.0.1:8000` y SPA `127.0.0.1:4200` arriba |
 | Seguridad | Sin `.env`/claves `.pem`/`.key` trackeados; `.obsidian` ignorado |
 
@@ -38,40 +38,23 @@ en la reserva, `Grabacion`, backups/monitoreo, auditoría de bugs #1–#12) y lo
 `vault/ACTUALIDAD.md`). **Revisión de diffs y merge a `main` = gate de Claude
 (no del ejecutor)**.
 
-## PENDIENTE 2 (supervisor) — terminar `#13` ESLint real (a medio hacer)
+## PENDIENTE 2 — RESUELTO: `#13` ESLint real (cerrado por Claude)
 
-Claude instaló/configuró la infra de lint **y quedó en el working tree sin
-commitear** al cortar la sesión. Nada de eso debe perderse; se dejó intacto.
+Claude retomó y **terminó el #13** (commits `197ba99` + `3c0ae5f`, en
+`origin/intersoft_miguel`):
 
-**Archivos modificados/sin commitear (WIP):**
-- `frontend/package.json` + `package-lock.json`: añade `@eslint/js ^10.0.1`,
-  `angular-eslint 22.5.0`, `eslint ^10.9.1`, `typescript-eslint 8.69.0`;
-  `"lint"` ahora es `ng lint && prettier --check ...`.
-- `frontend/angular.json`: target de lint (builder) configurado.
-- `frontend/eslint.config.js`: **nuevo (untracked)** — flat config con
-  TS strict + `angular.configs.tsRecommended` + `templateRecommended` +
-  `templateAccessibility`; sin supresiones.
-- `.ts` con auto-fixes de ESLint (imports/loose) de Claude: `catalogo.service`,
-  `tienda.service`, `temporizador.util.spec`, `roles`, `usuarios`,
-  `clientes`, `productos`, `dashboard`, `empleados`, `inventario`,
-  `catalogo`, `favoritos`, `pos` (component).
-- Templates ya corregidos por Claude (patrón a11y real: `label for`+`id`, o
-  input envuelto en `<label>`): `pos.component.html`, `inventario.component.html`,
-  `pos.component.css`.
+- `197ba99 fix(frontend): ESLint real con @angular-eslint y 77 violaciones
+  corregidas (#13)` — instaló `@eslint/js`, `angular-eslint 22.5.0`, `eslint
+  ^10.9.1`, `typescript-eslint 8.69.0`; `eslint.config.js` flat config;
+  target `ng lint` en `angular.json`; `"lint"` = `ng lint && prettier --check`;
+  corrigió a11y real (`label for`+`id`, envolturas en `<label>`, key events +
+  focusable) en todos los templates. `npm run lint` → exit 0.
+- `3c0ae5f docs: cerrar #13` — actualizó `vault/auditoria-bugs-opencode.md`
+  (13 hallazgos cerrados: 12 + revisado #7), `docs/CAMBIOS-2026-09-10.md`,
+  `docs/RIESGOS.md` (§7 resuelto) y `docs/PR-BODY-12.md`.
 
-**Faltan (40 errores `ng lint`, en 10 templates):**
-- `click-effects-key-events` + `interactive-supports-focus` en: `envios`,
-  `facturacion`, `catalogo`, `favoritos`, `ventas`, `confirmacion`,
-  `sidebar`, `welcome-overlay` (y algunos en `pos`/`inventario` todavía).
-- `label-has-associated-control` en: `carrito`, `checkout`, `ventas`,
-  `catalogo`.
-- `role-has-required-aria` (`aria-selected`) en `catalogo` (línea 52).
-
-**Cómo retomarlo:** seguir el patrón de Claude (a11y real, sin
-`eslint-disable`), correr `npm run lint` hasta exit 0, y después
-`npm run build`, `npm run test:ci` y `npm run test:e2e`. Luego commitea
-`feat(frontend): ESLint real (@angular-eslint) en todo src/` y actualiza
-`docs/RIESGOS.md` §pendientes #7 y `vault/auditoria-bugs-opencode.md` #13.
+**No queda ningún pendiente de la auditoría.** Cobertura de cobertura
+post-fix pendiente de confirmar con gates frontend (build/test:ci).
 
 ## Pendientes de riesgo menores (no bloqueantes)
 
@@ -84,5 +67,6 @@ commitear** al cortar la sesión. Nada de eso debe perderse; se dejó intacto.
 ## Flujo acordado
 
 1. Leer `AGENTS.md` §1.1 + `docs/INDICE.md` + `vault/INDICE.md` + este archivo.
-2. Continuar #13 (PENDIENTE 2) o decidir el orden con el supervisor.
+2. Decidir con el supervisor el orden: pendiente real es solo el **merge de
+   `intersoft_miguel` a `main`** (gate de revisión de Claude).
 3. No push a `main` sin revisión de Claude. Commits Conventional Commits.
