@@ -20,7 +20,7 @@ están corregidos, con test de regresión y commit atómico en
 - #8 (estadísticas de ventas infladas con anuladas/pendientes): `commit 6aa83bd`.
 - #9 (500 no controlado rompe el contrato de error) + #10 (`IA_NO_DISPONIBLE`
   sin `errores`): `commit 9eee239`.
-- #12 (`_generar_numero_factura`): ver conclusión abajo.
+- #12 (`_generar_numero_factura`): `commit b1a2ca0`, ver conclusión abajo.
 
 **#7 revisado, no es un bug activo:** el signal `mantener_totales_venta`
 recalcula `subtotal`/`total` desde `DetalleVenta` en cada post_save/post_delete
@@ -269,8 +269,8 @@ para revisión.
       en _carrito_de (#5, #6) — commit fcc873f
 - [x] (fuera del plan original) estadisticas de ventas infladas (#8) —
       commit 6aa83bd
-- [x] (fuera del plan original) numero_factura auto-bloqueado (#12) — commit
-      pendiente de registrar aqui tras el commit de esta sesion
+- [x] (fuera del plan original) numero_factura auto-bloqueado (#12) —
+      commit b1a2ca0
 - [x] #7 revisado — no es bug activo, sin fix (ver nota arriba)
 - [ ] #13 revisado — sin fix, requiere trabajo de infraestructura de lint
       frontend aparte (ver nota arriba)
