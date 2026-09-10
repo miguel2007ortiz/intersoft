@@ -110,14 +110,16 @@ ninguna es un bug critico abierto que bloquee la entrega.
    verificado en dev (restore de 43 tablas OK). El checklist de despliegue
    (`docs/CHECKLIST-SEGURIDAD.md`, `docs/DESPLIEGUE.md`) ya referencia estos
    comandos; el agendado (cron/systemd) sigue siendo operativo del servidor.
-7. **`npm run lint` sin ESLint real**: el script solo corre
-   `prettier --check` sobre 4 archivos fijos (`vitest-base.config.ts`,
-   `src/test-setup.ts` y dos componentes); no hay `@angular-eslint`
-   instalado ni configurado. Ampliar el `--check` a todo `src/` sin más
-   falla de inmediato (76 archivos hoy no pasan el formato de Prettier).
-   Armar ESLint real (instalar `@angular-eslint`, configurar reglas,
-   corregir las violaciones que aparezcan) queda como trabajo de
-   infraestructura de frontend aparte, no un fix quirúrgico de una línea.
+7. **`npm run lint` sin ESLint real**: tras el merge de `origin/main`, el
+   script ya corre `prettier --check` sobre **todo `src/`** (`"src/**/*.{ts,html,css}"`
+   + `vitest-base.config.ts` + `src/test-setup.ts`) y pasa en el estado actual
+   de la rama; lo que sigue pendiente es que **no hay `@angular-eslint`**
+   instalado ni configurado (el "lint" es solo formato, sin reglas estáticas:
+   `no-unused`, accesibilidad, `@angular-eslint/*`, etc.). Armar ESLint real
+   (instalar `@angular-eslint`, configurar reglas, corregir las violaciones
+   que aparezcan con fallback de reglas/supresiones justificadas) queda como
+   trabajo de infraestructura de frontend aparte — requiere aprobación
+   explícita del supervisor por ser dependencias nuevas en `package.json`.
 8. **Doble fuente de `subtotal`/`total` en `Venta` — verificado, no es un
    riesgo activo**: la vista calcula esos valores al crear la venta y el
    signal `mantener_totales_venta` los recalcula desde `DetalleVenta` en
