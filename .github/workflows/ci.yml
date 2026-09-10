@@ -64,9 +64,16 @@ jobs:
     env:
       # DEBUG=False ejercita las protecciones de produccion del settings
       # (SECRET_KEY y ALLOWED_HOSTS obligatorios; fail-fast si algo falta).
+      # El runner sirve todo por HTTP plano (sin TLS), asi que las 3
+      # banderas de "cookies/redirect seguros" se apagan explicitamente:
+      # sin esto, SECURE_SSL_REDIRECT por defecto (True con DEBUG=False)
+      # hace que SecurityMiddleware devuelva 301 en cada request de test.
       DEBUG: 'False'
       SECRET_KEY: ci-only-secret-para-pipeline-no-usar-en-produccion-2026
       ALLOWED_HOSTS: localhost,127.0.0.1
+      SECURE_SSL_REDIRECT: 'False'
+      SESSION_COOKIE_SECURE: 'False'
+      CSRF_COOKIE_SECURE: 'False'
       DB_NAME: intersoft1_db
       DB_USER: root
       DB_PASSWORD: root
