@@ -3,9 +3,11 @@ import { expect, request, test } from '@playwright/test';
 /**
  * Happy path del marketplace con el modulo de Envios (seccion 6 de AGENTS.md).
  * Requiere backend en 127.0.0.1:8000 con BD `intersoft1_db` migrada y
- * seed_demo aplicado. Usa la usuaria demo del seed (ana@elprogreso.co /
- * demo12345); en la BD demo es ADMINISTRADOR con cliente de marketplace y
- * direccion de envio, y un carrito pre-cargado.
+ * seed_demo aplicado. La compradora demo (ana@elprogreso.co / demo12345) es
+ * rol CLIENTE (`seed_demo.py`: `Perfil.objects.create(..., rol=_rol('CLIENTE'))`)
+ * con direccion de envio y un carrito pre-cargado; el personal demo
+ * (luis@elprogreso.co / demo12345) es rol EMPLEADO y es quien puede ver el
+ * panel de Envios (`personalGuard` bloquea CLIENTE y redirige al marketplace).
  *
  * Determinismo: antes de correr, el beforeAll garantiza por API que el
  * carrito de Ana tenga al menos un item (una corrida previa puede haber
@@ -13,14 +15,18 @@ import { expect, request, test } from '@playwright/test';
  */
 
 const API = process.env.API_URL ?? 'http://127.0.0.1:8000/api';
-const USUARIO = { email: 'ana@elprogreso.co', pass: 'demo12345' };
+const COMPRADORA = { email: 'ana@elprogreso.co', pass: 'demo12345' };
+const PERSONAL = { email: 'luis@elprogreso.co', pass: 'demo12345' };
 
 /** Loguea en la UI y espera a que el navegador guarde la sesion (evita la
  * carrera entre el click del login y la redireccion a la ruta objetivo). */
-async function cargarSesion(page: import('@playwright/test').Page): Promise<void> {
+async function cargarSesion(
+  page: import('@playwright/test').Page,
+  usuario: { email: string; pass: string },
+): Promise<void> {
   await page.goto('/login');
-  await page.locator('#email').fill(USUARIO.email);
-  await page.locator('#password').fill(USUARIO.pass);
+  await page.locator('#email').fill(usuario.email);
+  await page.locator('#password').fill(usuario.pass);
   await page.getByRole('button', { name: 'Iniciar sesion' }).click();
   await page.waitForFunction(() => window.localStorage.getItem('intersoft.token') !== null, null, {
     timeout: 20_000,
@@ -30,7 +36,7 @@ async function cargarSesion(page: import('@playwright/test').Page): Promise<void
 async function tokenComprador(): Promise<string> {
   const ctx = await request.newContext();
   const r = await ctx.post(`${API}/auth/login/`, {
-    data: { email: USUARIO.email, password: USUARIO.pass },
+    data: { email: COMPRADORA.email, password: COMPRADORA.pass },
   });
   return (await r.json()).access as string;
 }
@@ -50,7 +56,7 @@ test.beforeAll(async () => {
 });
 
 test('comprador completa el checkout, crea el envio y ve su seguimiento', async ({ page }) => {
-  await cargarSesion(page);
+  await cargarSesion(page, COMPRADORA);
 
   await page.goto('/carrito');
   await expect(page.getByText('Proceder al checkout')).toBeVisible();
@@ -66,7 +72,7 @@ test('comprador completa el checkout, crea el envio y ve su seguimiento', async 
 });
 
 test('el personal ve el panel de envios con el envio recien creado', async ({ page }) => {
-  await cargarSesion(page);
+  await cargarSesion(page, PERSONAL);
 
   await page.goto('/envios');
   await expect(page.locator('h1')).toHaveText('Envios');
