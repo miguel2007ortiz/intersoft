@@ -26,6 +26,7 @@ trabajo y decisiones informales viven en `vault/`.
 - [figma-marketplace/figma-guide-admin.md](../figma-marketplace/figma-guide-admin.md) — capturas del panel administrativo.
 
 ## Vault (notas de trabajo)
+- [vault/INDICE.md](../vault/INDICE.md) — índice de notas del vault (leer antes de cada tarea).
 - [vault/README.md](../vault/README.md) — qué es el vault y cómo se usa.
 - [vault/decisiones.md](../vault/decisiones.md) — registro informal de decisiones.
 - [vault/plantillas/decision-nueva.md](../vault/plantillas/decision-nueva.md) — plantilla de nueva decisión.

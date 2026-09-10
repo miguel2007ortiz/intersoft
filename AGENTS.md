@@ -20,6 +20,23 @@ despliegue a producción sin pasar los gates de la sección 4.
 
 ---
 
+## 1.1 Consulta obligatoria del vault (todas las sesiones)
+
+Claude (supervisión) **y** OpenCode (ejecución) leen `docs/INDICE.md` (MOC
+del repo) y `vault/INDICE.md` (índice de notas del proyecto) antes de cada
+tarea y después de un merge relevante. Reglas:
+
+- Si una nota del vault contradice el plan de una tarea, el ejecutor lo
+  declara en su reporte; el supervisor decide.
+- Decisiones nuevas del trabajo se registran en `vault/decisiones.md` (con la
+  plantilla `vault/plantillas/decision-nueva.md`), no solo en el commit.
+- `vault/auditoria-bugs-opencode.md` es el registro de bugs reales de OpenCode
+  y su estado; cualquier bug confirmado nuevo se agrega ahí antes del fix.
+- Lo que vive en `.obsidian/` (config local del vault) **no** se lee ni se
+  edita: para los agentes no existe; solo cuentan los archivos versionados.
+
+---
+
 ## 2. Flujo por tarea
 
 1. **Claude especifica** la tarea: objetivo, archivos/módulos tocados
