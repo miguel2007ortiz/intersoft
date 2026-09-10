@@ -20,6 +20,7 @@ from datetime import datetime
 from django.core.cache import cache as dj_cache
 from django.db import connection
 from django.utils import timezone
+from django.utils.html import escape
 
 from .cache_key import generacion
 
@@ -303,7 +304,11 @@ TIPOS_REPORTE = {
         'columnas': [('producto', 'Producto'), ('sku', 'SKU'),
                      ('categoria', 'Categoria'), ('unidades', 'Unidades'),
                      ('ingresos', 'Ingresos')],
-        'fecha': 'dia',
+        # La vista agrega el historico completo (no tiene columna de fecha,
+        # ver core/migrations/0006_dashboard_vistas.py); con 'fecha': 'dia'
+        # reporte() intentaba "ORDER BY dia" sobre una columna inexistente y
+        # /api/reportes/vista|exportar/?tipo=top_productos siempre daba 500.
+        'fecha': None,
     },
     'clientes_frecuentes': {
         'titulo': 'Clientes frecuentes',
@@ -387,7 +392,8 @@ def exportar_csv(tipo, f):
 
     escritor.writerow([nombre for _, nombre in def_reporte['columnas']])
     for fila in filas:
-        escritor.writerow([_presentar(fila.get(clave)) for clave, _ in def_reporte['columnas']])
+        escritor.writerow([_sanear_celda_csv(_presentar(fila.get(clave)))
+                           for clave, _ in def_reporte['columnas']])
 
     # BOM UTF-8 para que Excel detecte los acentos correctamente
     contenido = '\ufeff' + salida.getvalue()
@@ -400,6 +406,14 @@ def _presentar(valor):
     if hasattr(valor, 'strftime'):
         return valor.strftime('%Y-%m-%d')
     return str(valor)
+
+
+def _sanear_celda_csv(texto):
+    """Neutraliza inyeccion de formulas: Excel/Sheets ejecutan una celda que
+    empiece por = + - @ como formula si el CSV se abre directo (CWE-1236)."""
+    if texto and texto[0] in ('=', '+', '-', '@'):
+        return "'" + texto
+    return texto
 
 
 def _num(valor):
@@ -438,24 +452,26 @@ def exportar_html(tipo, f, empresa):
 
     cuerpo = "".join(
         "<tr>" + "".join(
-            f"<td>{_presentar(fila.get(clave))}</td>"
+            f"<td>{escape(_presentar(fila.get(clave)))}</td>"
             for clave, _ in def_reporte['columnas']
         ) + "</tr>"
         for fila in filas
     )
 
     encabezados = "".join(
-        f"<th>{nombre}</th>" for _, nombre in def_reporte['columnas']
+        f"<th>{escape(nombre)}</th>" for _, nombre in def_reporte['columnas']
     )
 
     tiene_filas_tabla = encabezados and cuerpo
     total_filas = len(filas)
+    titulo = escape(def_reporte['titulo'])
+    nombre_empresa = escape(_presentar(empresa.nombre))
 
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>{def_reporte['titulo']} - InterSoft</title>
+<title>{titulo} - InterSoft</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1a1f36;
@@ -475,9 +491,9 @@ def exportar_html(tipo, f, empresa):
 <body>
   <div class="pagina">
     <div class="marca">InterSoft</div>
-    <h1>{def_reporte['titulo']}</h1>
+    <h1>{titulo}</h1>
     <div class="meta">
-      Empresa: {_presentar(empresa.nombre)} &middot;
+      Empresa: {nombre_empresa} &middot;
       Rango: {f.fecha_inicio or 'inicio'} a {f.fecha_fin or 'hoy'} &middot;
       {total_filas} registro(s) &middot;
       Generado: {timezone.localtime().strftime('%Y-%m-%d %H:%M')}

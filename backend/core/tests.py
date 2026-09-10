@@ -643,6 +643,37 @@ class DashboardReportesTest(BaseCatalogoTest):
         self.assertIn("attachment", res["Content-Disposition"])
         self.assertTrue(res.content.startswith(b'\xef\xbb\xbf'))  # BOM UTF-8
 
+    def test_exportar_pdf_html_escapa_datos_de_negocio(self):
+        """Un producto con nombre/sku maliciosos no debe inyectar HTML/JS
+        en el reporte exportado (regresion del hallazgo de XSS almacenado)."""
+        malicioso = Producto.objects.create(
+            empresa=self.empresa, nombre='<script>alert(1)</script>',
+            sku='=CMD()', precio=1000, stock=5, stock_minimo=1,
+            categoria=self.cat2)
+        self._venta_con_detalle(malicioso, 1, 1000)
+        res = self.api_como(self.admin).get(
+            "/api/reportes/exportar/",
+            {"tipo": "top_productos", "formato": "pdf"})
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode('utf-8')
+        self.assertNotIn('<script>alert(1)</script>', html)
+        self.assertIn('&lt;script&gt;', html)
+
+    def test_exportar_excel_csv_neutraliza_inyeccion_de_formula(self):
+        """Una celda que empiece por = + - @ se ejecuta como formula en
+        Excel/Sheets si no se prefija; regresion del hallazgo de CSV injection."""
+        malicioso = Producto.objects.create(
+            empresa=self.empresa, nombre='=HYPERLINK("http://evil")',
+            sku='PRD-EVIL', precio=1000, stock=5, stock_minimo=1,
+            categoria=self.cat2)
+        self._venta_con_detalle(malicioso, 1, 1000)
+        res = self.api_como(self.admin).get(
+            "/api/reportes/exportar/",
+            {"tipo": "top_productos", "formato": "excel"})
+        contenido = res.content.decode('utf-8-sig')
+        self.assertNotIn('\n=HYPERLINK', contenido)
+        self.assertIn("'=HYPERLINK", contenido)
+
     def test_exportar_pdf_html(self):
         res = self.api_como(self.admin).get(
             "/api/reportes/exportar/",
