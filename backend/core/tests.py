@@ -2636,6 +2636,47 @@ class VentasComplementoTest(BaseCatalogoTest):
                                   api.get("/api/inventario/productos/?limite=abc").data["resultados"]])
 
 
+class VentasEstadisticasTest(BaseCatalogoTest):
+    """Regresion: las estadisticas de /api/ventas/ (Sum('total')) sumaban
+    TODAS las ventas del filtro, incluidas 'anulada'/'pendiente', asi que
+    sin un ?estado explicito el ingreso mostrado por defecto quedaba
+    inflado con ventas que nunca se cobraron."""
+
+    def _pos(self, api, cantidad=1):
+        return api.post("/api/ventas/pos/", {
+            "cliente": str(self.cliente.id),
+            "metodo_pago": "efectivo",
+            "detalles": [{"producto": str(self.producto.id), "cantidad": cantidad}],
+        }, format="json")
+
+    def test_sin_filtro_estado_ignora_anuladas_en_estadisticas(self):
+        api = self.api_como(self.admin)
+        completada = Venta.objects.get(pk=self._pos(api).json()["id"])
+        anulada = Venta.objects.get(pk=self._pos(api).json()["id"])
+        api.post(f"/api/ventas/{anulada.id}/anular/", {"motivo": "cliente se arrepintio"},
+                format="json")
+
+        resp = api.get("/api/ventas/")
+        self.assertEqual(resp.status_code, 200)
+        # Ambas ventas siguen apareciendo en la lista...
+        self.assertEqual(resp.data["total"], 2)
+        # ...pero la anulada no debe contar en el ingreso ni en el conteo.
+        self.assertEqual(Decimal(resp.data["estadisticas"]["total_ventas"]),
+                         completada.total)
+        self.assertEqual(resp.data["estadisticas"]["total_registros"], 1)
+
+    def test_filtro_estado_explicito_respeta_ese_estado_en_estadisticas(self):
+        api = self.api_como(self.admin)
+        anulada = Venta.objects.get(pk=self._pos(api).json()["id"])
+        api.post(f"/api/ventas/{anulada.id}/anular/", {"motivo": "prueba"}, format="json")
+
+        resp = api.get("/api/ventas/", {"estado": "anulada"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["estadisticas"]["total_registros"], 1)
+        anulada.refresh_from_db()
+        self.assertEqual(Decimal(resp.data["estadisticas"]["total_ventas"]), anulada.total)
+
+
 class EnvioVentasComplementoTest(BaseEnvioTest):
     """Ramas no ejercitadas de la API de envios en views_ventas.py."""
 
