@@ -8,8 +8,11 @@
 
 Las capturas reales del marketplace (desktop 1440×1000 y móvil 375×812) y los
 tokens exportables a Figma están en **`figma-marketplace/`** (`tokens.json` y
-`capturas/`). Esa carpeta es un artefacto externo de diseño y **no se versiona**
-en el repo.
+`capturas/`). El panel administrativo tiene su propio set: **`capturas-admin/`**
+(17 pantallas desktop + 2 móviles, sesión ADMINISTRADOR) y la guía
+**`figma-guide-admin.md`**, regenerables con
+`frontend/scripts/capturas-figma-admin.mjs`. La carpeta `figma-marketplace/`
+queda en el repo como referencia de diseño versionada (restaurada del histórico).
 
 ---
 

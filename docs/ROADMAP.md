@@ -170,6 +170,9 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 ## Fase E — Calidad de producto
 - **E1. Design system vivo**: tokens de `styles.css` + capturas `figma-marketplace/` → documentar
   el sistema (colores, tipografía, componentes de tienda). **Hecho** → `docs/DESIGN_SYSTEM.md`.
+  El panel administrativo se sumó al paquete de diseño: `figma-marketplace/capturas-admin/`
+  (17 pantallas desktop + 2 móviles con sesión ADMINISTRADOR) y `figma-guide-admin.md`,
+  regenerables con `frontend/scripts/capturas-figma-admin.mjs`. **Hecho**.
 - **E2. Validar descarga de PDF/XML** de facturas y notas crédito en todos los casos (tests e2e). **Hecho**.
 
 ---
