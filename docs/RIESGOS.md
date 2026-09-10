@@ -1,7 +1,7 @@
 # Riesgos — InterSoft (resumido al cierre)
 
 Estado al cierre de la entrega. **Resueltos** = verificados por código y/o
-pruebas (241 backend + 20 frontend). **Pendientes** = mejoras/deudas conocidas,
+pruebas (539 backend + 78 frontend). **Pendientes** = mejoras/deudas conocidas,
 ninguna es un bug critico abierto que bloquee la entrega.
 
 ---
@@ -17,9 +17,16 @@ ninguna es un bug critico abierto que bloquee la entrega.
 | Nota crédito inconsistente (descuadre de stock) | Venta bloqueada y flujo (crear+enviar+revertir) atómico. |
 | Anulación fuera de transaccion | Locks de venta y productos movidos **dentro** del `atomic`. |
 | Ajuste de inventario perdía el lock | `select_for_update` dentro del `atomic` (antes se liberaba al salir). |
-| Correlativo `numero_factura` duplicado | Fila de `Empresa` bloqueada para serializar el consecutivo. |
+| Correlativo `numero_factura` duplicado | `Venta.save()` bloquea la fila de `Empresa` (`select_for_update`) y hace el conteo + el insert dentro del mismo `transaction.atomic()`, sin soltar el lock entre medio: seguro por sí solo, sin depender de que el caller bloquee antes (`commit b1a2ca0`). |
+| XSS almacenado al exportar reportes en HTML (`analytics.exportar_html`) | Escapado de `producto`, `sku`, `categoria`, `cliente`, `empresa.nombre` antes de interpolar en el f-string HTML (`commit 75dbc90`). |
+| CSV/formula injection en exportación de reportes (`analytics.exportar_csv`) | Celdas que empiezan con `= + - @` se neutralizan antes de escribirse (`commit 75dbc90`). |
+| Llamada SOAP a la DIAN dentro de `transaction.atomic()` con la venta bloqueada, sin `timeout` en el `Transport` de zeep | Llamada movida fuera del `atomic`; `Transport` con `timeout` explícito (`commit 17c1d0a`). |
+| `IntegrityError` no capturado al reintentar una nota crédito rechazada (violación de `unique=True` en `numero`) | `try/except IntegrityError` → error de dominio en vez de 500 (`commit 17c1d0a`). |
+| RBAC grueso (`EsAdministrador`/`EsPersonal`) hardcodeado por `perfil.rol.nombre`, ignoraba roles personalizados por empresa y no protegía contra `perfil.rol is None` | Fallback por permiso asignado (`perfil.tiene_permiso(...)` / `rol.rol_permisos.exists()`) además del nombre de rol base, y guard contra `rol is None` (`commit f03b3b5`). |
+| Pasarela de pago se cobraba antes de reservar stock (sin reverso si el stock fallaba después) + carrera en `Carrito.objects.create()` sobre el `OneToOneField` | Checkout reordenado a reservar stock → cobrar → confirmar/revertir; `_carrito_de` usa `get_or_create` (`commit fcc873f`). |
+| Estadísticas de ventas (`VentasView.get`) sumaban ingresos de ventas anuladas/pendientes salvo filtro explícito | Por defecto solo cuentan ventas `completada`, salvo que el caller filtre `estado` explícitamente (`commit 6aa83bd`). |
 | Grafo de migraciones con dos ramas `0010` | Merge `core/0014` (vacío) + índices aditivos `0015`; `makemigrations --check --dry-run` limpio; suite verde desde cero. |
-| Errores de API con shapes inconsistentes / con tracebacks | Manejador global (`core/exceptions.py`): siempre `{codigo, detalle, errores}`, sin trazas ni datos sensibles. |
+| Errores de API con shapes inconsistentes / con tracebacks | Manejador global (`core/exceptions.py`): siempre `{codigo, detalle, errores}`, sin trazas ni datos sensibles. El fallback del 500 no controlado devolvía el shape por defecto de DRF (`{'detail': ...}`) y la respuesta 502 de `IA_NO_DISPONIBLE` omitía `errores`; ambos ya cumplen el contrato (`commit 9eee239`). |
 | Entradas no validadas (fechas, precios, `categoria`) | Validación estricta en ventas/dashboard/reportes/catálogo → 400 uniforme. |
 | `url_stream` inyectable (`javascript:`, etc.) | Solo `http(s)`, `rtsp`, `rtmp`; vacío permitido (cámara sin video). |
 | Listados sin tope (DoS por filas) | Paginación acotada a 200 (default 50) en productos, usuarios, pedidos, inventario. |
@@ -103,6 +110,22 @@ ninguna es un bug critico abierto que bloquee la entrega.
    verificado en dev (restore de 43 tablas OK). El checklist de despliegue
    (`docs/CHECKLIST-SEGURIDAD.md`, `docs/DESPLIEGUE.md`) ya referencia estos
    comandos; el agendado (cron/systemd) sigue siendo operativo del servidor.
+7. **`npm run lint` sin ESLint real**: el script solo corre
+   `prettier --check` sobre 4 archivos fijos (`vitest-base.config.ts`,
+   `src/test-setup.ts` y dos componentes); no hay `@angular-eslint`
+   instalado ni configurado. Ampliar el `--check` a todo `src/` sin más
+   falla de inmediato (76 archivos hoy no pasan el formato de Prettier).
+   Armar ESLint real (instalar `@angular-eslint`, configurar reglas,
+   corregir las violaciones que aparezcan) queda como trabajo de
+   infraestructura de frontend aparte, no un fix quirúrgico de una línea.
+8. **Doble fuente de `subtotal`/`total` en `Venta` — verificado, no es un
+   riesgo activo**: la vista calcula esos valores al crear la venta y el
+   signal `mantener_totales_venta` los recalcula desde `DetalleVenta` en
+   cada `post_save`/`post_delete`; se revisó el código y no existe hoy
+   ningún camino que mute `descuento` sin tocar `DetalleVenta` en la misma
+   operación, así que el signal es la única fuente de verdad real y no hay
+   inconsistencia posible con el código actual. Se documenta como riesgo
+   revisado y cerrado, sin cambios de código.
 
 > Documentación cruzada: requisitos e instalación en `README.md` raíz;
 > especificos de backend en `backend/README.md`; calidad frontend en
