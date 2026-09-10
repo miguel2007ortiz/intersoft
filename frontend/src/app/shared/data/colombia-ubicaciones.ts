@@ -1,3 +1,14 @@
+/**
+ * Departamentos y ciudades de Colombia
+ *
+ * Que hace: tabla fija de departamentos con sus ciudades para los selectores de
+ * direccion.
+ * Donde se usa: registro de comprador, checkout y datos de empresa.
+ * Por que asi: es dato que no cambia; tenerlo en el frontend evita una peticion
+ * solo para llenar un desplegable. Elegir de una lista en vez de escribir a
+ * mano evita "Bogota", "bogota" y "Bogotá" como tres ciudades distintas.
+ */
+
 /** Departamentos y ciudades principales de Colombia, para listas de
  * direccion (registro de comprador, checkout). No es un listado DIVIPOLA
  * exhaustivo: incluye la capital de cada departamento y sus municipios
@@ -9,7 +20,10 @@ export interface DepartamentoColombia {
 
 export const DEPARTAMENTOS_COLOMBIA: DepartamentoColombia[] = [
   { nombre: 'Amazonas', ciudades: ['Leticia', 'Puerto Nariño'] },
-  { nombre: 'Antioquia', ciudades: ['Medellín', 'Bello', 'Envigado', 'Itagüí', 'Rionegro', 'Apartadó', 'Turbo'] },
+  {
+    nombre: 'Antioquia',
+    ciudades: ['Medellín', 'Bello', 'Envigado', 'Itagüí', 'Rionegro', 'Apartadó', 'Turbo'],
+  },
   { nombre: 'Arauca', ciudades: ['Arauca', 'Saravena', 'Tame'] },
   { nombre: 'Atlántico', ciudades: ['Barranquilla', 'Soledad', 'Malambo', 'Sabanalarga'] },
   { nombre: 'Bogotá D.C.', ciudades: ['Bogotá'] },
@@ -35,7 +49,10 @@ export const DEPARTAMENTOS_COLOMBIA: DepartamentoColombia[] = [
   { nombre: 'Quindío', ciudades: ['Armenia', 'Calarcá'] },
   { nombre: 'Risaralda', ciudades: ['Pereira', 'Dosquebradas', 'Santa Rosa de Cabal'] },
   { nombre: 'San Andrés y Providencia', ciudades: ['San Andrés', 'Providencia'] },
-  { nombre: 'Santander', ciudades: ['Bucaramanga', 'Floridablanca', 'Girón', 'Piedecuesta', 'Barrancabermeja'] },
+  {
+    nombre: 'Santander',
+    ciudades: ['Bucaramanga', 'Floridablanca', 'Girón', 'Piedecuesta', 'Barrancabermeja'],
+  },
   { nombre: 'Sucre', ciudades: ['Sincelejo', 'Corozal'] },
   { nombre: 'Tolima', ciudades: ['Ibagué', 'Espinal'] },
   { nombre: 'Valle del Cauca', ciudades: ['Cali', 'Palmira', 'Buenaventura', 'Tuluá', 'Cartago'] },

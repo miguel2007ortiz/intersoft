@@ -1,7 +1,21 @@
+/**
+ * Camaras — monitoreo del local
+ *
+ * Que hace: lista las camaras, su estado y los eventos registrados.
+ * Ruta: /monitoreo/camaras (authGuard + adminGuard).
+ * Por que asi: es una pantalla de consulta; el video y la conexion los sirve el
+ * backend, aqui solo se pinta lo que devuelve.
+ */
+
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MonitoreoService } from '../../core/services/monitoreo.service';
-import { Camara, CamaraEscritura, ErrorMonitoreo, GrabacionCamara } from '../../core/models/monitoreo.model';
+import {
+  Camara,
+  CamaraEscritura,
+  ErrorMonitoreo,
+  GrabacionCamara,
+} from '../../core/models/monitoreo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { ConfirmacionService } from '../../core/services/confirmacion.service';
 
@@ -50,8 +64,12 @@ export class CamarasComponent implements OnInit {
     });
   }
 
-  abrirFormulario(): void { this.mostrandoForm.set(true); }
-  cerrarFormulario(): void { this.mostrandoForm.set(false); }
+  abrirFormulario(): void {
+    this.mostrandoForm.set(true);
+  }
+  cerrarFormulario(): void {
+    this.mostrandoForm.set(false);
+  }
 
   crearCamara(): void {
     if (!this.nombre().trim()) return;
@@ -65,10 +83,15 @@ export class CamarasComponent implements OnInit {
     this.monitoreo.crearCamara(datos).subscribe({
       next: () => {
         this.cerrarFormulario();
-        this.nombre.set(''); this.ubicacion.set(''); this.urlStream.set('');
+        this.nombre.set('');
+        this.ubicacion.set('');
+        this.urlStream.set('');
         this.cargarCamaras();
       },
-      error: (e: ErrorMonitoreo) => { this.error.set(e.detalle ?? 'No se pudo crear la camara.'); this.guardando.set(false); },
+      error: (e: ErrorMonitoreo) => {
+        this.error.set(e.detalle ?? 'No se pudo crear la camara.');
+        this.guardando.set(false);
+      },
       complete: () => this.guardando.set(false),
     });
   }
@@ -99,7 +122,10 @@ export class CamarasComponent implements OnInit {
     this.grabacion.set(null);
   }
 
-  cerrarGrabadora(): void { this.camaraActiva.set(null); this.grabacion.set(null); }
+  cerrarGrabadora(): void {
+    this.camaraActiva.set(null);
+    this.grabacion.set(null);
+  }
 
   consultarGrabacion(): void {
     const c = this.camaraActiva();
@@ -107,7 +133,10 @@ export class CamarasComponent implements OnInit {
     this.consultando.set(true);
     this.grabacion.set(null);
     this.monitoreo.grabacion(c.id, this.fecha(), this.hora()).subscribe({
-      next: (g) => { this.grabacion.set(g); this.consultando.set(false); },
+      next: (g) => {
+        this.grabacion.set(g);
+        this.consultando.set(false);
+      },
       error: (e: ErrorMonitoreo) => {
         const detalle = e.detalle ?? 'No se encontro la grabacion.';
         this.grabacion.set({ disponible: false, detalle });

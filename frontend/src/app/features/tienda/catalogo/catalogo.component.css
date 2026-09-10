@@ -1386,3 +1386,9 @@
     right: 8px;
   }
 }
+
+/* Aviso flotante de error (mismo sitio que el toast de exito). */
+.toast-error {
+  background: var(--error);
+  color: #fff;
+}

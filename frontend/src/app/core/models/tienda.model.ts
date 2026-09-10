@@ -1,3 +1,15 @@
+/**
+ * Modelos del marketplace — contrato con /api/tienda/
+ *
+ * Que hace: describe producto, categoria, carrito, cupon, pedido, comentario,
+ * favorito y los resultados del pago.
+ * Donde se usa: TiendaService y las pantallas de la tienda.
+ * Por que asi: los nombres son EXACTAMENTE los de la API (por ejemplo el
+ * favorito trae `producto` con el id y `producto_obj` con el producto entero).
+ * Si el backend cambia un campo, TypeScript marca el error en el sitio donde
+ * se usa, en vez de fallar callado en tiempo de ejecucion.
+ */
+
 /** Tipos de la fase 5: tienda virtual, carrito y checkout. */
 
 export interface ProductoTienda {

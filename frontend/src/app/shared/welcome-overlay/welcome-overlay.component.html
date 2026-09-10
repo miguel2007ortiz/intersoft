@@ -1,3 +1,7 @@
+<!--
+  Saludo a pantalla completa tras iniciar sesion (2,4 s). Vive en la raiz
+  para seguir visible mientras el Router ya pinta el panel.
+-->
 @if (welcome.activo()) {
   <div class="fondo" role="status" aria-live="polite" (click)="cerrar()">
     <span class="orbe orbe-1"></span>

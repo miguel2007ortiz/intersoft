@@ -1,3 +1,13 @@
+/**
+ * Recuperar contrasena — paso 1 de 2
+ *
+ * Que hace: pide el correo y dispara el envio del enlace de restablecimiento.
+ * Ruta: /recuperar (publica).
+ * Por que asi: la respuesta es siempre la misma haya o no cuenta con ese
+ * correo. Es a proposito: si dijera "ese correo no existe" cualquiera podria
+ * averiguar que cuentas hay registradas.
+ */
+
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';

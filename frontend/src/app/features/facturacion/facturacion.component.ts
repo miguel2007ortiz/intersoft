@@ -1,3 +1,14 @@
+/**
+ * Facturacion electronica — DIAN (Flujo 2)
+ *
+ * Que hace: genera la factura electronica de una venta, muestra su estado
+ * (aceptada, rechazada, pendiente), permite reenviarla y emitir notas credito.
+ * Ruta: /facturacion (authGuard + personalGuard).
+ * Por que asi: el envio a la DIAN es asincrono: la pantalla muestra el estado
+ * que reporta el backend y ofrece reenviar, en vez de bloquear al usuario
+ * esperando una respuesta que puede tardar.
+ */
+
 import { DatePipe, DecimalPipe, SlicePipe } from '@angular/common';
 import { Component, DestroyRef, HostListener, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -21,10 +32,16 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
           <button [class.activo]="pestana() === 'facturas'" (click)="pestana.set('facturas')">
             Facturas Electronicas
           </button>
-          <button [class.activo]="pestana() === 'notas'" (click)="pestana.set('notas'); cargarNotasCredito()">
+          <button
+            [class.activo]="pestana() === 'notas'"
+            (click)="pestana.set('notas'); cargarNotasCredito()"
+          >
             Notas Credito
           </button>
-          <button [class.activo]="pestana() === 'generar'" (click)="pestana.set('generar'); cargarVentas()">
+          <button
+            [class.activo]="pestana() === 'generar'"
+            (click)="pestana.set('generar'); cargarVentas()"
+          >
             Generar Factura
           </button>
         </nav>
@@ -32,9 +49,19 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
         <!-- ===== TAB: Facturas ===== -->
         @if (pestana() === 'facturas') {
           <section class="filtros">
-            <input type="text" aria-label="Buscar factura" placeholder="Buscar por numero, CUFE, cliente..."
-                   [(ngModel)]="busquedaFactura" (input)="buscarFacturasDebounced()" class="input" />
-            <select [(ngModel)]="filtroEstado" (change)="cargarFacturas()" class="input input-select">
+            <input
+              type="text"
+              aria-label="Buscar factura"
+              placeholder="Buscar por numero, CUFE, cliente..."
+              [(ngModel)]="busquedaFactura"
+              (input)="buscarFacturasDebounced()"
+              class="input"
+            />
+            <select
+              [(ngModel)]="filtroEstado"
+              (change)="cargarFacturas()"
+              class="input input-select"
+            >
               <option value="">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
               <option value="enviada">Enviada</option>
@@ -75,21 +102,34 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
                         {{ f.estado_display }}
                       </span>
                     </td>
-                    <td class="monospace cufe">{{ f.cufe ? (f.cufe | slice:0:20) + '...' : '—' }}</td>
+                    <td class="monospace cufe">
+                      {{ f.cufe ? (f.cufe | slice: 0 : 20) + '...' : '—' }}
+                    </td>
                     <td class="acciones-celda">
                       @if (f.estado === 'aprobada') {
                         <button class="btn-sm btn-primary" (click)="reenviar(f)">Reenviar</button>
                       }
                       @if (f.pdf) {
-                        <a class="btn-sm btn-outline" [href]="f.pdf" target="_blank" rel="noopener">PDF</a>
+                        <a class="btn-sm btn-outline" [href]="f.pdf" target="_blank" rel="noopener"
+                          >PDF</a
+                        >
                       }
                       @if (f.xml) {
-                        <a class="btn-sm btn-outline" [href]="f.xml" target="_blank" rel="noopener">XML</a>
+                        <a class="btn-sm btn-outline" [href]="f.xml" target="_blank" rel="noopener"
+                          >XML</a
+                        >
                       }
                       @if (f.estado === 'fallida' || f.estado === 'rechazada') {
-                        <button class="btn-sm btn-warning" (click)="reintentar(f)"
-                                [disabled]="accionId() === f.id">
-                          @if (accionId() === f.id) { Reintentando... } @else { Reintentar }
+                        <button
+                          class="btn-sm btn-warning"
+                          (click)="reintentar(f)"
+                          [disabled]="accionId() === f.id"
+                        >
+                          @if (accionId() === f.id) {
+                            Reintentando...
+                          } @else {
+                            Reintentar
+                          }
                         </button>
                       }
                       @if (f.estado === 'rechazada' && f.motivo_rechazo) {
@@ -108,7 +148,9 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
         <!-- ===== TAB: Generar Factura ===== -->
         @if (pestana() === 'generar') {
           <section class="seccion">
-            <p class="hint">Selecciona una venta completada sin factura electronica para generarla.</p>
+            <p class="hint">
+              Selecciona una venta completada sin factura electronica para generarla.
+            </p>
             @if (cargandoVentas()) {
               <div class="cargando">Cargando ventas...</div>
             } @else if (!ventasDisponibles().length) {
@@ -130,12 +172,18 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
                       <td>{{ v.numero_factura }}</td>
                       <td>{{ v.cliente_nombre }}</td>
                       <td>{{ v.total | number }} COP</td>
-                      <td>{{ v.fecha | date:'dd/MM/yyyy HH:mm' }}</td>
+                      <td>{{ v.fecha | date: 'dd/MM/yyyy HH:mm' }}</td>
                       <td>
-                        <button class="btn-sm btn-primary"
-                                [disabled]="generandoId() === v.id"
-                                (click)="generarFactura(v)">
-                          @if (generandoId() === v.id) { Generando... } @else { Generar FE }
+                        <button
+                          class="btn-sm btn-primary"
+                          [disabled]="generandoId() === v.id"
+                          (click)="generarFactura(v)"
+                        >
+                          @if (generandoId() === v.id) {
+                            Generando...
+                          } @else {
+                            Generar FE
+                          }
                         </button>
                       </td>
                     </tr>
@@ -151,7 +199,10 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
           <section class="seccion">
             <div class="section-header">
               <p class="hint">Notas credito para reversar ventas ya facturadas ante la DIAN.</p>
-              <button class="btn-sm btn-primary" (click)="pestana.set('crear-nc'); cargarVentasFacturadas()">
+              <button
+                class="btn-sm btn-primary"
+                (click)="pestana.set('crear-nc'); cargarVentasFacturadas()"
+              >
                 + Nota Credito
               </button>
             </div>
@@ -182,7 +233,16 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
                       <td>{{ nc.cliente_nombre }}</td>
                       <td>{{ nc.venta_total | number }} COP</td>
                       <td>
-                        <span class="badge" [attr.data-estado]="nc.estado === 'aprobada' ? 'aprobada' : nc.estado === 'rechazada' ? 'rechazada' : 'pendiente'">
+                        <span
+                          class="badge"
+                          [attr.data-estado]="
+                            nc.estado === 'aprobada'
+                              ? 'aprobada'
+                              : nc.estado === 'rechazada'
+                                ? 'rechazada'
+                                : 'pendiente'
+                          "
+                        >
                           {{ nc.estado_display }}
                         </span>
                       </td>
@@ -190,12 +250,26 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
                       <td>{{ nc.motivo }}</td>
                       <td class="acciones-celda">
                         @if (nc.pdf) {
-                          <a class="btn-sm btn-outline" [href]="nc.pdf" target="_blank" rel="noopener">PDF</a>
+                          <a
+                            class="btn-sm btn-outline"
+                            [href]="nc.pdf"
+                            target="_blank"
+                            rel="noopener"
+                            >PDF</a
+                          >
                         }
                         @if (nc.xml) {
-                          <a class="btn-sm btn-outline" [href]="nc.xml" target="_blank" rel="noopener">XML</a>
+                          <a
+                            class="btn-sm btn-outline"
+                            [href]="nc.xml"
+                            target="_blank"
+                            rel="noopener"
+                            >XML</a
+                          >
                         }
-                        @if (!nc.pdf && !nc.xml) { — }
+                        @if (!nc.pdf && !nc.xml) {
+                          —
+                        }
                       </td>
                     </tr>
                   }
@@ -217,14 +291,27 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
                 <select [(ngModel)]="ventaNcSeleccionada" class="input">
                   <option value="">Seleccionar venta...</option>
                   @for (v of ventasFacturadas(); track v.id) {
-                    <option [value]="v.id">{{ v.numero_factura }} — {{ v.cliente_nombre }} — {{ v.total | number }} COP</option>
+                    <option [value]="v.id">
+                      {{ v.numero_factura }} — {{ v.cliente_nombre }} — {{ v.total | number }} COP
+                    </option>
                   }
                 </select>
-                <textarea [(ngModel)]="motivoNc" placeholder="Motivo de la nota credito..."
-                          class="input" rows="3"></textarea>
-                <button class="btn-primary" [disabled]="!ventaNcSeleccionada || !motivoNc || creandoNc()"
-                        (click)="crearNotaCredito()">
-                  @if (creandoNc()) { Procesando... } @else { Crear Nota Credito }
+                <textarea
+                  [(ngModel)]="motivoNc"
+                  placeholder="Motivo de la nota credito..."
+                  class="input"
+                  rows="3"
+                ></textarea>
+                <button
+                  class="btn-primary"
+                  [disabled]="!ventaNcSeleccionada || !motivoNc || creandoNc()"
+                  (click)="crearNotaCredito()"
+                >
+                  @if (creandoNc()) {
+                    Procesando...
+                  } @else {
+                    Crear Nota Credito
+                  }
                 </button>
               </div>
             }
@@ -234,8 +321,13 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
         <!-- Modal detalle / motivo rechazo -->
         @if (detalleVisible()) {
           <div class="modal-overlay" (click)="detalleVisible.set(false)">
-            <div class="modal" role="dialog" aria-modal="true"
-                 aria-labelledby="detalle-titulo" (click)="$event.stopPropagation()">
+            <div
+              class="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="detalle-titulo"
+              (click)="$event.stopPropagation()"
+            >
               <h3 id="detalle-titulo">Detalle de Factura</h3>
               @if (detalleSeleccion()) {
                 <div class="modal-body">
@@ -250,15 +342,30 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
                     </div>
                   }
                   <p><strong>Intentos:</strong> {{ detalleSeleccion()!.intentos }}</p>
-                  <p><strong>Correo enviado:</strong> {{ detalleSeleccion()!.enviado_correo ? 'Si' : 'No' }}</p>
+                  <p>
+                    <strong>Correo enviado:</strong>
+                    {{ detalleSeleccion()!.enviado_correo ? 'Si' : 'No' }}
+                  </p>
                   @if (detalleSeleccion()!.pdf || detalleSeleccion()!.xml) {
                     <p><strong>Comprobantes:</strong></p>
                     <div class="acciones-celda">
                       @if (detalleSeleccion()!.pdf) {
-                        <a class="btn-sm btn-outline" [href]="detalleSeleccion()!.pdf!" target="_blank" rel="noopener">PDF</a>
+                        <a
+                          class="btn-sm btn-outline"
+                          [href]="detalleSeleccion()!.pdf!"
+                          target="_blank"
+                          rel="noopener"
+                          >PDF</a
+                        >
                       }
                       @if (detalleSeleccion()!.xml) {
-                        <a class="btn-sm btn-outline" [href]="detalleSeleccion()!.xml!" target="_blank" rel="noopener">XML</a>
+                        <a
+                          class="btn-sm btn-outline"
+                          [href]="detalleSeleccion()!.xml!"
+                          target="_blank"
+                          rel="noopener"
+                          >XML</a
+                        >
                       }
                     </div>
                   }
@@ -272,17 +379,31 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
         <!-- Modal reenviar -->
         @if (reenviarVisible()) {
           <div class="modal-overlay" (click)="reenviarVisible.set(false)">
-            <div class="modal" role="dialog" aria-modal="true"
-                 aria-labelledby="reenviar-titulo" (click)="$event.stopPropagation()">
+            <div
+              class="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reenviar-titulo"
+              (click)="$event.stopPropagation()"
+            >
               <h3 id="reenviar-titulo">Reenviar Factura</h3>
-              <p>Factura: <strong>{{ facturaReenviar()?.numero }}</strong></p>
+              <p>
+                Factura: <strong>{{ facturaReenviar()?.numero }}</strong>
+              </p>
               <p>Cliente: {{ facturaReenviar()?.cliente_nombre }}</p>
               <div class="nc-form">
-                <input type="email" [(ngModel)]="emailReenvio" placeholder="Email destino (opcional)"
-                       class="input" />
-                <button class="btn-primary" [disabled]="reenviando()"
-                        (click)="confirmarReenvio()">
-                  @if (reenviando()) { Enviando... } @else { Enviar }
+                <input
+                  type="email"
+                  [(ngModel)]="emailReenvio"
+                  placeholder="Email destino (opcional)"
+                  class="input"
+                />
+                <button class="btn-primary" [disabled]="reenviando()" (click)="confirmarReenvio()">
+                  @if (reenviando()) {
+                    Enviando...
+                  } @else {
+                    Enviar
+                  }
                 </button>
                 <button class="btn-outline" (click)="reenviarVisible.set(false)">Cancelar</button>
               </div>
@@ -300,113 +421,278 @@ import { debounce, programarAviso } from '../../core/utils/temporizador.util';
       </div>
     </app-panel-shell>
   `,
-  styles: [`
-    .facturacion { max-width: 1100px; margin: 0 auto; padding: var(--e5) var(--e4); }
-    .page-header { margin-bottom: var(--e4); }
-    .page-header h1 { margin: 0; font-size: clamp(22px, 4vw, 28px); }
+  styles: [
+    `
+      .facturacion {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: var(--e5) var(--e4);
+      }
+      .page-header {
+        margin-bottom: var(--e4);
+      }
+      .page-header h1 {
+        margin: 0;
+        font-size: clamp(22px, 4vw, 28px);
+      }
 
-    .tabs {
-      display: flex; gap: 0; border-bottom: 2px solid var(--linea);
-      margin-bottom: var(--e5);
-    }
-    .tabs button {
-      padding: 10px 20px; border: 0; background: none; cursor: pointer;
-      font: inherit; font-size: 14px; color: var(--gris);
-      border-bottom: 2px solid transparent; margin-bottom: -2px;
-      transition: all .15s;
-    }
-    .tabs button:hover { color: var(--texto); }
-    .tabs button.activo {
-      color: var(--primario); font-weight: 600;
-      border-bottom-color: var(--primario);
-    }
+      .tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--linea);
+        margin-bottom: var(--e5);
+      }
+      .tabs button {
+        padding: 10px 20px;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        color: var(--gris);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        transition: all 0.15s;
+      }
+      .tabs button:hover {
+        color: var(--texto);
+      }
+      .tabs button.activo {
+        color: var(--primario);
+        font-weight: 600;
+        border-bottom-color: var(--primario);
+      }
 
-    .filtros { display: flex; gap: var(--e3); flex-wrap: wrap; margin-bottom: var(--e4); }
-    .input {
-      padding: 10px 14px; border: 1px solid var(--linea);
-      border-radius: 8px; font: inherit; font-size: 14px;
-      background: var(--blanco); transition: border-color .15s;
-    }
-    .input:focus { outline: none; border-color: var(--primario); }
-    .input-select { min-width: 180px; }
+      .filtros {
+        display: flex;
+        gap: var(--e3);
+        flex-wrap: wrap;
+        margin-bottom: var(--e4);
+      }
+      .input {
+        padding: 10px 14px;
+        border: 1px solid var(--linea);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 14px;
+        background: var(--blanco);
+        transition: border-color 0.15s;
+      }
+      .input:focus {
+        outline: none;
+        border-color: var(--primario);
+      }
+      .input-select {
+        min-width: 180px;
+      }
 
-    .cargando, .vacio { text-align: center; padding: var(--e6); color: var(--gris); font-size: 15px; }
-    .error-box {
-      background: #fef3f2; border: 1px solid #fecdca; border-radius: 8px;
-      padding: 12px 16px; color: #b42318; font-size: 14px;
-    }
+      .cargando,
+      .vacio {
+        text-align: center;
+        padding: var(--e6);
+        color: var(--gris);
+        font-size: 15px;
+      }
+      .error-box {
+        background: #fef3f2;
+        border: 1px solid #fecdca;
+        border-radius: 8px;
+        padding: 12px 16px;
+        color: #b42318;
+        font-size: 14px;
+      }
 
-    .tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .tabla th {
-      text-align: left; padding: 10px 8px;
-      border-bottom: 2px solid var(--linea); font-weight: 600; font-size: 13px;
-    }
-    .tabla td { padding: 10px 8px; border-bottom: 1px solid var(--linea); }
-    .monospace { font-family: monospace; font-size: 13px; }
-    .cufe { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .acciones-celda { display: flex; gap: 6px; flex-wrap: wrap; }
+      .tabla {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .tabla th {
+        text-align: left;
+        padding: 10px 8px;
+        border-bottom: 2px solid var(--linea);
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .tabla td {
+        padding: 10px 8px;
+        border-bottom: 1px solid var(--linea);
+      }
+      .monospace {
+        font-family: monospace;
+        font-size: 13px;
+      }
+      .cufe {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .acciones-celda {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
 
-    .badge {
-      display: inline-block; padding: 3px 10px; border-radius: 12px;
-      font-size: 12px; font-weight: 600; text-transform: uppercase;
-    }
-    .badge[data-estado="aprobada"] { background: #ecfdf3; color: #067647; }
-    .badge[data-estado="rechazada"] { background: #fef3f2; color: #b42318; }
-    .badge[data-estado="fallida"] { background: #fef3f2; color: #b42318; }
-    .badge[data-estado="pendiente"] { background: #fff8ed; color: #b54708; }
-    .badge[data-estado="enviada"] { background: #eff8ff; color: #175cd3; }
+      .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      .badge[data-estado='aprobada'] {
+        background: #ecfdf3;
+        color: #067647;
+      }
+      .badge[data-estado='rechazada'] {
+        background: #fef3f2;
+        color: #b42318;
+      }
+      .badge[data-estado='fallida'] {
+        background: #fef3f2;
+        color: #b42318;
+      }
+      .badge[data-estado='pendiente'] {
+        background: #fff8ed;
+        color: #b54708;
+      }
+      .badge[data-estado='enviada'] {
+        background: #eff8ff;
+        color: #175cd3;
+      }
 
-    .btn-sm {
-      padding: 4px 10px; border: 1px solid var(--linea); border-radius: 6px;
-      background: var(--blanco); cursor: pointer; font: inherit; font-size: 12px;
-      font-weight: 600; transition: all .15s;
-    }
-    .btn-sm:hover { border-color: var(--primario); }
-    .btn-sm:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-primary { background: var(--primario); color: #fff; border-color: var(--primario); }
-    .btn-primary:hover { opacity: .9; }
-    .btn-warning { background: #b54708; color: #fff; border-color: #b54708; }
-    .btn-outline { background: var(--blanco); }
+      .btn-sm {
+        padding: 4px 10px;
+        border: 1px solid var(--linea);
+        border-radius: 6px;
+        background: var(--blanco);
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        transition: all 0.15s;
+      }
+      .btn-sm:hover {
+        border-color: var(--primario);
+      }
+      .btn-sm:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-primary {
+        background: var(--primario);
+        color: #fff;
+        border-color: var(--primario);
+      }
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+      .btn-warning {
+        background: #b54708;
+        color: #fff;
+        border-color: #b54708;
+      }
+      .btn-outline {
+        background: var(--blanco);
+      }
 
-    .hint { font-size: 14px; color: var(--gris); margin-bottom: var(--e3); }
-    .section-header { display: flex; justify-content: space-between; align-items: center; }
-    .section-header .hint { margin-bottom: 0; }
+      .hint {
+        font-size: 14px;
+        color: var(--gris);
+        margin-bottom: var(--e3);
+      }
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .section-header .hint {
+        margin-bottom: 0;
+      }
 
-    .nc-form { display: flex; flex-direction: column; gap: var(--e3); max-width: 500px; }
-    .nc-form .btn-primary { align-self: flex-start; padding: 10px 24px; }
+      .nc-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--e3);
+        max-width: 500px;
+      }
+      .nc-form .btn-primary {
+        align-self: flex-start;
+        padding: 10px 24px;
+      }
 
-    .modal-overlay {
-      position: fixed; inset: 0; z-index: 9000;
-      background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center;
-    }
-    .modal {
-      background: var(--blanco); border-radius: 12px; padding: 24px;
-      max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
-    }
-    .modal h3 { margin: 0 0 var(--e3); }
-    .modal-body p { margin: 6px 0; font-size: 14px; }
-    .cufe-full {
-      background: #f1f5f9; padding: 10px; border-radius: 6px;
-      font-size: 12px; word-break: break-all; margin: 4px 0;
-    }
-    .motivo-rechazo {
-      background: #fef3f2; border: 1px solid #fecdca; border-radius: 6px;
-      padding: 10px; margin: 8px 0; color: #b42318; font-size: 13px;
-    }
-    .exito-inline {
-      background: #ecfdf3; border: 1px solid #d1fadf; border-radius: 6px;
-      padding: 10px; margin-top: var(--e2); color: #067647; font-size: 13px;
-    }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9000;
+        background: rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal {
+        background: var(--blanco);
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .modal h3 {
+        margin: 0 0 var(--e3);
+      }
+      .modal-body p {
+        margin: 6px 0;
+        font-size: 14px;
+      }
+      .cufe-full {
+        background: #f1f5f9;
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        word-break: break-all;
+        margin: 4px 0;
+      }
+      .motivo-rechazo {
+        background: #fef3f2;
+        border: 1px solid #fecdca;
+        border-radius: 6px;
+        padding: 10px;
+        margin: 8px 0;
+        color: #b42318;
+        font-size: 13px;
+      }
+      .exito-inline {
+        background: #ecfdf3;
+        border: 1px solid #d1fadf;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: var(--e2);
+        color: #067647;
+        font-size: 13px;
+      }
 
-    .exito-toast {
-      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
-      background: #067647; color: #fff; padding: 12px 24px;
-      border-radius: 8px; font-size: 14px; font-weight: 600;
-      box-shadow: 0 8px 24px rgba(6,118,71,.3);
-    }
-  `],
+      .exito-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 9999;
+        background: #067647;
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 8px 24px rgba(6, 118, 71, 0.3);
+      }
+    `,
+  ],
 })
-export class FacturacionComponent implements OnInit {  private readonly catalogo = inject(CatalogoService);
+export class FacturacionComponent implements OnInit {
+  private readonly catalogo = inject(CatalogoService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly pestana = signal<'facturas' | 'notas' | 'generar' | 'crear-nc'>('facturas');
@@ -446,13 +732,21 @@ export class FacturacionComponent implements OnInit {  private readonly catalogo
   cargarFacturas(): void {
     this.cargando.set(true);
     this.error.set('');
-    this.catalogo.listarFacturas({
-      busqueda: this.busquedaFactura,
-      estado: this.filtroEstado,
-    }).subscribe({
-      next: (r) => { this.facturas.set(r.resultados); this.cargando.set(false); },
-      error: (e) => { this.error.set(e.detalle || 'Error al cargar.'); this.cargando.set(false); },
-    });
+    this.catalogo
+      .listarFacturas({
+        busqueda: this.busquedaFactura,
+        estado: this.filtroEstado,
+      })
+      .subscribe({
+        next: (r) => {
+          this.facturas.set(r.resultados);
+          this.cargando.set(false);
+        },
+        error: (e) => {
+          this.error.set(e.detalle || 'Error al cargar.');
+          this.cargando.set(false);
+        },
+      });
   }
 
   cargarVentas(): void {
@@ -470,10 +764,10 @@ export class FacturacionComponent implements OnInit {  private readonly catalogo
     this.cargandoVentas.set(true);
     this.catalogo.listarFacturas({ estado: 'aprobada' }).subscribe({
       next: (r) => {
-        const ids = r.resultados.map(f => f.venta);
+        const ids = r.resultados.map((f) => f.venta);
         this.catalogo.listarVentas({ estado: 'completada' }).subscribe({
           next: (vr) => {
-            this.ventasFacturadas.set(vr.resultados.filter(v => ids.includes(v.id)));
+            this.ventasFacturadas.set(vr.resultados.filter((v) => ids.includes(v.id)));
             this.cargandoVentas.set(false);
           },
           error: () => this.cargandoVentas.set(false),
@@ -486,7 +780,10 @@ export class FacturacionComponent implements OnInit {  private readonly catalogo
   cargarNotasCredito(): void {
     this.cargandoNotas.set(true);
     this.catalogo.listarNotasCredito().subscribe({
-      next: (r) => { this.notasCredito.set(r.resultados); this.cargandoNotas.set(false); },
+      next: (r) => {
+        this.notasCredito.set(r.resultados);
+        this.cargandoNotas.set(false);
+      },
       error: () => this.cargandoNotas.set(false),
     });
   }
@@ -540,7 +837,14 @@ export class FacturacionComponent implements OnInit {  private readonly catalogo
       next: (r) => {
         this.reenviando.set(false);
         this.exitoReenvio.set(r.detalle);
-        programarAviso(this.destroyRef, () => { this.reenviarVisible.set(false); this.exitoReenvio.set(''); }, 3000);
+        programarAviso(
+          this.destroyRef,
+          () => {
+            this.reenviarVisible.set(false);
+            this.exitoReenvio.set('');
+          },
+          3000,
+        );
       },
       error: (e) => {
         this.exitoReenvio.set('');

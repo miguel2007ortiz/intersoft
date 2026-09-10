@@ -1,6 +1,23 @@
+/**
+ * NavProgress — barra fina de progreso al cambiar de pantalla
+ *
+ * Que hace: escucha los eventos del Router y muestra una barra arriba
+ * mientras se descarga el codigo de la pantalla destino.
+ * Donde se usa: montado en app.html, siempre visible.
+ * Por que asi: como las rutas cargan su codigo bajo demanda (loadComponent),
+ * puede haber un instante sin nada en pantalla; esta barra da la senal de que
+ * la aplicacion esta trabajando y no colgada.
+ */
+
 import { Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
+import {
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  NavigationStart,
+  Router,
+} from '@angular/router';
 
 @Component({
   selector: 'app-nav-progress',

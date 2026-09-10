@@ -1,9 +1,22 @@
-.caja-auth { width: min(520px, 100%); }
-.caja-auth h1 { margin: 0 0 var(--e1); font-size: 26px; }
-.subtitulo { margin: 0 0 var(--e5); color: var(--gris); font-size: 15px; }
+.caja-auth {
+  width: min(520px, 100%);
+}
+.caja-auth h1 {
+  margin: 0 0 var(--e1);
+  font-size: 26px;
+}
+.subtitulo {
+  margin: 0 0 var(--e5);
+  color: var(--gris);
+  font-size: 15px;
+}
 
-.campo-password { position: relative; }
-.campo-password input { padding-right: 78px; }
+.campo-password {
+  position: relative;
+}
+.campo-password input {
+  padding-right: 78px;
+}
 .ver {
   position: absolute;
   right: var(--e2);
@@ -19,8 +32,12 @@
   padding: var(--e1) var(--e2);
 }
 
-.ayuda.ok { color: var(--ok); }
-.ayuda-seccion { margin: 0 0 var(--e2); }
+.ayuda.ok {
+  color: var(--ok);
+}
+.ayuda-seccion {
+  margin: 0 0 var(--e2);
+}
 
 .fila-documento {
   display: grid;
@@ -39,5 +56,10 @@
   justify-content: center;
   flex-wrap: wrap;
 }
-.enlaces a { color: var(--primario-osc); font-weight: 600; }
-.divisor { color: var(--linea); }
+.enlaces a {
+  color: var(--primario-osc);
+  font-weight: 600;
+}
+.divisor {
+  color: var(--linea);
+}

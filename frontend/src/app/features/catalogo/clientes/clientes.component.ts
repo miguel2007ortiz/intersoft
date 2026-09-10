@@ -1,3 +1,14 @@
+/**
+ * Clientes — cartera de la empresa (Flujo 2)
+ *
+ * Que hace: busca, crea, edita y desactiva clientes, y abre el detalle con su
+ * historial de compras.
+ * Ruta: /clientes (authGuard + personalGuard).
+ * Por que asi: la busqueda va con debounce (se espera a que el usuario deje
+ * de teclear) para no lanzar una consulta por letra, y la paginacion la
+ * resuelve el backend: la pantalla nunca descarga la tabla entera.
+ */
+
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -64,27 +75,30 @@ export class ClientesComponent {
   ngOnInit(): void {
     this.cargar();
     if (this.puedeVincularUsuarios()) {
-      this.seguridad.listarUsuarios()
-        .subscribe(({ resultados }) => this.usuarios.set(resultados));
+      this.seguridad.listarUsuarios().subscribe(({ resultados }) => this.usuarios.set(resultados));
     }
   }
 
   cargar(): void {
     this.cargando.set(true);
-    this.catalogo.listarClientes({
-      busqueda: this.busqueda(), estado: this.estado(), pagina: this.pagina(),
-    }).subscribe({
-      next: (r) => {
-        this.clientes.set(r.resultados);
-        this.total.set(r.total);
-        this.totalPaginas.set(r.total_paginas ?? 1);
-        this.cargando.set(false);
-      },
-      error: (e) => {
-        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
-        this.cargando.set(false);
-      },
-    });
+    this.catalogo
+      .listarClientes({
+        busqueda: this.busqueda(),
+        estado: this.estado(),
+        pagina: this.pagina(),
+      })
+      .subscribe({
+        next: (r) => {
+          this.clientes.set(r.resultados);
+          this.total.set(r.total);
+          this.totalPaginas.set(r.total_paginas ?? 1);
+          this.cargando.set(false);
+        },
+        error: (e) => {
+          this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+          this.cargando.set(false);
+        },
+      });
   }
 
   buscar(evento: Event): void {
@@ -100,7 +114,9 @@ export class ClientesComponent {
   }
 
   filtrarPorEstado(evento: Event): void {
-    this.estado.set((evento.target as HTMLSelectElement).value as 'activos' | 'inactivos' | 'todos');
+    this.estado.set(
+      (evento.target as HTMLSelectElement).value as 'activos' | 'inactivos' | 'todos',
+    );
     this.pagina.set(1);
     this.cargar();
   }
@@ -114,8 +130,13 @@ export class ClientesComponent {
   abrirCreacion(): void {
     this.editando.set(null);
     this.formulario.reset({
-      nombre: '', tipo_documento: 'CC', numero_documento: '',
-      email: '', telefono: '', ciudad: '', usuario_id: '',
+      nombre: '',
+      tipo_documento: 'CC',
+      numero_documento: '',
+      email: '',
+      telefono: '',
+      ciudad: '',
+      usuario_id: '',
     });
     this.error.set(null);
     this.formularioAbierto.set(true);
@@ -183,8 +204,9 @@ export class ClientesComponent {
   async desactivar(cliente: Cliente): Promise<void> {
     const acepto = await this.confirmacion.pedir({
       titulo: 'Desactivar cliente',
-      mensaje: `"${cliente.nombre}" dejara de aparecer en nuevas ventas. Su `
-        + 'historial se conserva y puedes reactivarlo cuando quieras.',
+      mensaje:
+        `"${cliente.nombre}" dejara de aparecer en nuevas ventas. Su ` +
+        'historial se conserva y puedes reactivarlo cuando quieras.',
       confirmar: 'Desactivar',
     });
     if (!acepto) return;

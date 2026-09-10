@@ -1,3 +1,14 @@
+/**
+ * Modelos del panel interno — contrato con /api/ (clientes, productos, ventas)
+ *
+ * Que hace: describe cliente, producto, categoria, venta, detalle de venta,
+ * movimiento de inventario, alerta de stock y factura DIAN.
+ * Donde se usa: CatalogoService y las pantallas del Flujo 2.
+ * Por que asi: las listas siempre llegan como `{ resultados, total }` porque la
+ * paginacion la hace el backend; tener ese tipo escrito evita que una pantalla
+ * intente recorrer la respuesta como si fuera un array plano.
+ */
+
 /** Tipos de la fase 3: clientes y productos (personal interno). */
 
 export interface Cliente {
@@ -31,9 +42,10 @@ export interface ClienteDetalle extends Cliente {
 
 /** Datos que se envian al crear/editar: los esenciales obligatorios,
  * el resto opcional (el backend los acepta vacios). */
-export type DatosCliente = Partial<Omit<Cliente, 'id' | 'usuario_email' | 'activo'
-  | 'total_compras' | 'created_at'>> & Pick<Cliente, 'nombre' | 'tipo_documento'
-  | 'numero_documento'>;
+export type DatosCliente = Partial<
+  Omit<Cliente, 'id' | 'usuario_email' | 'activo' | 'total_compras' | 'created_at'>
+> &
+  Pick<Cliente, 'nombre' | 'tipo_documento' | 'numero_documento'>;
 
 export interface Producto {
   id: string;

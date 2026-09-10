@@ -1,3 +1,15 @@
+/**
+ * Retorno de la pasarela — a donde vuelve el comprador tras pagar
+ *
+ * Que hace: recoge la referencia del pago, pregunta al backend como quedo y
+ * muestra aprobado, rechazado o pendiente.
+ * Ruta: /pago/retorno (authGuard).
+ * Por que asi: NO se cree lo que diga la URL de la pasarela; se confirma
+ * siempre contra el backend, que es quien habla con el proveedor de pago. Si
+ * no fuera asi, bastaria con escribir a mano una URL de "aprobado" para dar un
+ * pedido por pagado.
+ */
+
 import { DecimalPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -45,7 +57,9 @@ const MAX_CONSULTAS = 24; // ~60 s
                 </li>
               }
             </ul>
-            <p class="total-general">Total pagado: <strong>{{ e.total | number }} COP</strong></p>
+            <p class="total-general">
+              Total pagado: <strong>{{ e.total | number }} COP</strong>
+            </p>
             <p class="transaccion">Transaccion: {{ e.transaccion_id }}</p>
             <div class="acciones">
               <a routerLink="/catalogo" class="btn-principal">Seguir comprando</a>
@@ -57,8 +71,8 @@ const MAX_CONSULTAS = 24; // ~60 s
             <div class="icono" aria-hidden="true">&#10005;</div>
             <h2>Pago rechazado</h2>
             <p>
-              La pasarela no aprobo el cobro. No se te cobro nada y tu carrito
-              sigue intacto: puedes intentarlo con otro medio de pago.
+              La pasarela no aprobo el cobro. No se te cobro nada y tu carrito sigue intacto: puedes
+              intentarlo con otro medio de pago.
             </p>
             <div class="acciones">
               <a routerLink="/checkout" class="btn-principal">Reintentar el pago</a>
@@ -69,9 +83,8 @@ const MAX_CONSULTAS = 24; // ~60 s
           <div class="caja espera" role="status" aria-live="polite">
             <h2>Tu pago sigue en proceso</h2>
             <p>
-              La pasarela aun no confirma el cobro. Puede tardar unos minutos.
-              Revisa tus pedidos mas tarde: si el pago se aprueba, la compra
-              queda registrada automaticamente.
+              La pasarela aun no confirma el cobro. Puede tardar unos minutos. Revisa tus pedidos
+              mas tarde: si el pago se aprueba, la compra queda registrada automaticamente.
             </p>
             <div class="acciones">
               <button type="button" class="btn-principal" (click)="consultarAhora()">
@@ -84,65 +97,155 @@ const MAX_CONSULTAS = 24; // ~60 s
       }
     </div>
   `,
-  styles: [`
-    .retorno { max-width: 600px; margin: 0 auto; padding: var(--e5) var(--e4); }
-    .retorno h1 { font-size: clamp(22px, 4vw, 28px); margin: 0 0 var(--e5); }
+  styles: [
+    `
+      .retorno {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: var(--e5) var(--e4);
+      }
+      .retorno h1 {
+        font-size: clamp(22px, 4vw, 28px);
+        margin: 0 0 var(--e5);
+      }
 
-    .caja { border-radius: 12px; padding: 32px; text-align: center; }
-    .caja h2 { margin: 0 0 var(--e3); }
-    .caja p { margin: 4px 0; font-size: 15px; }
+      .caja {
+        border-radius: 12px;
+        padding: 32px;
+        text-align: center;
+      }
+      .caja h2 {
+        margin: 0 0 var(--e3);
+      }
+      .caja p {
+        margin: 4px 0;
+        font-size: 15px;
+      }
 
-    .espera { background: var(--superficie); border: 1px solid var(--linea); color: var(--texto); }
-    .exito { background: #ecfdf3; border: 1px solid #d1fadf; color: #067647; }
-    .exito h2, .exito span { color: #067647; }
-    .fallo { background: #fef3f2; border: 1px solid #fecdca; color: #b42318; }
-    .fallo h2 { color: #b42318; }
+      .espera {
+        background: var(--superficie);
+        border: 1px solid var(--linea);
+        color: var(--texto);
+      }
+      .exito {
+        background: #ecfdf3;
+        border: 1px solid #d1fadf;
+        color: #067647;
+      }
+      .exito h2,
+      .exito span {
+        color: #067647;
+      }
+      .fallo {
+        background: #fef3f2;
+        border: 1px solid #fecdca;
+        color: #b42318;
+      }
+      .fallo h2 {
+        color: #b42318;
+      }
 
-    .icono {
-      width: 60px; height: 60px; border-radius: 50%; color: #fff;
-      font-size: 28px; font-weight: 700; display: flex;
-      align-items: center; justify-content: center; margin: 0 auto var(--e3);
-    }
-    .exito .icono { background: #067647; }
-    .fallo .icono { background: #b42318; }
+      .icono {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        color: #fff;
+        font-size: 28px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto var(--e3);
+      }
+      .exito .icono {
+        background: #067647;
+      }
+      .fallo .icono {
+        background: #b42318;
+      }
 
-    .giro {
-      width: 40px; height: 40px; margin: 0 auto var(--e3);
-      border: 3px solid var(--linea); border-top-color: var(--primario);
-      border-radius: 50%; animation: girar 1s linear infinite;
-    }
-    @keyframes girar { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .giro { animation: none; border-top-color: var(--linea); }
-    }
+      .giro {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto var(--e3);
+        border: 3px solid var(--linea);
+        border-top-color: var(--primario);
+        border-radius: 50%;
+        animation: girar 1s linear infinite;
+      }
+      @keyframes girar {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .giro {
+          animation: none;
+          border-top-color: var(--linea);
+        }
+      }
 
-    .ventas {
-      list-style: none; margin: 0 auto var(--e4); padding: 0;
-      max-width: 360px; text-align: left; font-size: 14px;
-    }
-    .ventas li {
-      display: flex; justify-content: space-between; align-items: center;
-      gap: var(--e2); padding: 10px 0; border-bottom: 1px solid #d1fadf;
-    }
-    .ventas li:last-child { border-bottom: 0; }
-    .ventas .total { font-weight: 700; }
-    .total-general { font-size: 16px !important; margin-top: var(--e2) !important; }
-    .transaccion { font-size: 13px; opacity: .8; margin-top: var(--e2) !important; }
+      .ventas {
+        list-style: none;
+        margin: 0 auto var(--e4);
+        padding: 0;
+        max-width: 360px;
+        text-align: left;
+        font-size: 14px;
+      }
+      .ventas li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--e2);
+        padding: 10px 0;
+        border-bottom: 1px solid #d1fadf;
+      }
+      .ventas li:last-child {
+        border-bottom: 0;
+      }
+      .ventas .total {
+        font-weight: 700;
+      }
+      .total-general {
+        font-size: 16px !important;
+        margin-top: var(--e2) !important;
+      }
+      .transaccion {
+        font-size: 13px;
+        opacity: 0.8;
+        margin-top: var(--e2) !important;
+      }
 
-    .acciones {
-      margin-top: var(--e4); display: flex; gap: var(--e3);
-      justify-content: center; flex-wrap: wrap;
-    }
-    .btn-principal, .btn-secundario {
-      padding: 10px 20px; border-radius: 8px; text-decoration: none;
-      font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
-    }
-    .btn-principal { background: var(--primario); color: #fff; border: 0; }
-    .btn-secundario {
-      border: 1px solid var(--linea); color: var(--texto);
-      background: var(--superficie);
-    }
-  `],
+      .acciones {
+        margin-top: var(--e4);
+        display: flex;
+        gap: var(--e3);
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .btn-principal,
+      .btn-secundario {
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font: inherit;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .btn-principal {
+        background: var(--primario);
+        color: #fff;
+        border: 0;
+      }
+      .btn-secundario {
+        border: 1px solid var(--linea);
+        color: var(--texto);
+        background: var(--superficie);
+      }
+    `,
+  ],
 })
 export class PagoRetornoComponent implements OnInit, OnDestroy {
   private readonly tienda = inject(TiendaService);

@@ -1,3 +1,14 @@
+/**
+ * Validadores de contrasena — mismas reglas que exige el backend
+ *
+ * Que hace: comprueba longitud, mayuscula, minuscula, numero y que las dos
+ * contrasenas coincidan, y devuelve la lista de requisitos que faltan.
+ * Donde se usa: registro, cambio de contrasena y restablecer contrasena.
+ * Por que asi: se replica la regla del servidor para poder decir al usuario
+ * que le falta MIENTRAS escribe, en vez de esperar al 400 del backend. El
+ * backend sigue siendo el que manda; esto es solo aviso temprano.
+ */
+
 import { AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
 
 export const fuerzaPassword: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {

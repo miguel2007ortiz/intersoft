@@ -1,3 +1,15 @@
+/**
+ * ConfirmacionService — el "estas seguro?" de la aplicacion
+ *
+ * Que hace: `pedir({...})` devuelve una promesa que se resuelve a true o
+ * false; el dialogo lo dibuja <app-confirmacion>, montado en app.html.
+ * Donde se usa: cualquier accion destructiva (anular venta, desactivar
+ * usuario, quitar del carrito).
+ * Por que asi: reemplaza al `confirm()` nativo, que bloquea el hilo, no se
+ * puede estilizar, ignora el modo noche y algunos navegadores directamente lo
+ * suprimen, dejando el clic sin ninguna respuesta.
+ */
+
 import { Injectable, signal } from '@angular/core';
 
 /** Texto y aspecto de una confirmacion pendiente. */

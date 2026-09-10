@@ -1,3 +1,15 @@
+/**
+ * TiendaService — toda la API del marketplace en un solo servicio
+ *
+ * Que hace: catalogo publico, carrito, cupones, checkout, pagos, pedidos,
+ * comentarios y favoritos. Cada metodo devuelve un Observable ya tipado.
+ * Donde se usa: pantallas de /catalogo, /carrito, /checkout, /pedidos y
+ * /favoritos.
+ * Por que asi: los errores pasan por `capturarErrorDjango`, que convierte la
+ * respuesta cruda de Django en un objeto con `detalle` legible; por eso las
+ * pantallas pueden hacer `e.detalle` y mostrarlo tal cual al usuario.
+ */
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
@@ -121,7 +133,7 @@ export class TiendaService {
 
   actualizarItem(itemId: string, cantidad: number): Observable<Carrito> {
     return this.http
-      .put<Carrito>(`${this.api}/carrito/items/${itemId}/`, { producto: itemId, cantidad })
+      .put<Carrito>(`${this.api}/carrito/items/${itemId}/`, { cantidad })
       .pipe(capturarError<Carrito>());
   }
 

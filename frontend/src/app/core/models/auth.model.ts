@@ -1,3 +1,13 @@
+/**
+ * Modelos de sesion — contrato con /api/auth/
+ *
+ * Que hace: describe la peticion de login, la respuesta con los tokens y el
+ * `MeResponse` de /auth/me/, que trae el usuario, su rol y sus permisos.
+ * Donde se usa: AuthService y, a traves de el, guards y menu.
+ * Por que asi: /auth/me/ es la fuente unica de verdad de los permisos. El
+ * frontend nunca deduce permisos por su cuenta a partir del rol.
+ */
+
 export type RolUsuario = 'ADMINISTRADOR' | 'EMPLEADO' | 'CLIENTE';
 
 export interface Usuario {

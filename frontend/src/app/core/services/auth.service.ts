@@ -1,10 +1,44 @@
+/**
+ * AuthService — dueno unico de la sesion del usuario
+ *
+ * Que hace: login, registro, cierre de sesion, recuperacion de contrasena y,
+ * sobre todo, guarda el estado de sesion en signals: token, refresh, usuario y
+ * permisos. Expone `estaAutenticado()` y `esAdministrador()` para los guards.
+ * Donde se usa: guards, interceptor, topbar, sidebar y cualquier pantalla que
+ * necesite saber quien esta dentro.
+ * Por que asi:
+ *   - Estado en signals: la vista se repinta sola cuando cambia el usuario.
+ *   - Persistencia en localStorage (claves `intersoft.*`): la sesion sobrevive
+ *     a F5, y al arrancar se revalida contra /auth/me/ por si el backend
+ *     desactivo la cuenta mientras tanto.
+ *   - Refresco en vuelo unico: si diez peticiones caducan a la vez, se pide UN
+ *     token nuevo (una sola promesa compartida) y todas esperan a esa.
+ */
+
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, catchError, finalize, firstValueFrom, from, map, of, switchMap, tap, throwError } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  finalize,
+  firstValueFrom,
+  from,
+  map,
+  of,
+  switchMap,
+  tap,
+  throwError,
+} from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
-  CambiarPasswordRequest, ErrorAuth, LoginRequest, LoginResponse, MeResponse,
-  RegistroCompradorRequest, RegistroRequest, Usuario,
+  CambiarPasswordRequest,
+  ErrorAuth,
+  LoginRequest,
+  LoginResponse,
+  MeResponse,
+  RegistroCompradorRequest,
+  RegistroRequest,
+  Usuario,
 } from '../models/auth.model';
 
 const CLAVE_TOKEN = 'intersoft.token';
@@ -84,33 +118,31 @@ export class AuthService {
     if (this.refrescoEnProgreso) return from(this.refrescoEnProgreso);
 
     this.refrescoEnProgreso = firstValueFrom(
-      this.http
-        .post<{ access: string }>(`${this.api}/auth/refresh/`, { refresh: refresco })
-        .pipe(
-          tap((r) => {
-            localStorage.setItem(CLAVE_TOKEN, r.access);
-            this._token.set(r.access);
-          }),
-          map(() => true),
-          catchError(() => of(false)),
-          finalize(() => {
-            this.refrescoEnProgreso = null;
-          }),
-        ),
+      this.http.post<{ access: string }>(`${this.api}/auth/refresh/`, { refresh: refresco }).pipe(
+        tap((r) => {
+          localStorage.setItem(CLAVE_TOKEN, r.access);
+          this._token.set(r.access);
+        }),
+        map(() => true),
+        catchError(() => of(false)),
+        finalize(() => {
+          this.refrescoEnProgreso = null;
+        }),
+      ),
     );
     return from(this.refrescoEnProgreso);
   }
 
   registrarEmpresa(datos: RegistroRequest): Observable<void> {
-    return this.http.post<void>(`${this.api}/auth/registro/`, datos).pipe(
-      catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))),
-    );
+    return this.http
+      .post<void>(`${this.api}/auth/registro/`, datos)
+      .pipe(catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))));
   }
 
   registrarComprador(datos: RegistroCompradorRequest): Observable<void> {
-    return this.http.post<void>(`${this.api}/auth/registro/comprador/`, datos).pipe(
-      catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))),
-    );
+    return this.http
+      .post<void>(`${this.api}/auth/registro/comprador/`, datos)
+      .pipe(catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))));
   }
 
   emailDisponible(email: string): Observable<boolean> {
@@ -120,15 +152,15 @@ export class AuthService {
   }
 
   solicitarRecuperacion(email: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/auth/password-reset/`, { email }).pipe(
-      catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))),
-    );
+    return this.http
+      .post<void>(`${this.api}/auth/password-reset/`, { email })
+      .pipe(catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))));
   }
 
   restablecerPassword(token: string, password: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/auth/password-reset/confirmar/`, { token, password }).pipe(
-      catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))),
-    );
+    return this.http
+      .post<void>(`${this.api}/auth/password-reset/confirmar/`, { token, password })
+      .pipe(catchError((e: HttpErrorResponse) => throwError(() => this.traducirError(e))));
   }
 
   private guardarSesion(r: LoginResponse): void {
@@ -161,7 +193,8 @@ export class AuthService {
 
   private traducirError(e: HttpErrorResponse): ErrorAuth {
     const cuerpo = e.error ?? {};
-    if (e.status === 0) return { codigo: 'SIN_CONEXION', mensaje: 'No hay conexion con el servidor.' };
+    if (e.status === 0)
+      return { codigo: 'SIN_CONEXION', mensaje: 'No hay conexion con el servidor.' };
     if (e.status === 401)
       return {
         codigo: 'CREDENCIALES_INVALIDAS',
@@ -169,8 +202,12 @@ export class AuthService {
         intentosRestantes: cuerpo.intentos_restantes,
       };
     if (e.status === 403 && cuerpo.codigo === 'EMPRESA_INACTIVA')
-      return { codigo: 'EMPRESA_INACTIVA', mensaje: 'Tu empresa esta desactivada. Contacta a soporte.' };
-    if (e.status === 403) return { codigo: 'USUARIO_INACTIVO', mensaje: 'Esta cuenta esta desactivada.' };
+      return {
+        codigo: 'EMPRESA_INACTIVA',
+        mensaje: 'Tu empresa esta desactivada. Contacta a soporte.',
+      };
+    if (e.status === 403)
+      return { codigo: 'USUARIO_INACTIVO', mensaje: 'Esta cuenta esta desactivada.' };
     if (e.status === 423)
       return {
         codigo: 'CUENTA_BLOQUEADA',
@@ -179,7 +216,8 @@ export class AuthService {
       };
     if (e.status === 400 && cuerpo.codigo === 'PASSWORD_ACTUAL_INCORRECTA')
       return { codigo: 'DATOS_INVALIDOS', mensaje: 'La contraseña actual no es correcta.' };
-    if (e.status === 400) return { codigo: 'DATOS_INVALIDOS', mensaje: cuerpo.detalle ?? 'Datos invalidos.' };
+    if (e.status === 400)
+      return { codigo: 'DATOS_INVALIDOS', mensaje: cuerpo.detalle ?? 'Datos invalidos.' };
     return { codigo: 'ERROR_SERVIDOR', mensaje: 'El servidor tuvo un problema.' };
   }
 }

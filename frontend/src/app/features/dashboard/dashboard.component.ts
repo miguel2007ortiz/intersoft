@@ -1,3 +1,15 @@
+/**
+ * Dashboard — pantalla de inicio del panel
+ *
+ * Que hace: resume el negocio: ventas del periodo, comparativa con el periodo
+ * anterior, grafica por dia, productos mas vendidos y alertas de stock.
+ * Ruta: /dashboard (authGuard).
+ * Por que asi: todos los numeros llegan ya calculados de AnalyticsService en
+ * una sola peticion. Las tarjetas entran con la animacion global `.aparecer` y
+ * un retraso escalonado (`--retraso`), que es un detalle visual y no toca los
+ * datos.
+ */
+
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,8 +18,13 @@ import { AnalyticsService } from '../../core/services/analytics.service';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { ErrorCatalogo } from '../../core/models/catalogo.model';
 import {
-  CategoriaFiltro, ClienteFrecuente, FiltrosAnalitica, ResumenDashboard,
-  SeriesVentas, TopProducto, ValorPorCategoria,
+  CategoriaFiltro,
+  ClienteFrecuente,
+  FiltrosAnalitica,
+  ResumenDashboard,
+  SeriesVentas,
+  TopProducto,
+  ValorPorCategoria,
 } from '../../core/models/analytics.model';
 
 /** Fase 7: panel de analitica (solo ADMINISTRADOR). Consulta las vistas SQL

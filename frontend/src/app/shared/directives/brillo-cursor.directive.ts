@@ -1,3 +1,13 @@
+/**
+ * brilloCursor — reflejo que sigue al cursor
+ *
+ * Que hace: guarda la posicion del raton en variables CSS que el estilo usa
+ * para mover un brillo dentro del elemento.
+ * Donde se usa: botones y tarjetas destacadas.
+ * Por que asi: la directiva solo escribe dos variables CSS; el dibujo lo hace
+ * el CSS. Asi el efecto se puede cambiar o quitar sin tocar TypeScript.
+ */
+
 import { Directive, ElementRef, HostListener, inject } from '@angular/core';
 
 /** Actualiza --brillo-x/--brillo-y con la posicion del cursor para un

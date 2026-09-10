@@ -1,9 +1,27 @@
+/**
+ * POS — punto de venta en mostrador (Flujo 2)
+ *
+ * Que hace: arma una venta buscando productos, controla stock, aplica el
+ * cliente (o el generico de mostrador) y registra la venta.
+ * Ruta: /pos (authGuard + personalGuard).
+ * Por que asi: el total se calcula en el frontend solo para mostrarlo; el que
+ * vale es el que devuelve el backend al crear la venta. Si el stock cambio
+ * mientras se armaba el carrito, el backend responde con el detalle de que
+ * falta y la pantalla lo muestra producto por producto.
+ */
+
 import { DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
-import { Cliente, Producto, LineaPOS, VentaPOSInput, StockInsuficiente } from '../../core/models/catalogo.model';
+import {
+  Cliente,
+  Producto,
+  LineaPOS,
+  VentaPOSInput,
+  StockInsuficiente,
+} from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { debounce } from '../../core/utils/temporizador.util';
 
@@ -28,18 +46,25 @@ import { debounce } from '../../core/utils/temporizador.util';
                 @if (c.id === clienteGenericoId()) {
                   <option [value]="c.id">⚡ {{ c.nombre }} (venta rapida)</option>
                 } @else {
-                  <option [value]="c.id">{{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})</option>
+                  <option [value]="c.id">
+                    {{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})
+                  </option>
                 }
               }
             </select>
-@if (errorClientes()) {
-              <span class="hint error">{{ errorClientes() }}
-                <button type="button" class="btn-reintentar" (click)="cargarClientes()">Reintentar</button>
+            @if (errorClientes()) {
+              <span class="hint error"
+                >{{ errorClientes() }}
+                <button type="button" class="btn-reintentar" (click)="cargarClientes()">
+                  Reintentar
+                </button>
               </span>
             } @else if (!clientes().length && !cargandoClientes()) {
               <span class="hint">No hay clientes. <a routerLink="/clientes">Crear uno</a></span>
             } @else {
-              <span class="hint">¿Compra a nombre de alguien? <a routerLink="/clientes">Registrar cliente</a></span>
+              <span class="hint"
+                >¿Compra a nombre de alguien? <a routerLink="/clientes">Registrar cliente</a></span
+              >
             }
           </div>
         </section>
@@ -48,9 +73,13 @@ import { debounce } from '../../core/utils/temporizador.util';
         <section class="seccion">
           <label>Agregar producto</label>
           <div class="producto-add">
-            <input type="text" placeholder="Buscar por nombre o SKU..."
-                   [(ngModel)]="busquedaProducto" (input)="buscarProductos()"
-                   class="input flex-1" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre o SKU..."
+              [(ngModel)]="busquedaProducto"
+              (input)="buscarProductos()"
+              class="input flex-1"
+            />
             @if (resultadosBusqueda().length) {
               <div class="resultados-busqueda">
                 @for (p of resultadosBusqueda(); track p.id) {
@@ -86,14 +115,21 @@ import { debounce } from '../../core/utils/temporizador.util';
                     </td>
                     <td>{{ l.precio_unitario | number }}</td>
                     <td>
-                      <input type="number" [(ngModel)]="l.cantidad" min="1"
-                             [max]="l.stock_disponible" (ngModelChange)="recalcular()"
-                             class="input-cantidad" />
+                      <input
+                        type="number"
+                        [(ngModel)]="l.cantidad"
+                        min="1"
+                        [max]="l.stock_disponible"
+                        (ngModelChange)="recalcular()"
+                        class="input-cantidad"
+                      />
                       <span class="stock-info">/{{ l.stock_disponible }}</span>
                     </td>
                     <td>{{ l.subtotal | number }}</td>
                     <td>
-                      <button type="button" class="btn-eliminar" (click)="eliminarLinea(l)">✕</button>
+                      <button type="button" class="btn-eliminar" (click)="eliminarLinea(l)">
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 }
@@ -107,23 +143,39 @@ import { debounce } from '../../core/utils/temporizador.util';
           <div class="descuento-notas">
             <div>
               <label>Descuento ($)</label>
-              <input type="number" [(ngModel)]="descuento" min="0"
-                     (ngModelChange)="recalcular()" class="input input-descuento" />
+              <input
+                type="number"
+                [(ngModel)]="descuento"
+                min="0"
+                (ngModelChange)="recalcular()"
+                class="input input-descuento"
+              />
             </div>
             <div class="flex-1">
               <label>Notas</label>
-              <textarea [(ngModel)]="notas" placeholder="Opcional..." class="input" rows="2"></textarea>
+              <textarea
+                [(ngModel)]="notas"
+                placeholder="Opcional..."
+                class="input"
+                rows="2"
+              ></textarea>
             </div>
           </div>
         </section>
 
         <!-- Totales -->
         <section class="seccion totales">
-          <div class="totales-fila"><span>Subtotal</span><span>{{ subtotal() | number }}</span></div>
+          <div class="totales-fila">
+            <span>Subtotal</span><span>{{ subtotal() | number }}</span>
+          </div>
           @if (descuento > 0) {
-            <div class="totales-fila descuento"><span>Descuento</span><span>-{{ descuento | number }}</span></div>
+            <div class="totales-fila descuento">
+              <span>Descuento</span><span>-{{ descuento | number }}</span>
+            </div>
           }
-          <div class="totales-fila total"><span>Total</span><span>{{ total() | number }}</span></div>
+          <div class="totales-fila total">
+            <span>Total</span><span>{{ total() | number }}</span>
+          </div>
         </section>
 
         <!-- Metodo de pago -->
@@ -131,10 +183,12 @@ import { debounce } from '../../core/utils/temporizador.util';
           <label>Metodo de pago</label>
           <div class="metodos-pago">
             @for (m of metodosPago; track m.valor) {
-              <button type="button"
-                      [class.activo]="metodoPago() === m.valor"
-                      (click)="metodoPago.set(m.valor)"
-                      class="btn-metodo">
+              <button
+                type="button"
+                [class.activo]="metodoPago() === m.valor"
+                (click)="metodoPago.set(m.valor)"
+                class="btn-metodo"
+              >
                 {{ m.etiqueta }}
               </button>
             }
@@ -149,17 +203,26 @@ import { debounce } from '../../core/utils/temporizador.util';
           <div class="error-box">
             <strong>Stock insuficiente:</strong>
             @for (e of erroresStock(); track e.producto) {
-              <div>{{ e.producto_nombre }}: solicita {{ e.solicitado }}, disponible {{ e.disponible }}</div>
+              <div>
+                {{ e.producto_nombre }}: solicita {{ e.solicitado }}, disponible {{ e.disponible }}
+              </div>
             }
           </div>
         }
 
         <!-- Boton confirmar -->
         <section class="seccion acciones">
-          <button type="button" class="btn-confirmar"
-                  [disabled]="!puedeConfirmar() || cargando()"
-                  (click)="confirmarVenta()">
-            @if (cargando()) { Procesando... } @else { Confirmar venta }
+          <button
+            type="button"
+            class="btn-confirmar"
+            [disabled]="!puedeConfirmar() || cargando()"
+            (click)="confirmarVenta()"
+          >
+            @if (cargando()) {
+              Procesando...
+            } @else {
+              Confirmar venta
+            }
           </button>
         </section>
 
@@ -167,112 +230,308 @@ import { debounce } from '../../core/utils/temporizador.util';
         @if (ventaCreada()) {
           <div class="exito-box">
             <strong>Venta registrada!</strong>
-            Factura: {{ ventaCreada()!.numero_factura }} — Total: {{ ventaCreada()!.total | number }}
+            Factura: {{ ventaCreada()!.numero_factura }} — Total:
+            {{ ventaCreada()!.total | number }}
             <button type="button" class="btn-nueva" (click)="nuevaVenta()">Nueva venta</button>
           </div>
         }
       </div>
     </app-panel-shell>
   `,
-  styles: [`
-    .pos { max-width: 900px; margin: 0 auto; padding: var(--e5) var(--e4); }
-    .pos-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--e5); }
-    .pos-header h1 { margin: 0; font-size: clamp(22px, 4vw, 28px); }
-    .btn-link { color: var(--primario); text-decoration: none; font-weight: 600; font-size: 14px; }
-    .btn-link:hover { text-decoration: underline; }
+  styles: [
+    `
+      .pos {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: var(--e5) var(--e4);
+      }
+      .pos-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--e5);
+      }
+      .pos-header h1 {
+        margin: 0;
+        font-size: clamp(22px, 4vw, 28px);
+      }
+      .btn-link {
+        color: var(--primario);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .btn-link:hover {
+        text-decoration: underline;
+      }
 
-    .seccion { margin-bottom: var(--e5); }
-    .seccion label { display: block; font-weight: 600; margin-bottom: var(--e2); font-size: 14px; }
+      .seccion {
+        margin-bottom: var(--e5);
+      }
+      .seccion label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: var(--e2);
+        font-size: 14px;
+      }
 
-    .input {
-      width: 100%; padding: 10px 14px; border: 1px solid var(--linea);
-      border-radius: 8px; font: inherit; font-size: 14px;
-      background: var(--blanco); transition: border-color .15s;
-    }
-    .input:focus { outline: none; border-color: var(--primario); }
-    .flex-1 { flex: 1; }
+      .input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid var(--linea);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 14px;
+        background: var(--blanco);
+        transition: border-color 0.15s;
+      }
+      .input:focus {
+        outline: none;
+        border-color: var(--primario);
+      }
+      .flex-1 {
+        flex: 1;
+      }
 
-    .cliente-select { position: relative; }
-    .hint { display: block; margin-top: var(--e1); font-size: 13px; color: var(--gris); }
-    .hint.error { color: #b42318; }
-    .hint a { color: var(--primario); }
-    .btn-reintentar {
-      margin-left: 8px; padding: 4px 12px; border: 1px solid var(--linea); background: var(--blanco);
-      border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
-    }
-    .btn-reintentar:hover { border-color: #b42318; color: #b42318; }
+      .cliente-select {
+        position: relative;
+      }
+      .hint {
+        display: block;
+        margin-top: var(--e1);
+        font-size: 13px;
+        color: var(--gris);
+      }
+      .hint.error {
+        color: #b42318;
+      }
+      .hint a {
+        color: var(--primario);
+      }
+      .btn-reintentar {
+        margin-left: 8px;
+        padding: 4px 12px;
+        border: 1px solid var(--linea);
+        background: var(--blanco);
+        border-radius: 6px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .btn-reintentar:hover {
+        border-color: #b42318;
+        color: #b42318;
+      }
 
-    .producto-add { position: relative; display: flex; gap: var(--e3); }
-    .resultados-busqueda {
-      position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
-      background: var(--blanco); border: 1px solid var(--linea); border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(15,23,42,.12); max-height: 240px; overflow-y: auto;
-    }
-    .resultado-item {
-      display: flex; justify-content: space-between; width: 100%; padding: 10px 14px;
-      border: 0; background: none; text-align: left; cursor: pointer; font: inherit;
-    }
-    .resultado-item:hover { background: var(--primario-suave); }
-    .resultado-item .precio { font-size: 13px; color: var(--gris); }
+      .producto-add {
+        position: relative;
+        display: flex;
+        gap: var(--e3);
+      }
+      .resultados-busqueda {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 100;
+        background: var(--blanco);
+        border: 1px solid var(--linea);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .resultado-item {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        padding: 10px 14px;
+        border: 0;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+      }
+      .resultado-item:hover {
+        background: var(--primario-suave);
+      }
+      .resultado-item .precio {
+        font-size: 13px;
+        color: var(--gris);
+      }
 
-    .tabla-lineas { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .tabla-lineas th { text-align: left; padding: 8px; border-bottom: 2px solid var(--linea); font-weight: 600; }
-    .tabla-lineas td { padding: 8px; border-bottom: 1px solid var(--linea); }
-    .sku { display: block; font-size: 12px; color: var(--gris); }
-    .input-cantidad { width: 60px; padding: 6px 8px; border: 1px solid var(--linea); border-radius: 6px; text-align: center; font: inherit; }
-    .input-cantidad:focus { outline: none; border-color: var(--primario); }
-    .stock-info { font-size: 12px; color: var(--gris); margin-left: 4px; }
-    .btn-eliminar { border: 0; background: none; color: #b42318; cursor: pointer; font-size: 16px; padding: 4px 8px; }
+      .tabla-lineas {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .tabla-lineas th {
+        text-align: left;
+        padding: 8px;
+        border-bottom: 2px solid var(--linea);
+        font-weight: 600;
+      }
+      .tabla-lineas td {
+        padding: 8px;
+        border-bottom: 1px solid var(--linea);
+      }
+      .sku {
+        display: block;
+        font-size: 12px;
+        color: var(--gris);
+      }
+      .input-cantidad {
+        width: 60px;
+        padding: 6px 8px;
+        border: 1px solid var(--linea);
+        border-radius: 6px;
+        text-align: center;
+        font: inherit;
+      }
+      .input-cantidad:focus {
+        outline: none;
+        border-color: var(--primario);
+      }
+      .stock-info {
+        font-size: 12px;
+        color: var(--gris);
+        margin-left: 4px;
+      }
+      .btn-eliminar {
+        border: 0;
+        background: none;
+        color: #b42318;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 4px 8px;
+      }
 
-    .descuento-notas { display: flex; gap: var(--e4); }
-    .input-descuento { max-width: 160px; }
+      .descuento-notas {
+        display: flex;
+        gap: var(--e4);
+      }
+      .input-descuento {
+        max-width: 160px;
+      }
 
-    .totales { text-align: right; }
-    .totales-fila { display: flex; justify-content: space-between; padding: 6px 0; font-size: 15px; }
-    .totales-fila.descuento { color: #b42318; }
-    .totales-fila.total { font-size: 20px; font-weight: 700; border-top: 2px solid var(--linea); padding-top: 10px; margin-top: 4px; }
+      .totales {
+        text-align: right;
+      }
+      .totales-fila {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        font-size: 15px;
+      }
+      .totales-fila.descuento {
+        color: #b42318;
+      }
+      .totales-fila.total {
+        font-size: 20px;
+        font-weight: 700;
+        border-top: 2px solid var(--linea);
+        padding-top: 10px;
+        margin-top: 4px;
+      }
 
-    .metodos-pago { display: flex; gap: var(--e2); flex-wrap: wrap; }
-    .btn-metodo {
-      padding: 8px 16px; border: 1px solid var(--linea); border-radius: 8px;
-      background: var(--blanco); cursor: pointer; font: inherit; font-size: 13px;
-      transition: all .15s;
-    }
-    .btn-metodo:hover { border-color: var(--primario); }
-    .btn-metodo.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
+      .metodos-pago {
+        display: flex;
+        gap: var(--e2);
+        flex-wrap: wrap;
+      }
+      .btn-metodo {
+        padding: 8px 16px;
+        border: 1px solid var(--linea);
+        border-radius: 8px;
+        background: var(--blanco);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        transition: all 0.15s;
+      }
+      .btn-metodo:hover {
+        border-color: var(--primario);
+      }
+      .btn-metodo.activo {
+        background: var(--primario);
+        color: #fff;
+        border-color: var(--primario);
+      }
 
-    .error-box {
-      background: #fef3f2; border: 1px solid #fecdca; border-radius: 8px;
-      padding: 12px 16px; margin-bottom: var(--e4); color: #b42318; font-size: 14px;
-    }
-    .error-box strong { display: block; margin-bottom: 4px; }
+      .error-box {
+        background: #fef3f2;
+        border: 1px solid #fecdca;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: var(--e4);
+        color: #b42318;
+        font-size: 14px;
+      }
+      .error-box strong {
+        display: block;
+        margin-bottom: 4px;
+      }
 
-    .acciones { text-align: right; }
-    .btn-confirmar {
-      padding: 12px 32px; background: var(--primario); color: #fff;
-      border: 0; border-radius: 8px; font: inherit; font-size: 15px;
-      font-weight: 600; cursor: pointer; transition: opacity .15s;
-    }
-    .btn-confirmar:hover { opacity: .9; }
-    .btn-confirmar:disabled { opacity: .5; cursor: not-allowed; }
+      .acciones {
+        text-align: right;
+      }
+      .btn-confirmar {
+        padding: 12px 32px;
+        background: var(--primario);
+        color: #fff;
+        border: 0;
+        border-radius: 8px;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+      }
+      .btn-confirmar:hover {
+        opacity: 0.9;
+      }
+      .btn-confirmar:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
 
-    .exito-box {
-      background: #ecfdf3; border: 1px solid #d1fadf; border-radius: 8px;
-      padding: 16px; margin-top: var(--e4); color: #067647; font-size: 14px;
-    }
-    .exito-box strong { display: block; margin-bottom: 4px; font-size: 16px; }
-    .btn-nueva {
-      margin-top: 8px; padding: 8px 20px; background: var(--primario);
-      color: #fff; border: 0; border-radius: 6px; cursor: pointer; font: inherit;
-    }
-  `],
+      .exito-box {
+        background: #ecfdf3;
+        border: 1px solid #d1fadf;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: var(--e4);
+        color: #067647;
+        font-size: 14px;
+      }
+      .exito-box strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 16px;
+      }
+      .btn-nueva {
+        margin-top: 8px;
+        padding: 8px 20px;
+        background: var(--primario);
+        color: #fff;
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+        font: inherit;
+      }
+    `,
+  ],
 })
 export class PosComponent {
   private readonly catalogo = inject(CatalogoService);
   private readonly destroyRef = inject(DestroyRef);
   /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
   private readonly buscarProductosDebounced = debounce(
-    this.destroyRef, () => this.buscarProductosInmediato(), 300);
+    this.destroyRef,
+    () => this.buscarProductosInmediato(),
+    300,
+  );
 
   readonly clientes = signal<Cliente[]>([]);
   readonly cargandoClientes = signal(true);
@@ -299,12 +558,9 @@ export class PosComponent {
     { valor: 'tarjeta', etiqueta: 'Tarjeta' },
   ];
 
-  readonly subtotal = computed(() =>
-    this.lineas().reduce((sum, l) => sum + l.subtotal, 0));
-  readonly total = computed(() =>
-    Math.max(this.subtotal() - this.descuento, 0));
-  readonly puedeConfirmar = computed(() =>
-    this.lineas().length > 0 && !!this.clienteSeleccionado);
+  readonly subtotal = computed(() => this.lineas().reduce((sum, l) => sum + l.subtotal, 0));
+  readonly total = computed(() => Math.max(this.subtotal() - this.descuento, 0));
+  readonly puedeConfirmar = computed(() => this.lineas().length > 0 && !!this.clienteSeleccionado);
 
   clienteSeleccionado = '';
 
@@ -352,44 +608,49 @@ export class PosComponent {
   }
 
   private buscarProductosInmediato(): void {
-    this.catalogo.listarProductos({ busqueda: this.busquedaProducto, activo: true })
-      .subscribe({
-        next: (r) => this.resultadosBusqueda.set(r.resultados),
-        error: () => this.resultadosBusqueda.set([]),
-      });
+    this.catalogo.listarProductos({ busqueda: this.busquedaProducto, activo: true }).subscribe({
+      next: (r) => this.resultadosBusqueda.set(r.resultados),
+      error: () => this.resultadosBusqueda.set([]),
+    });
   }
 
   agregarProducto(producto: Producto): void {
-    const existente = this.lineas().find(l => l.producto === producto.id);
+    const existente = this.lineas().find((l) => l.producto === producto.id);
     if (existente) {
       existente.cantidad += 1;
       existente.subtotal = existente.cantidad * existente.precio_unitario;
-      this.lineas.update(l => [...l]);
+      this.lineas.update((l) => [...l]);
     } else {
-      this.lineas.update(l => [...l, {
-        producto: producto.id,
-        nombre: producto.nombre,
-        sku: producto.sku,
-        precio_unitario: Number(producto.precio),
-        cantidad: 1,
-        stock_disponible: producto.stock,
-        subtotal: Number(producto.precio),
-      }]);
+      this.lineas.update((l) => [
+        ...l,
+        {
+          producto: producto.id,
+          nombre: producto.nombre,
+          sku: producto.sku,
+          precio_unitario: Number(producto.precio),
+          cantidad: 1,
+          stock_disponible: producto.stock,
+          subtotal: Number(producto.precio),
+        },
+      ]);
     }
     this.resultadosBusqueda.set([]);
     this.busquedaProducto = '';
   }
 
   eliminarLinea(linea: LineaPOS): void {
-    this.lineas.update(l => l.filter(x => x.producto !== linea.producto));
+    this.lineas.update((l) => l.filter((x) => x.producto !== linea.producto));
   }
 
   recalcular(): void {
-    this.lineas.update(l => l.map(linea => ({
-      ...linea,
-      cantidad: Math.max(1, Math.min(linea.cantidad, linea.stock_disponible)),
-      subtotal: Math.max(1, Math.min(linea.cantidad, linea.stock_disponible)) * linea.precio_unitario,
-    })));
+    this.lineas.update((l) =>
+      l.map((linea) => ({
+        ...linea,
+        cantidad: Math.max(1, Math.min(linea.cantidad, linea.stock_disponible)),
+        subtotal:
+          Math.max(1, Math.min(linea.cantidad, linea.stock_disponible)) * linea.precio_unitario,
+      })),
+    );
   }
 
   confirmarVenta(): void {
@@ -404,7 +665,7 @@ export class PosComponent {
       metodo_pago: this.metodoPago(),
       descuento: this.descuento,
       notas: this.notas,
-      detalles: this.lineas().map(l => ({
+      detalles: this.lineas().map((l) => ({
         producto: l.producto,
         cantidad: l.cantidad,
       })),

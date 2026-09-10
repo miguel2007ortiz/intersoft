@@ -1,3 +1,14 @@
+/**
+ * Utilidades de la pasarela de pago
+ *
+ * Que hace: guarda y recupera la referencia del pago mientras el comprador
+ * esta fuera de la aplicacion, en la pagina de la pasarela.
+ * Donde se usa: checkout (al salir) y /pago/retorno (al volver).
+ * Por que asi: el retorno de la pasarela es una carga nueva de la aplicacion;
+ * sin dejar la referencia guardada no habria forma de saber que pago hay que
+ * consultar al volver.
+ */
+
 import { DatosCheckoutPasarela } from '../models/tienda.model';
 
 /** Donde se guarda la referencia del pago mientras el comprador esta fuera

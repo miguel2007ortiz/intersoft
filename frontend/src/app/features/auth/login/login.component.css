@@ -1,9 +1,22 @@
-.caja-auth { width: min(430px, 100%); }
-.caja-auth h1 { margin: 0 0 var(--e1); font-size: 26px; }
-.subtitulo { margin: 0 0 var(--e5); color: var(--gris); font-size: 15px; }
+.caja-auth {
+  width: min(430px, 100%);
+}
+.caja-auth h1 {
+  margin: 0 0 var(--e1);
+  font-size: 26px;
+}
+.subtitulo {
+  margin: 0 0 var(--e5);
+  color: var(--gris);
+  font-size: 15px;
+}
 
-.campo-password { position: relative; }
-.campo-password input { padding-right: 78px; }
+.campo-password {
+  position: relative;
+}
+.campo-password input {
+  padding-right: 78px;
+}
 .ver {
   position: absolute;
   right: var(--e2);
@@ -29,4 +42,7 @@
   font-size: 14.5px;
   text-align: center;
 }
-.enlaces a { color: var(--primario-osc); font-weight: 600; }
+.enlaces a {
+  color: var(--primario-osc);
+  font-weight: 600;
+}

@@ -1,3 +1,14 @@
+/**
+ * Home — pagina de presentacion del producto (landing)
+ *
+ * Que hace: pantalla comercial con beneficios y llamadas a la accion.
+ * Ruta: NINGUNA hoy. La raiz '/' carga el marketplace (CatalogoComponent),
+ * asi que este componente esta escrito pero no enganchado a la tabla de rutas.
+ * Por que asi: se dejo preparada la landing para cuando se separe la portada
+ * comercial del marketplace. Si manana te preguntan por ella: existe, compila,
+ * y basta anadir una ruta para publicarla.
+ */
+
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { BrilloCursorDirective } from '../../shared/directives/brillo-cursor.directive';
@@ -7,7 +18,13 @@ import { SiteFooterComponent } from '../../shared/layout/site-footer/site-footer
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, BrilloCursorDirective, Inclinar3dDirective, RevelarAlEntrarDirective, SiteFooterComponent],
+  imports: [
+    RouterLink,
+    BrilloCursorDirective,
+    Inclinar3dDirective,
+    RevelarAlEntrarDirective,
+    SiteFooterComponent,
+  ],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
 })

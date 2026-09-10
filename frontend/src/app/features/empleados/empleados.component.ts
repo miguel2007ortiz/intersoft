@@ -1,3 +1,15 @@
+/**
+ * Empleados — personal de la tienda (Flujo 2, por permiso)
+ *
+ * Que hace: alta, edicion y activacion/desactivacion de empleados, con
+ * asignacion de rol.
+ * Ruta: /empleados (authGuard + permisoGuard('empleado.leer')).
+ * Por que asi: esta pantalla no se protege por rol sino por PERMISO, porque
+ * el administrador puede crear un rol propio que vea empleados sin ser
+ * administrador. Al desactivar se pide confirmacion con ConfirmacionService
+ * (dialogo propio de la app, no el confirm() del navegador).
+ */
+
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
@@ -218,8 +230,9 @@ export class EmpleadosComponent {
   async regenerarPassword(empleado: Empleado): Promise<void> {
     const acepto = await this.confirmacion.pedir({
       titulo: 'Nueva contrasena temporal',
-      mensaje: `Se generara una contrasena temporal para ${empleado.nombre}. La `
-        + 'actual dejara de servir y solo veras la nueva una vez.',
+      mensaje:
+        `Se generara una contrasena temporal para ${empleado.nombre}. La ` +
+        'actual dejara de servir y solo veras la nueva una vez.',
       confirmar: 'Generar contrasena',
     });
     if (!acepto) return;

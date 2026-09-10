@@ -1,3 +1,15 @@
+/**
+ * Login — puerta de entrada (Flujo 1)
+ *
+ * Que hace: pide correo y contrasena, llama a AuthService.login y, segun el
+ * resultado, lleva al usuario a donde toca: a `?redirigir=` si venia de una
+ * ruta protegida, a /cambiar-password si el backend lo exige, o al panel.
+ * Ruta: /login (publica).
+ * Por que asi: lee los avisos por query param (`?registrado=1`, `?expirada=1`)
+ * en vez de guardarlos en un servicio; asi el mensaje sobrevive a la recarga y
+ * la URL cuenta por si sola que paso.
+ */
+
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';

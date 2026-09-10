@@ -1,3 +1,14 @@
+/**
+ * Ventas — historial y anulacion (Flujo 2)
+ *
+ * Que hace: lista las ventas con filtros por fecha y estado, abre el detalle
+ * y permite anular una venta.
+ * Ruta: /ventas (authGuard + personalGuard).
+ * Por que asi: anular pide confirmacion explicita porque devuelve stock y
+ * afecta la contabilidad; el backend es quien repone el inventario, aqui solo
+ * se refresca la lista al terminar.
+ */
+
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -10,7 +21,14 @@ import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-ventas',
-  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, PanelShellComponent, EstadoVacioComponent],
+  imports: [
+    DatePipe,
+    DecimalPipe,
+    FormsModule,
+    RouterLink,
+    PanelShellComponent,
+    EstadoVacioComponent,
+  ],
   template: `
     <app-panel-shell>
       <div class="ventas">
@@ -21,9 +39,18 @@ import { debounce } from '../../core/utils/temporizador.util';
 
         <!-- Filtros -->
         <section class="filtros">
-          <input type="text" placeholder="Buscar por factura o cliente..."
-                 [(ngModel)]="busqueda" (input)="buscarDebounced()" class="input" />
-          <select [(ngModel)]="filtroEstado" (ngModelChange)="cargarVentas()" class="input input-estado">
+          <input
+            type="text"
+            placeholder="Buscar por factura o cliente..."
+            [(ngModel)]="busqueda"
+            (input)="buscarDebounced()"
+            class="input"
+          />
+          <select
+            [(ngModel)]="filtroEstado"
+            (ngModelChange)="cargarVentas()"
+            class="input input-estado"
+          >
             <option value="">Todos los estados</option>
             <option value="completada">Completadas</option>
             <option value="anulada">Anuladas</option>
@@ -48,16 +75,26 @@ import { debounce } from '../../core/utils/temporizador.util';
         @if (cargando()) {
           <p class="cargando">Cargando ventas...</p>
         } @else if (error()) {
-          <app-estado-vacio tipo="error" [titulo]="'No pudimos cargar las ventas'"
-                            [mensaje]="error()" accionTexto="Reintentar"
-                            (accion)="cargarVentas()"></app-estado-vacio>
+          <app-estado-vacio
+            tipo="error"
+            [titulo]="'No pudimos cargar las ventas'"
+            [mensaje]="error()"
+            accionTexto="Reintentar"
+            (accion)="cargarVentas()"
+          ></app-estado-vacio>
         } @else if (!ventas().length) {
           @if (busqueda || filtroEstado) {
-            <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
-                              mensaje="No se encontraron ventas para esa busqueda o filtro."></app-estado-vacio>
+            <app-estado-vacio
+              tipo="busqueda"
+              titulo="Sin resultados"
+              mensaje="No se encontraron ventas para esa busqueda o filtro."
+            ></app-estado-vacio>
           } @else {
-            <app-estado-vacio tipo="vacio" titulo="Aun no hay ventas"
-                              mensaje="Inicia una venta desde el punto de venta y aparecera aqui."></app-estado-vacio>
+            <app-estado-vacio
+              tipo="vacio"
+              titulo="Aun no hay ventas"
+              mensaje="Inicia una venta desde el punto de venta y aparecera aqui."
+            ></app-estado-vacio>
           }
         } @else {
           <div class="tabla-wrap">
@@ -77,7 +114,7 @@ import { debounce } from '../../core/utils/temporizador.util';
                 @for (v of ventas(); track v.id) {
                   <tr>
                     <td class="factura">{{ v.numero_factura }}</td>
-                    <td>{{ v.fecha | date:'dd/MM/yy HH:mm' }}</td>
+                    <td>{{ v.fecha | date: 'dd/MM/yy HH:mm' }}</td>
                     <td>{{ v.cliente_nombre }}</td>
                     <td>{{ v.total_items }}</td>
                     <td class="total">{{ v.total | number }}</td>
@@ -86,8 +123,9 @@ import { debounce } from '../../core/utils/temporizador.util';
                     </td>
                     <td>
                       @if (v.estado === 'completada') {
-                        <button type="button" class="btn-anular"
-                                (click)="iniciarAnulacion(v)">Anular</button>
+                        <button type="button" class="btn-anular" (click)="iniciarAnulacion(v)">
+                          Anular
+                        </button>
                       }
                     </td>
                   </tr>
@@ -100,23 +138,46 @@ import { debounce } from '../../core/utils/temporizador.util';
         <!-- Modal de anulacion -->
         @if (ventaAnulando()) {
           <div class="modal-overlay" (click)="cancelarAnulacion()">
-            <div class="modal" role="dialog" aria-modal="true"
-                 aria-labelledby="anular-titulo" (click)="$event.stopPropagation()">
+            <div
+              class="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="anular-titulo"
+              (click)="$event.stopPropagation()"
+            >
               <h2 id="anular-titulo">Anular venta</h2>
-              <p>Factura: <strong>{{ ventaAnulando()!.numero_factura }}</strong></p>
-              <p>Cliente: {{ ventaAnulando()!.cliente_nombre }} — Total: {{ ventaAnulando()!.total | number }}</p>
+              <p>
+                Factura: <strong>{{ ventaAnulando()!.numero_factura }}</strong>
+              </p>
+              <p>
+                Cliente: {{ ventaAnulando()!.cliente_nombre }} — Total:
+                {{ ventaAnulando()!.total | number }}
+              </p>
               <label>Motivo de anulacion</label>
-              <textarea [(ngModel)]="motivoAnulacion" class="input" rows="3"
-                        placeholder="Describe el motivo..."></textarea>
+              <textarea
+                [(ngModel)]="motivoAnulacion"
+                class="input"
+                rows="3"
+                placeholder="Describe el motivo..."
+              ></textarea>
               @if (errorAnulacion()) {
                 <div class="error-box">{{ errorAnulacion() }}</div>
               }
               <div class="modal-acciones">
-                <button type="button" class="btn-cancelar" (click)="cancelarAnulacion()">Cancelar</button>
-                <button type="button" class="btn-confirmar-anular"
-                        [disabled]="!motivoAnulacion || motivoAnulacion.length < 3 || cargandoAnulacion()"
-                        (click)="confirmarAnulacion()">
-                  @if (cargandoAnulacion()) { Anulando... } @else { Anular venta }
+                <button type="button" class="btn-cancelar" (click)="cancelarAnulacion()">
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  class="btn-confirmar-anular"
+                  [disabled]="!motivoAnulacion || motivoAnulacion.length < 3 || cargandoAnulacion()"
+                  (click)="confirmarAnulacion()"
+                >
+                  @if (cargandoAnulacion()) {
+                    Anulando...
+                  } @else {
+                    Anular venta
+                  }
                 </button>
               </div>
             </div>
@@ -125,77 +186,213 @@ import { debounce } from '../../core/utils/temporizador.util';
       </div>
     </app-panel-shell>
   `,
-  styles: [`
-    .ventas { max-width: 1000px; margin: 0 auto; padding: var(--e5) var(--e4); }
-    .ventas-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--e5); }
-    .ventas-header h1 { margin: 0; font-size: clamp(22px, 4vw, 28px); }
-    .btn-primary {
-      padding: 10px 20px; background: var(--primario); color: #fff;
-      border: 0; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;
-    }
+  styles: [
+    `
+      .ventas {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: var(--e5) var(--e4);
+      }
+      .ventas-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--e5);
+      }
+      .ventas-header h1 {
+        margin: 0;
+        font-size: clamp(22px, 4vw, 28px);
+      }
+      .btn-primary {
+        padding: 10px 20px;
+        background: var(--primario);
+        color: #fff;
+        border: 0;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+      }
 
-    .filtros { display: flex; gap: var(--e3); margin-bottom: var(--e4); }
-    .input {
-      padding: 10px 14px; border: 1px solid var(--linea); border-radius: 8px;
-      font: inherit; font-size: 14px; background: var(--blanco);
-    }
-    .input:focus { outline: none; border-color: var(--primario); }
-    .input-estado { max-width: 200px; }
+      .filtros {
+        display: flex;
+        gap: var(--e3);
+        margin-bottom: var(--e4);
+      }
+      .input {
+        padding: 10px 14px;
+        border: 1px solid var(--linea);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 14px;
+        background: var(--blanco);
+      }
+      .input:focus {
+        outline: none;
+        border-color: var(--primario);
+      }
+      .input-estado {
+        max-width: 200px;
+      }
 
-    .stats { display: flex; gap: var(--e4); margin-bottom: var(--e5); }
-    .stat { background: var(--primario-suave); padding: 12px 20px; border-radius: 8px; }
-    .stat-label { display: block; font-size: 12px; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; }
-    .stat-valor { font-size: 20px; font-weight: 700; }
+      .stats {
+        display: flex;
+        gap: var(--e4);
+        margin-bottom: var(--e5);
+      }
+      .stat {
+        background: var(--primario-suave);
+        padding: 12px 20px;
+        border-radius: 8px;
+      }
+      .stat-label {
+        display: block;
+        font-size: 12px;
+        color: var(--gris);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .stat-valor {
+        font-size: 20px;
+        font-weight: 700;
+      }
 
-    .cargando { color: var(--gris); text-align: center; padding: var(--e6); }
+      .cargando {
+        color: var(--gris);
+        text-align: center;
+        padding: var(--e6);
+      }
 
-    .tabla-wrap { overflow-x: auto; }
-    .tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .tabla th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--linea); font-weight: 600; }
-    .tabla td { padding: 10px 12px; border-bottom: 1px solid var(--linea); }
-    .factura { font-family: monospace; font-weight: 600; }
-    .total { font-weight: 600; }
+      .tabla-wrap {
+        overflow-x: auto;
+      }
+      .tabla {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .tabla th {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 2px solid var(--linea);
+        font-weight: 600;
+      }
+      .tabla td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--linea);
+      }
+      .factura {
+        font-family: monospace;
+        font-weight: 600;
+      }
+      .total {
+        font-weight: 600;
+      }
 
-    .badge {
-      display: inline-block; padding: 3px 10px; border-radius: 999px;
-      font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
-    }
-    .badge.completada { background: #ecfdf3; color: #067647; }
-    .badge.anulada { background: #fef3f2; color: #b42318; }
-    .badge.pendiente { background: #fef9ec; color: #b54708; }
+      .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .badge.completada {
+        background: #ecfdf3;
+        color: #067647;
+      }
+      .badge.anulada {
+        background: #fef3f2;
+        color: #b42318;
+      }
+      .badge.pendiente {
+        background: #fef9ec;
+        color: #b54708;
+      }
 
-    .btn-anular {
-      padding: 5px 12px; border: 1px solid #fecdca; background: #fef3f2;
-      color: #b42318; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
-    }
-    .btn-anular:hover { background: #fecdca; }
+      .btn-anular {
+        padding: 5px 12px;
+        border: 1px solid #fecdca;
+        background: #fef3f2;
+        color: #b42318;
+        border-radius: 6px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+      }
+      .btn-anular:hover {
+        background: #fecdca;
+      }
 
-    .modal-overlay {
-      position: fixed; inset: 0; background: rgba(15,23,42,.5);
-      display: grid; place-items: center; z-index: 1000;
-    }
-    .modal {
-      background: var(--blanco); border-radius: 14px; padding: var(--e6);
-      width: min(480px, 90vw); box-shadow: 0 20px 50px rgba(15,23,42,.2);
-    }
-    .modal h2 { margin: 0 0 var(--e3); }
-    .modal label { display: block; margin-top: var(--e3); margin-bottom: var(--e2); font-weight: 600; font-size: 14px; }
-    .modal .input { width: 100%; resize: vertical; }
-    .error-box {
-      background: #fef3f2; border: 1px solid #fecdca; border-radius: 8px;
-      padding: 10px 14px; margin-top: var(--e3); color: #b42318; font-size: 13px;
-    }
-    .modal-acciones { display: flex; justify-content: flex-end; gap: var(--e3); margin-top: var(--e4); }
-    .btn-cancelar {
-      padding: 10px 20px; border: 1px solid var(--linea); background: var(--blanco);
-      border-radius: 8px; cursor: pointer; font: inherit;
-    }
-    .btn-confirmar-anular {
-      padding: 10px 20px; border: 0; background: #b42318; color: #fff;
-      border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600;
-    }
-    .btn-confirmar-anular:disabled { opacity: .5; cursor: not-allowed; }
-  `],
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.5);
+        display: grid;
+        place-items: center;
+        z-index: 1000;
+      }
+      .modal {
+        background: var(--blanco);
+        border-radius: 14px;
+        padding: var(--e6);
+        width: min(480px, 90vw);
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+      }
+      .modal h2 {
+        margin: 0 0 var(--e3);
+      }
+      .modal label {
+        display: block;
+        margin-top: var(--e3);
+        margin-bottom: var(--e2);
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .modal .input {
+        width: 100%;
+        resize: vertical;
+      }
+      .error-box {
+        background: #fef3f2;
+        border: 1px solid #fecdca;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-top: var(--e3);
+        color: #b42318;
+        font-size: 13px;
+      }
+      .modal-acciones {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--e3);
+        margin-top: var(--e4);
+      }
+      .btn-cancelar {
+        padding: 10px 20px;
+        border: 1px solid var(--linea);
+        background: var(--blanco);
+        border-radius: 8px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .btn-confirmar-anular {
+        padding: 10px 20px;
+        border: 0;
+        background: #b42318;
+        color: #fff;
+        border-radius: 8px;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 600;
+      }
+      .btn-confirmar-anular:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    `,
+  ],
 })
 export class VentasComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
@@ -221,22 +418,25 @@ export class VentasComponent implements OnInit {
 
   cargarVentas(): void {
     this.cargando.set(true);
-    this.catalogo.listarVentas({
-      estado: this.filtroEstado || undefined,
-      busqueda: this.busqueda || undefined,
-    }).subscribe({
-      next: (r) => {
-        this.ventas.set(r.resultados);
-        const est = r.estadisticas as { total_ventas: string; total_registros: number } | undefined;
-        this.estadisticas.set(est ?? null);
-        this.error.set(null);
-        this.cargando.set(false);
-      },
-      error: (e) => {
-        this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
-        this.cargando.set(false);
-      },
-    });
+    this.catalogo
+      .listarVentas({
+        estado: this.filtroEstado || undefined,
+        busqueda: this.busqueda || undefined,
+      })
+      .subscribe({
+        next: (r) => {
+          this.ventas.set(r.resultados);
+          const est = r.estadisticas as
+            { total_ventas: string; total_registros: number } | undefined;
+          this.estadisticas.set(est ?? null);
+          this.error.set(null);
+          this.cargando.set(false);
+        },
+        error: (e) => {
+          this.error.set(e.detalle ?? 'No se pudo cargar la lista.');
+          this.cargando.set(false);
+        },
+      });
   }
 
   iniciarAnulacion(venta: Venta): void {

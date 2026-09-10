@@ -1,10 +1,24 @@
+/**
+ * IaService — asistente de inteligencia artificial
+ *
+ * Que hace: manda la pregunta del usuario al backend y devuelve la respuesta,
+ * mas las sugerencias de negocio calculadas sobre los datos de la empresa.
+ * Donde se usa: /ia.
+ * Por que asi: la clave del proveedor de IA vive solo en el backend. El
+ * frontend nunca la ve, por eso pasa siempre por nuestra API y no llama al
+ * proveedor directamente.
+ */
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { capturarErrorDjango, ErrorDjango } from '../utils/django-error.util';
 import {
-  ConversacionIA, ConversacionIAResumen, ErrorIA, RespuestaChatIA,
+  ConversacionIA,
+  ConversacionIAResumen,
+  ErrorIA,
+  RespuestaChatIA,
   ResultadoListaIA,
 } from '../models/ia.model';
 
@@ -16,31 +30,33 @@ export class IaService {
   private readonly api = `${environment.apiUrl}`;
 
   conversaciones(): Observable<ResultadoListaIA<ConversacionIAResumen>> {
-    return this.http.get<ResultadoListaIA<ConversacionIAResumen>>(
-      `${this.api}/ia/conversaciones/`).pipe(capturarErrorIA());
+    return this.http
+      .get<ResultadoListaIA<ConversacionIAResumen>>(`${this.api}/ia/conversaciones/`)
+      .pipe(capturarErrorIA());
   }
 
   crearConversacion(titulo?: string): Observable<ConversacionIA> {
-    return this.http.post<ConversacionIA>(
-      `${this.api}/ia/conversaciones/`, { titulo }).pipe(capturarErrorIA());
+    return this.http
+      .post<ConversacionIA>(`${this.api}/ia/conversaciones/`, { titulo })
+      .pipe(capturarErrorIA());
   }
 
   detalle(id: string): Observable<ConversacionIA> {
-    return this.http.get<ConversacionIA>(
-      `${this.api}/ia/conversaciones/${id}/`).pipe(capturarErrorIA());
+    return this.http
+      .get<ConversacionIA>(`${this.api}/ia/conversaciones/${id}/`)
+      .pipe(capturarErrorIA());
   }
 
   enviar(mensaje: string, conversacionId?: string): Observable<RespuestaChatIA> {
     const cuerpo: Record<string, string> = { mensaje };
     if (conversacionId) cuerpo['conversacion_id'] = conversacionId;
-    return this.http.post<RespuestaChatIA>(
-      `${this.api}/ia/chat/`, cuerpo).pipe(capturarErrorIA());
+    return this.http.post<RespuestaChatIA>(`${this.api}/ia/chat/`, cuerpo).pipe(capturarErrorIA());
   }
 }
 
 /** Convierte la respuesta de error de Django en un mensaje legible,
  * conservando la conversacion cuando el motor de IA falla (502). */
-const capturarErrorIA = <T,>() =>
+const capturarErrorIA = <T>() =>
   capturarErrorDjango<T, ErrorIA>({
     enriquecer: (e, cuerpo, base) => {
       const conConversacion = e.status === 502 && !!cuerpo['conversacion'];
