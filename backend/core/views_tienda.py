@@ -14,7 +14,7 @@ import uuid as uuid_mod
 
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, F, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -406,12 +406,18 @@ def _carrito_de(request, bloquear=False):
     Con `bloquear=True` toma SELECT FOR UPDATE sobre la fila del carrito para
     serializar operaciones concurrentes del mismo comprador (agregar items,
     actualizar cantidades o aplicar cupon).
+
+    usuario es OneToOneField: dos peticiones concurrentes del mismo
+    comprador sin carrito previo podian pasar ambas el "no existe" y
+    chocar en Carrito.objects.create(), la segunda con IntegrityError sin
+    capturar (500). get_or_create() resuelve la carrera con su propio
+    savepoint interno.
     """
-    qs = Carrito.objects.select_for_update() if bloquear else Carrito.objects
-    carrito = qs.filter(usuario=request.user).first()
-    if carrito is None:
-        carrito = Carrito.objects.create(usuario=request.user, empresa=None)
-    elif carrito.empresa_id is not None:
+    carrito, _creado = Carrito.objects.get_or_create(
+        usuario=request.user, defaults={'empresa': None})
+    if bloquear:
+        carrito = Carrito.objects.select_for_update().get(pk=carrito.pk)
+    if carrito.empresa_id is not None:
         # Se migra un carrito con empresa antigua al modelo de marketplace.
         carrito.empresa = None
         carrito.save(update_fields=['empresa'])
@@ -618,20 +624,43 @@ class CarritoCuponView(APIView):
 
 # ------------------------------ Checkout ---------------------------------
 
+def _cobrar_pasarela(metodo_pago):
+    """Llamada a la pasarela de pago (mock configurable por env).
+
+    Se llama SIN ningun lock de BD sostenido: es una llamada externa (mock
+    hoy, red real cuando se integre una pasarela) y no debe bloquear filas
+    de venta/producto mientras "viaja" (mismo criterio que el adaptador
+    DIAN en views_facturacion.py)."""
+    mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
+    if mock_habilitado:
+        return {
+            'aprobada': True,
+            'transaccion_id': f"MOCK-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+            'mensaje': 'Pago aprobado (mock)',
+        }
+    return {
+        'aprobada': False,
+        'transaccion_id': None,
+        'mensaje': 'Pasarela no configurada',
+    }
+
+
 class CheckoutView(APIView):
     """POST convierte el carrito en ventas (checkout tipo marketplace).
 
     El carrito puede llevar productos de varias empresas. Se genera UNA
-    venta por cada empresa vendedora, todas dentro de una misma transaccion.
+    venta por cada empresa vendedora.
 
-    Flujo:
-    1. Valida stock de cada item con select_for_update.
-    2. Si stock_insuficiente, rechaza con la lista de productos afectados.
-    3. Agrupa los items por empresa vendedora y crea una venta por cada una,
-       descontando stock y registrando movimientos (transaction.atomic).
-    4. Aplica descuento del cupon solo si pertenece a la empresa vendedora.
-    5. Simula pasarela de pago (mock configurable por env).
-    6. Limpia el carrito.
+    Flujo (la pasarela se cobra DESPUES de reservar el stock, no antes: si
+    se cobrara primero y el stock fallara despues, no habria como revertir
+    el cobro ya hecho en una pasarela real):
+    1. Transaccion A: bloquea carrito y productos, valida stock, reserva
+       stock (resta) y crea las ventas en estado 'pendiente' (aun no se ha
+       cobrado nada).
+    2. Fuera de cualquier lock: cobra la pasarela.
+    3. Transaccion B (corta): si aprobada, marca las ventas 'completada' y
+       crea los envios; si rechazada, revierte el stock reservado y anula
+       las ventas -- el carrito queda intacto para reintentar el pago.
     """
     permission_classes = [IsAuthenticated]
 
@@ -644,29 +673,7 @@ class CheckoutView(APIView):
                  "opciones": [c for c, _ in Venta.METODO_PAGO_CHOICES]},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
-        if mock_habilitado:
-            pasarelarespuesta = {
-                'aprobada': True,
-                'transaccion_id': f"MOCK-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-                'mensaje': 'Pago aprobado (mock)',
-            }
-        else:
-            pasarelarespuesta = {
-                'aprobada': False,
-                'transaccion_id': None,
-                'mensaje': 'Pasarela no configurada',
-            }
-
-        if not pasarelarespuesta['aprobada']:
-            return Response(
-                {"codigo": "PAGO_RECHAZADO",
-                 "detalle": pasarelarespuesta['mensaje']},
-                status=status.HTTP_402_PAYMENT_REQUIRED)
-
-        # Transaccion unica: bloquea el carrito del comprador (evita doble
-        # checkout concurrente), los productos y la fila de cada empresa
-        # vendedora (serializa el correlativo de numero_factura).
+        # --- Transaccion A: validar y reservar stock, sin cobrar todavia ---
         with transaction.atomic():
             carrito = _carrito_de(request, bloquear=True)
 
@@ -767,13 +774,15 @@ class CheckoutView(APIView):
                     subtotal=subtotal,
                     descuento=descuento,
                     total=total,
-                    estado='completada',
+                    estado='pendiente',
                     metodo_pago=metodo_pago,
-                    notas=(f"Checkout tienda - Transaccion: "
-                           f"{pasarelarespuesta['transaccion_id']}"
+                    notas=("Checkout tienda"
                            + (f" - Cupon: {cupon.codigo}" if cupon and cupon.empresa_id == empresa_id else '')),
                 )
 
+                # Reserva de stock: se resta ya (sin esto un segundo checkout
+                # concurrente podria vender lo mismo mientras se espera la
+                # pasarela); si el pago se rechaza, la transaccion B lo revierte.
                 for item in lineas:
                     DetalleVenta.objects.create(
                         venta=venta,
@@ -787,21 +796,62 @@ class CheckoutView(APIView):
                         item.producto, request.user, 'salida', item.cantidad,
                         f"Checkout tienda {venta.numero_factura}")
 
-                Envio.objects.create(
-                    venta=venta,
-                    direccion=cliente.direccion,
-                    ciudad=cliente.ciudad,
-                )
-
                 ventas.append(venta)
 
+            # El carrito se vacia ya en esta misma transaccion (todavia bajo
+            # el lock de _carrito_de): asi un segundo checkout concurrente del
+            # mismo comprador queda serializado por el SELECT FOR UPDATE de
+            # arriba y encuentra el carrito vacio (CARRITO_VACIO) en vez de
+            # poder reservar el mismo item dos veces mientras este espera la
+            # pasarela. Si el pago se rechaza mas abajo, se restaura.
+            carrito_id = carrito.pk
             carrito.items.all().delete()
             carrito.cupon = None
             carrito.save(update_fields=['cupon'])
 
-            ActividadUsuario.registrar(
-                request.user, "CHECKOUT_MARKETPLACE",
-                f"{len(ventas)} venta(s) - Total ${sum(v.total for v in ventas)}")
+        # --- Cobro a la pasarela: fuera de cualquier transaccion/lock ---
+        pasarelarespuesta = _cobrar_pasarela(metodo_pago)
+
+        # --- Transaccion B: aplicar el resultado del cobro ---
+        with transaction.atomic():
+            if pasarelarespuesta['aprobada']:
+                for venta in ventas:
+                    venta.estado = 'completada'
+                    venta.notas = (f"{venta.notas} - Transaccion: "
+                                   f"{pasarelarespuesta['transaccion_id']}")
+                    venta.save(update_fields=['estado', 'notas'])
+                    Envio.objects.create(
+                        venta=venta, direccion=cliente.direccion, ciudad=cliente.ciudad)
+
+                ActividadUsuario.registrar(
+                    request.user, "CHECKOUT_MARKETPLACE",
+                    f"{len(ventas)} venta(s) - Total ${sum(v.total for v in ventas)}")
+            else:
+                # Pago rechazado: revierte el stock reservado, anula las
+                # ventas 'pendiente' creadas en la transaccion A y devuelve
+                # los items al carrito (que se habia vaciado) para que el
+                # comprador pueda reintentar el pago sin rearmar la compra.
+                for venta in ventas:
+                    for detalle in venta.detalles.select_related('producto'):
+                        Producto.objects.filter(pk=detalle.producto_id).update(
+                            stock=F('stock') + detalle.cantidad)
+                        _registrar_movimiento(
+                            detalle.producto, request.user, 'entrada', detalle.cantidad,
+                            f"Reverso checkout {venta.numero_factura} (pago rechazado)")
+                        CarritoItem.objects.get_or_create(
+                            carrito_id=carrito_id, producto_id=detalle.producto_id,
+                            defaults={'cantidad': detalle.cantidad})
+                    venta.estado = 'anulada'
+                    venta.motivo_anulacion = pasarelarespuesta['mensaje']
+                    venta.anulada_en = timezone.now()
+                    venta.save(update_fields=['estado', 'motivo_anulacion', 'anulada_en'])
+                if cupon:
+                    Carrito.objects.filter(pk=carrito_id).update(cupon=cupon)
+
+                return Response(
+                    {"codigo": "PAGO_RECHAZADO",
+                     "detalle": pasarelarespuesta['mensaje']},
+                    status=status.HTTP_402_PAYMENT_REQUIRED)
 
         return Response({
             "codigo": "EXITO",

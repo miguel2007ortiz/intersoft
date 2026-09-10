@@ -2328,6 +2328,37 @@ class CheckoutPagoYCuponTest(BaseMarketplaceTest):
         self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
 
 
+class CheckoutPagoRechazadoRevierteTest(BaseMarketplaceTest):
+    """Regresion: antes la pasarela se cobraba ANTES de reservar stock; si
+    el pago se rechazaba, el stock ya reservado y las ventas 'pendiente'
+    quedaban sin revertir y el carrito sin restaurar."""
+
+    def test_pago_rechazado_revierte_stock_venta_y_restaura_carrito(self):
+        import os
+        stock_inicial = self.producto_a.stock
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+
+        with patch.dict(os.environ, {"PASARELA_MOCK": "false"}, clear=False):
+            resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+
+        self.assertEqual(resp.status_code, 402)
+        self.assertEqual(resp.data["codigo"], "PAGO_RECHAZADO")
+
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, stock_inicial,
+                         "el stock reservado debe revertirse si el pago falla")
+
+        venta = Venta.objects.get(cliente=self.cliente_comprador)
+        self.assertEqual(venta.estado, "anulada")
+
+        carrito = api.get("/api/tienda/carrito/").data
+        self.assertEqual(len(carrito["items"]), 1,
+                         "el item debe volver al carrito para reintentar el pago")
+        self.assertEqual(carrito["items"][0]["cantidad"], 2)
+
+
 # ============ Complemento de cobertura: catalogo / ventas / empleados =====
 
 class CatalogoComplementoTest(BaseCatalogoTest):
