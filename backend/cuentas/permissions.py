@@ -11,11 +11,26 @@ class EsAdministrador(BasePermission):
 
     def has_permission(self, request, view) -> bool:
         perfil = getattr(request.user, "perfil", None)
-        return bool(perfil and not perfil.deleted_at and perfil.rol.nombre == "ADMINISTRADOR")
+        # perfil.rol es PROTECT y no-nulo a nivel de modelo, pero un perfil
+        # mal migrado/creado a mano (p. ej. via shell) puede tener rol_id
+        # colgante; sin este guard, perfil.rol lanzaba AttributeError -> 500
+        # en vez de negar el acceso.
+        if not (perfil and not perfil.deleted_at and perfil.rol):
+            return False
+        # Ademas del rol base ADMINISTRADOR, acepta un rol personalizado
+        # por-empresa que tenga el permiso de gestion de usuarios: antes
+        # solo se comparaba perfil.rol.nombre, asi que un rol a medida con
+        # permisos de administrador (asignables solo via roles.asignar,
+        # exclusivo del ADMINISTRADOR) quedaba bloqueado de estas vistas
+        # pese a tener realmente el permiso.
+        return (perfil.rol.nombre == "ADMINISTRADOR"
+                or perfil.tiene_permiso("usuarios.gestionar"))
 
 
 class EsPersonal(BasePermission):
-    """ADMINISTRADOR o EMPLEADO con cuenta activa (fase 3)."""
+    """ADMINISTRADOR o EMPLEADO con cuenta activa (fase 3), o cualquier rol
+    -incluido uno personalizado por-empresa- con al menos un permiso
+    operativo asignado (el rol base CLIENTE no tiene ninguno)."""
 
     message = "Solo el personal de la empresa (ADMINISTRADOR o EMPLEADO) puede hacer esto."
 
@@ -23,8 +38,10 @@ class EsPersonal(BasePermission):
 
     def has_permission(self, request, view) -> bool:
         perfil = getattr(request.user, "perfil", None)
-        return bool(perfil and not perfil.deleted_at
-                    and perfil.rol.nombre in self.ROLES_PERSONAL)
+        if not (perfil and not perfil.deleted_at and perfil.rol):
+            return False
+        return (perfil.rol.nombre in self.ROLES_PERSONAL
+                or perfil.rol.rol_permisos.exists())
 
 
 def TienePermiso(codigo: str):

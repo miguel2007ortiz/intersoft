@@ -1,7 +1,7 @@
 import uuid
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -274,18 +274,27 @@ class Venta(TimeStampedModel):
     def __str__(self):
         return f"Factura {self.numero_factura} - {self.cliente.nombre} (${self.total})"
 
-    def _generar_numero_factura(self, bloqueada=False):
+    def _generar_numero_factura(self):
+        # Correlativo por empresa via COUNT(*). Solo es libre de carreras si
+        # quien llama ya tiene la fila de la empresa bloqueada (ver save()).
         fecha = timezone.localtime().strftime('%Y%m%d')
-        # Correlativo por empresa. Si 'bloqueada' es True es porque la fila de
-        # la empresa ya esta siendo lockeada (SELECT FOR UPDATE) por el caller,
-        # lo que serializa la generacion del consecutivo sin colisiones.
         consecutivo = Venta.objects.filter(empresa=self.empresa).count() + 1
         prefijo = self.empresa_id.hex[:8].upper()
         return f"{prefijo}-{fecha}-{consecutivo:05d}"
 
     def save(self, *args, **kwargs):
         if not self.numero_factura:
-            self.numero_factura = self._generar_numero_factura()
+            # Bloqueamos la fila de la empresa aqui mismo (SELECT FOR UPDATE)
+            # y no la soltamos hasta insertar la venta, para serializar el
+            # conteo+insercion sin depender de que cada caller recuerde
+            # bloquearla antes: si dos ventas de la misma empresa se guardan
+            # a la vez, la segunda espera a que la primera termine de
+            # insertar y recien ahi cuenta (viendo el consecutivo al dia).
+            with transaction.atomic():
+                Empresa.objects.select_for_update().filter(pk=self.empresa_id).first()
+                self.numero_factura = self._generar_numero_factura()
+                super().save(*args, **kwargs)
+            return
         super().save(*args, **kwargs)
 
 

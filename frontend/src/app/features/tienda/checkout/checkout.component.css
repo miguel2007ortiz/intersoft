@@ -121,7 +121,8 @@
 .metodo-pago {
   margin-bottom: var(--e5);
 }
-.metodo-pago label {
+.metodo-pago label,
+.metodo-pago .label-grupo {
   display: block;
   font-weight: 600;
   margin-bottom: var(--e2);

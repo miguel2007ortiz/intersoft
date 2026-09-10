@@ -10,7 +10,7 @@
  * (dialogo propio de la app, no el confirm() del navegador).
  */
 
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { EmpleadosService } from '../../core/services/empleados.service';
@@ -32,7 +32,7 @@ const CERRAR_AVISO_MS = 4000;
   templateUrl: './empleados.component.html',
   styleUrl: './empleados.component.css',
 })
-export class EmpleadosComponent {
+export class EmpleadosComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly empleados = inject(EmpleadosService);

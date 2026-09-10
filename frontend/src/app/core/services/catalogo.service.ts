@@ -24,7 +24,6 @@ import {
   Producto,
   Venta,
   VentaPOSInput,
-  StockInsuficiente,
   MovimientoInventario,
   Notificacion,
   InventarioProducto,

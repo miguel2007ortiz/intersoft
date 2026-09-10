@@ -155,9 +155,13 @@ class FacturasView(APIView):
 
         empresa = _obtener_empresa(request)
 
-        # La venta se bloquea (SELECT FOR UPDATE) para evitar que dos
-        # peticiones concurrentes generen dos FacturaElectronica para la
-        # misma venta; el IntegrityError queda como respaldo defensivo.
+        # La venta se bloquea (SELECT FOR UPDATE) solo mientras se valida y
+        # se reserva el comprobante 'pendiente'; el IntegrityError queda como
+        # respaldo defensivo ante dos peticiones concurrentes. La llamada de
+        # red a la DIAN se hace DESPUES de liberar el lock (ver
+        # FacturaReintentarView.post, que ya seguia este patron): mantener el
+        # lock durante una llamada SOAP externa retiene la fila de la venta y
+        # una conexion de BD por toda la duracion de esa llamada.
         with transaction.atomic():
             venta = Venta.objects.select_for_update().filter(
                 empresa=empresa, deleted_at__isnull=True,
@@ -201,8 +205,13 @@ class FacturasView(APIView):
                     status=status.HTTP_400_BAD_REQUEST)
 
             datos_dian = _datos_venta_para_dian(venta)
-            respuesta = enviar_factura(datos_dian)
 
+        # Fuera del atomic: la venta ya no esta bloqueada durante la llamada
+        # de red. Una peticion concurrente vera la factura 'pendiente' recien
+        # creada y respondera YA_FACTURADA en vez de reintentar el envio.
+        respuesta = enviar_factura(datos_dian)
+
+        with transaction.atomic():
             if respuesta.aprobada:
                 factura.estado = 'aprobada'
                 factura.cufe = respuesta.cufe
@@ -408,9 +417,10 @@ class NotasCreditoView(APIView):
 
         empresa = _obtener_empresa(request)
 
-        # La venta se bloquea para serializar las notas credito de la misma
-        # venta (evita crear dos notas activas ante peticiones simultaneas);
-        # el flujo completo (crear + enviar + revertir stock) es atomico.
+        # La venta se bloquea solo mientras se valida y se reserva la nota
+        # 'pendiente' (evita crear dos notas activas ante peticiones
+        # simultaneas); la llamada de red a la DIAN se hace fuera del lock,
+        # por la misma razon que en FacturasView.generar.
         with transaction.atomic():
             venta = Venta.objects.select_for_update().filter(
                 empresa=empresa, deleted_at__isnull=True,
@@ -443,22 +453,35 @@ class NotasCreditoView(APIView):
                                 "aprobada por la DIAN."},
                     status=status.HTTP_400_BAD_REQUEST)
 
-            if NotaCredito.objects.filter(
-                    venta_original=venta, estado__in=('pendiente', 'aprobada')
-            ).exists():
+            notas_previas = NotaCredito.objects.filter(venta_original=venta)
+            if notas_previas.filter(estado__in=('pendiente', 'aprobada')).exists():
                 return Response(
                     {"codigo": "YA_TIENE_NOTA",
                      "detalle": "Esta venta ya tiene una nota credito "
                                 "activa o pendiente."},
                     status=status.HTTP_400_BAD_REQUEST)
 
-            numero_nc = f"NC-{venta.numero_factura}"
-            nota = NotaCredito.objects.create(
-                venta_original=venta,
-                numero=numero_nc,
-                motivo=entrada.validated_data['motivo'],
-                estado='pendiente',
-            )
+            # Solo llegan aqui notas previas 'rechazada' (unica otra opcion
+            # del ESTADO_CHOICES). numero es unique=True: reintentar con el
+            # mismo "NC-<numero_factura>" chocaria con la nota rechazada, asi
+            # que la enesima nota de la misma venta suma un sufijo.
+            intentos_previos = notas_previas.count()
+            numero_nc = (f"NC-{venta.numero_factura}" if intentos_previos == 0
+                        else f"NC-{venta.numero_factura}-{intentos_previos + 1}")
+            try:
+                nota = NotaCredito.objects.create(
+                    venta_original=venta,
+                    numero=numero_nc,
+                    motivo=entrada.validated_data['motivo'],
+                    estado='pendiente',
+                )
+            except IntegrityError:
+                # Respaldo: otra peticion concurrente reservo ese numero.
+                return Response(
+                    {"codigo": "YA_TIENE_NOTA",
+                     "detalle": "Ya se esta creando una nota credito para "
+                                "esta venta. Intenta de nuevo."},
+                    status=status.HTTP_400_BAD_REQUEST)
 
             cliente = venta.cliente
             datos_dian_nota = {
@@ -470,9 +493,17 @@ class NotasCreditoView(APIView):
                 'total': str(venta.total),
                 'motivo': nota.motivo,
             }
-            respuesta = enviar_nota_credito(datos_dian_nota)
 
+        # Fuera del atomic: la nota ya quedo reservada como 'pendiente', asi
+        # que una peticion concurrente vera YA_TIENE_NOTA en vez de reintentar
+        # el envio mientras esta se resuelve.
+        respuesta = enviar_nota_credito(datos_dian_nota)
+
+        with transaction.atomic():
+            # La venta se vuelve a bloquear aqui solo si la DIAN aprueba,
+            # porque en ese caso hay que anular la venta y revertir stock.
             if respuesta.aprobada:
+                venta = Venta.objects.select_for_update().get(pk=venta.pk)
                 nota.estado = 'aprobada'
                 nota.cufe_nota = respuesta.cufe
                 _guardar_comprobantes(nota, numero_nc, respuesta)

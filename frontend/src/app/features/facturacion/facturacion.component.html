@@ -281,14 +281,12 @@
 
     <!-- Modal detalle / motivo rechazo -->
     @if (detalleVisible()) {
-      <div class="modal-overlay" (click)="detalleVisible.set(false)">
-        <div
-          class="modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="detalle-titulo"
-          (click)="$event.stopPropagation()"
-        >
+      <div
+        class="modal-overlay"
+        role="presentation"
+        (click)="$event.target === $event.currentTarget && detalleVisible.set(false)"
+      >
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detalle-titulo">
           <h3 id="detalle-titulo">Detalle de Factura</h3>
           @if (detalleSeleccion()) {
             <div class="modal-body">
@@ -339,14 +337,12 @@
 
     <!-- Modal reenviar -->
     @if (reenviarVisible()) {
-      <div class="modal-overlay" (click)="reenviarVisible.set(false)">
-        <div
-          class="modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reenviar-titulo"
-          (click)="$event.stopPropagation()"
-        >
+      <div
+        class="modal-overlay"
+        role="presentation"
+        (click)="$event.target === $event.currentTarget && reenviarVisible.set(false)"
+      >
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reenviar-titulo">
           <h3 id="reenviar-titulo">Reenviar Factura</h3>
           <p>
             Factura: <strong>{{ facturaReenviar()?.numero }}</strong>

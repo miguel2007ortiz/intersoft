@@ -414,12 +414,18 @@ def _carrito_de_usuario(usuario, bloquear=False):
     Con `bloquear=True` toma SELECT FOR UPDATE sobre la fila del carrito para
     serializar operaciones concurrentes del mismo comprador (agregar items,
     actualizar cantidades o aplicar cupon).
+
+    usuario es OneToOneField: dos peticiones concurrentes del mismo
+    comprador sin carrito previo podian pasar ambas el "no existe" y
+    chocar en Carrito.objects.create(), la segunda con IntegrityError sin
+    capturar (500). get_or_create() resuelve la carrera con su propio
+    savepoint interno.
     """
-    qs = Carrito.objects.select_for_update() if bloquear else Carrito.objects
-    carrito = qs.filter(usuario=usuario).first()
-    if carrito is None:
-        carrito = Carrito.objects.create(usuario=usuario, empresa=None)
-    elif carrito.empresa_id is not None:
+    carrito, _creado = Carrito.objects.get_or_create(
+        usuario=usuario, defaults={'empresa': None})
+    if bloquear:
+        carrito = Carrito.objects.select_for_update().get(pk=carrito.pk)
+    if carrito.empresa_id is not None:
         # Se migra un carrito con empresa antigua al modelo de marketplace.
         carrito.empresa = None
         carrito.save(update_fields=['empresa'])
@@ -775,7 +781,7 @@ class CheckoutView(APIView):
     El carrito puede llevar productos de varias empresas. Se genera UNA
     venta por cada empresa vendedora.
 
-    Flujo (Fase 2 - reservar -> cobrar -> confirmar) en TRES tramos:
+Flujo (Fase 2 - reservar -> cobrar -> confirmar) en TRES tramos:
 
     1. RESERVA (transaction.atomic con locks cortos):
        valida stock de cada item con select_for_update; si hay stock
@@ -814,7 +820,7 @@ class CheckoutView(APIView):
                  "opciones": [c for c, _ in Venta.METODO_PAGO_CHOICES]},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Clave de idempotencia: la aporta el cliente o se deriva del contenido
+# Clave de idempotencia: la aporta el cliente o se deriva del contenido
         # del carrito, de modo que un checkout reintentado no cobre dos veces.
         idempotencia_clave = (request.data.get('idempotencia_clave', '')
                               or self._clave_de_carrito(request))
@@ -832,6 +838,7 @@ class CheckoutView(APIView):
 
         # ---------------- 1. Reserva (locks cortos) ----------------
         referencias_empresa = []
+
         with transaction.atomic():
             carrito = _carrito_de(request, bloquear=True)
 
@@ -963,12 +970,17 @@ class CheckoutView(APIView):
                     subtotal=subtotal,
                     descuento=descuento,
                     total=total,
-                    estado='pendiente',          # se confirma al cobrar
+estado='pendiente',          # se confirma al cobrar
                     estado_pago='pendiente',     # se confirma al cobrar
                     metodo_pago=metodo_pago,
                     intento_pago=intento,
+                    notas=("Checkout tienda"
+                           + (f" - Cupon: {cupon.codigo}" if cupon and cupon.empresa_id == empresa_id else '')),
                 )
 
+                # Reserva de stock: se resta ya (sin esto un segundo checkout
+                # concurrente podria vender lo mismo mientras se espera la
+                # pasarela); si el pago se rechaza, la transaccion B lo revierte.
                 for item in lineas:
                     DetalleVenta.objects.create(
                         venta=venta,

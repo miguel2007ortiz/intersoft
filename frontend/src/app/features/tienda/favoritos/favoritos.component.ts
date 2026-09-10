@@ -15,7 +15,7 @@
  */
 
 import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -28,7 +28,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
   templateUrl: './favoritos.component.html',
   styleUrls: ['./favoritos.component.css'],
 })
-export class FavoritosComponent {
+export class FavoritosComponent implements OnInit {
   private readonly tienda = inject(TiendaService);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
@@ -79,7 +79,7 @@ export class FavoritosComponent {
     if (!this.auth.estaAutenticado()) return;
     this.agregandoId.set(producto.id);
     this.tienda.agregarItem(producto.id, 1).subscribe({
-      next: (c) => {
+      next: () => {
         this.agregandoId.set(null);
         this.agregadoId.set(producto.id);
         programarAviso(this.destroyRef, () => this.agregadoId.set(null), 1200);

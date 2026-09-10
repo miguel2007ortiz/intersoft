@@ -27,6 +27,21 @@ def _cupon_vigente(empresa, codigo, porcentaje=10):
         fecha_fin=timezone.now() + timedelta(days=30))
 
 
+class ManejadorExcepcionesTest(TestCase):
+    """Regresion: el fallback de errores no controlados devolvia
+    {'detail': ...}, rompiendo el contrato {codigo, detalle, errores} que
+    el resto de la API (y el frontend) da por garantizado."""
+
+    def test_excepcion_no_controlada_respeta_el_contrato_de_error(self):
+        from .exceptions import manejador_excepciones
+        respuesta = manejador_excepciones(RuntimeError("boom"), {"view": None})
+        self.assertEqual(respuesta.status_code, 500)
+        self.assertEqual(respuesta.data["codigo"], "ERROR_INTERNO")
+        self.assertIn("errores", respuesta.data)
+        self.assertIsNone(respuesta.data["errores"])
+        self.assertIn("detalle", respuesta.data)
+
+
 class BaseCoreTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -645,6 +660,37 @@ class DashboardReportesTest(BaseCatalogoTest):
         self.assertIn("attachment", res["Content-Disposition"])
         self.assertTrue(res.content.startswith(b'\xef\xbb\xbf'))  # BOM UTF-8
 
+    def test_exportar_pdf_html_escapa_datos_de_negocio(self):
+        """Un producto con nombre/sku maliciosos no debe inyectar HTML/JS
+        en el reporte exportado (regresion del hallazgo de XSS almacenado)."""
+        malicioso = Producto.objects.create(
+            empresa=self.empresa, nombre='<script>alert(1)</script>',
+            sku='=CMD()', precio=1000, stock=5, stock_minimo=1,
+            categoria=self.cat2)
+        self._venta_con_detalle(malicioso, 1, 1000)
+        res = self.api_como(self.admin).get(
+            "/api/reportes/exportar/",
+            {"tipo": "top_productos", "formato": "pdf"})
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode('utf-8')
+        self.assertNotIn('<script>alert(1)</script>', html)
+        self.assertIn('&lt;script&gt;', html)
+
+    def test_exportar_excel_csv_neutraliza_inyeccion_de_formula(self):
+        """Una celda que empiece por = + - @ se ejecuta como formula en
+        Excel/Sheets si no se prefija; regresion del hallazgo de CSV injection."""
+        malicioso = Producto.objects.create(
+            empresa=self.empresa, nombre='=HYPERLINK("http://evil")',
+            sku='PRD-EVIL', precio=1000, stock=5, stock_minimo=1,
+            categoria=self.cat2)
+        self._venta_con_detalle(malicioso, 1, 1000)
+        res = self.api_como(self.admin).get(
+            "/api/reportes/exportar/",
+            {"tipo": "top_productos", "formato": "excel"})
+        contenido = res.content.decode('utf-8-sig')
+        self.assertNotIn('\n=HYPERLINK', contenido)
+        self.assertIn("'=HYPERLINK", contenido)
+
     def test_exportar_pdf_html(self):
         res = self.api_como(self.admin).get(
             "/api/reportes/exportar/",
@@ -791,6 +837,10 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(res.status_code, 502)
         cuerpo = res.json()
         self.assertEqual(cuerpo["codigo"], "IA_NO_DISPONIBLE")
+        # Contrato uniforme {codigo, detalle, errores} igual que el resto de
+        # la API (antes faltaba la clave 'errores' en este 502 puntual).
+        self.assertIn("errores", cuerpo)
+        self.assertIsNone(cuerpo["errores"])
         # Conserva la conversacion con el mensaje del usuario (para reintentar)
         mensajes = cuerpo["conversacion"]["mensajes"]
         self.assertEqual([m["rol"] for m in mensajes], ["usuario"])
@@ -2631,6 +2681,40 @@ class CheckoutPagoYCuponTest(BaseMarketplaceTest):
         self.assertEqual(resp.data["codigo"], "STOCK_INSUFICIENTE")
 
 
+class CheckoutPagoRechazadoRevierteTest(BaseMarketplaceTest):
+    """Regresion: antes la pasarela se cobraba ANTES de reservar stock; si
+    el pago se rechazaba, el stock ya reservado y las ventas 'pendiente'
+    quedaban sin revertir y el carrito sin restaurar."""
+
+    def test_pago_rechazado_revierte_stock_venta_y_restaura_carrito(self):
+        import os
+        stock_inicial = self.producto_a.stock
+        api = self.api_como(self.comprador)
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 2}, format="json")
+
+        with patch.dict(os.environ, {"PASARELA_MOCK": "false"}, clear=False):
+            resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+
+        self.assertEqual(resp.status_code, 402)
+        self.assertEqual(resp.data["codigo"], "PAGO_RECHAZADO")
+
+        self.producto_a.refresh_from_db()
+        self.assertEqual(self.producto_a.stock, stock_inicial,
+                         "el stock reservado debe revertirse si el pago falla")
+
+        venta = Venta.objects.get(cliente=self.cliente_comprador)
+        # Flujo canónico (Fase 2): la venta NO se anula; queda 'pendiente'
+        # con estado_pago 'reversado' (registro de auditoría, no cobrable).
+        self.assertEqual(venta.estado, "pendiente")
+        self.assertEqual(venta.estado_pago, "reversado")
+
+        carrito = api.get("/api/tienda/carrito/").data
+        self.assertEqual(len(carrito["items"]), 1,
+                         "el carrito conserva el item para reintentar el pago")
+        self.assertEqual(carrito["items"][0]["cantidad"], 2)
+
+
 # ============ Complemento de cobertura: catalogo / ventas / empleados =====
 
 class CatalogoComplementoTest(BaseCatalogoTest):
@@ -2906,6 +2990,47 @@ class VentasComplementoTest(BaseCatalogoTest):
         self.assertIn("Short", nombres_bajos)
         self.assertIn("Zapatos", [p["nombre"] for p in
                                   api.get("/api/inventario/productos/?limite=abc").data["resultados"]])
+
+
+class VentasEstadisticasTest(BaseCatalogoTest):
+    """Regresion: las estadisticas de /api/ventas/ (Sum('total')) sumaban
+    TODAS las ventas del filtro, incluidas 'anulada'/'pendiente', asi que
+    sin un ?estado explicito el ingreso mostrado por defecto quedaba
+    inflado con ventas que nunca se cobraron."""
+
+    def _pos(self, api, cantidad=1):
+        return api.post("/api/ventas/pos/", {
+            "cliente": str(self.cliente.id),
+            "metodo_pago": "efectivo",
+            "detalles": [{"producto": str(self.producto.id), "cantidad": cantidad}],
+        }, format="json")
+
+    def test_sin_filtro_estado_ignora_anuladas_en_estadisticas(self):
+        api = self.api_como(self.admin)
+        completada = Venta.objects.get(pk=self._pos(api).json()["id"])
+        anulada = Venta.objects.get(pk=self._pos(api).json()["id"])
+        api.post(f"/api/ventas/{anulada.id}/anular/", {"motivo": "cliente se arrepintio"},
+                format="json")
+
+        resp = api.get("/api/ventas/")
+        self.assertEqual(resp.status_code, 200)
+        # Ambas ventas siguen apareciendo en la lista...
+        self.assertEqual(resp.data["total"], 2)
+        # ...pero la anulada no debe contar en el ingreso ni en el conteo.
+        self.assertEqual(Decimal(resp.data["estadisticas"]["total_ventas"]),
+                         completada.total)
+        self.assertEqual(resp.data["estadisticas"]["total_registros"], 1)
+
+    def test_filtro_estado_explicito_respeta_ese_estado_en_estadisticas(self):
+        api = self.api_como(self.admin)
+        anulada = Venta.objects.get(pk=self._pos(api).json()["id"])
+        api.post(f"/api/ventas/{anulada.id}/anular/", {"motivo": "prueba"}, format="json")
+
+        resp = api.get("/api/ventas/", {"estado": "anulada"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["estadisticas"]["total_registros"], 1)
+        anulada.refresh_from_db()
+        self.assertEqual(Decimal(resp.data["estadisticas"]["total_ventas"]), anulada.total)
 
 
 class EnvioVentasComplementoTest(BaseEnvioTest):

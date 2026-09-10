@@ -32,6 +32,8 @@ def manejador_excepciones(exc, context):
 
     logger.exception('Error no controlado en %s', context.get('view'))
     return Response(
-        {'detail': 'Ocurrio un error inesperado. Intenta de nuevo en unos minutos.'},
+        {'codigo': 'ERROR_INTERNO',
+         'detalle': 'Ocurrio un error inesperado. Intenta de nuevo en unos minutos.',
+         'errores': None},
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )

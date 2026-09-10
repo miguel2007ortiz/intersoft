@@ -41,7 +41,11 @@
           <div
             class="card tarjeta aparecer"
             [style.--retraso.ms]="(i % 12) * 60"
+            role="button"
+            tabindex="0"
             (click)="agregarAlCarrito(p)"
+            (keydown.enter)="agregarAlCarrito(p)"
+            (keydown.space)="agregarAlCarrito(p); $event.preventDefault()"
             title="Click para agregar al carrito"
           >
             <div class="card-img">

@@ -21,6 +21,7 @@ import {
   LineaPOS,
   VentaPOSInput,
   StockInsuficiente,
+  Venta,
 } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { debounce } from '../../core/utils/temporizador.util';
@@ -56,7 +57,7 @@ export class PosComponent {
   readonly cargando = signal(false);
   readonly error = signal('');
   readonly erroresStock = signal<StockInsuficiente[]>([]);
-  readonly ventaCreada = signal<any>(null);
+  readonly ventaCreada = signal<Venta | null>(null);
 
   readonly metodosPago = [
     { valor: 'efectivo', etiqueta: 'Efectivo' },
@@ -103,7 +104,7 @@ export class PosComponent {
         }
         if (!this.clienteSeleccionado) this.clienteSeleccionado = c.id;
       },
-      error: () => {},
+      error: () => undefined,
     });
   }
 

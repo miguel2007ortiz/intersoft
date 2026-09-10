@@ -26,7 +26,8 @@
 .seccion {
   margin-bottom: var(--e5);
 }
-.seccion label {
+.seccion label,
+.seccion .label-grupo {
   display: block;
   font-weight: 600;
   margin-bottom: var(--e2);

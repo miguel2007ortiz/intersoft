@@ -9,7 +9,7 @@
  * resuelve el backend: la pantalla nunca descarga la tabla entera.
  */
 
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
@@ -31,7 +31,7 @@ const CERRAR_AVISO_MS = 4000;
   templateUrl: './clientes.component.html',
   styleUrl: './clientes.component.css',
 })
-export class ClientesComponent {
+export class ClientesComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly catalogo = inject(CatalogoService);

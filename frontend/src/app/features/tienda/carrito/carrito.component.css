@@ -111,7 +111,8 @@
 .cupon-seccion {
   margin-bottom: var(--e4);
 }
-.cupon-seccion label {
+.cupon-seccion label,
+.cupon-seccion .label-grupo {
   display: block;
   font-weight: 600;
   margin-bottom: var(--e2);

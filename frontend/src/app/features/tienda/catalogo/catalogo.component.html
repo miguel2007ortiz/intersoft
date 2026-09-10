@@ -49,7 +49,7 @@
               <li class="sugerencia-info">Sin resultados para "{{ busqueda }}"</li>
             } @else {
               @for (s of sugerencias(); track s.id) {
-                <li role="option">
+                <li role="option" aria-selected="false">
                   <button type="button" class="sugerencia" (click)="seleccionarSugerencia(s)">
                     @if (s.imagen) {
                       <img
@@ -110,7 +110,13 @@
           </button>
 
           @if (menuAbierto()) {
-            <div class="menu-desplegable" role="menu" (click)="menuAbierto.set(false)">
+            <div
+              class="menu-desplegable"
+              role="menu"
+              tabindex="-1"
+              (click)="menuAbierto.set(false)"
+              (keydown.enter)="menuAbierto.set(false)"
+            >
               @if (sesion(); as u) {
                 <div class="menu-usuario">
                   <strong>{{ u.nombre }}</strong>
@@ -442,8 +448,12 @@
             class="card tarjeta-flot tarjeta-hover aparecer"
             [style.--retraso.ms]="(i % 12) * 60"
             [class.tarjeta-doble-click]="tarjetaEfecto() === p.id"
+            role="button"
+            tabindex="0"
             (click)="abrirDetalle(p)"
             (dblclick)="abrirDetalle(p, $event)"
+            (keydown.enter)="abrirDetalle(p)"
+            (keydown.space)="abrirDetalle(p); $event.preventDefault()"
             title="Click para ver el detalle"
           >
             @if (tarjetaEfecto() === p.id) {
@@ -603,14 +613,12 @@
   }
 
   @if (productoDetalle(); as p) {
-    <div class="modal-fondo" (click)="cerrarDetalle()">
-      <div
-        class="modal-caja"
-        role="dialog"
-        aria-modal="true"
-        [attr.aria-label]="p.nombre"
-        (click)="$event.stopPropagation()"
-      >
+    <div
+      class="modal-fondo"
+      role="presentation"
+      (click)="$event.target === $event.currentTarget && cerrarDetalle()"
+    >
+      <div class="modal-caja" role="dialog" aria-modal="true" [attr.aria-label]="p.nombre">
         <button type="button" class="modal-cerrar" (click)="cerrarDetalle()" aria-label="Cerrar">
           âœ•
         </button>
@@ -736,7 +744,7 @@
 
           @if (sesion()) {
             <div class="form-comentario">
-              <label>Tu calificacion</label>
+              <span class="label-grupo">Tu calificacion</span>
               <div class="estrellas">
                 @for (n of [1, 2, 3, 4, 5]; track n) {
                   <button

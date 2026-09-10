@@ -64,7 +64,6 @@ export class DashboardComponent {
   readonly esAdmin = computed(() => this.auth.esAdministrador());
 
   constructor() {
-    this.categorias().length; // inicializa (carga dentro de reload)
     this.cargarTodo();
   }
 
@@ -96,22 +95,22 @@ export class DashboardComponent {
 
     this.analytics.ventas(filtros).subscribe({
       next: (r) => this.series.set(r),
-      error: () => {},
+      error: () => undefined,
     });
 
     this.analytics.topProductos(filtros).subscribe({
       next: (r) => this.topProductos.set(r.resultados.slice(0, 8)),
-      error: () => {},
+      error: () => undefined,
     });
 
     this.analytics.clientesFrecuentes(filtros).subscribe({
       next: (r) => this.clientes.set(r.resultados.slice(0, 6)),
-      error: () => {},
+      error: () => undefined,
     });
 
     this.analytics.inventario().subscribe({
       next: (r) => this.valorCategorias.set(r.valor_por_categoria),
-      error: () => {},
+      error: () => undefined,
     });
   }
 

@@ -256,8 +256,14 @@ class VentasView(APIView):
                 Q(numero_factura__icontains=busqueda)
                 | Q(cliente__nombre__icontains=busqueda))
 
-        # Estadisticas
-        stats = ventas.aggregate(
+        # Estadisticas: si no se pidio un estado explicito, el ingreso
+        # ("total_ventas") solo cuenta ventas 'completada' -- antes sumaba
+        # tambien 'anulada'/'pendiente' e inflaba/distorsionaba el ingreso
+        # real mostrado por defecto. Si el caller SI filtro por estado
+        # (p. ej. estado=anulada para auditar anulaciones), respeta ese
+        # filtro tal cual en las estadisticas.
+        ventas_para_stats = ventas if estado else ventas.filter(estado='completada')
+        stats = ventas_para_stats.aggregate(
             total_ventas=Sum('total'),
             total_count=Count('id'),
         )
