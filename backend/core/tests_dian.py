@@ -193,3 +193,15 @@ class FlujoWebServiceTest(SimpleTestCase):
             r = enviar_nota_credito(dict(NOTA))
             self.assertFalse(r.aprobada)
             self.assertEqual(r.codigo_error, "RECHAZADO_DIAN")
+
+    def test_cliente_soap_usa_timeout_configurado(self):
+        """Regresion: el Transport de zeep no tenia timeout -> una DIAN real
+        colgada podia bloquear el hilo (y la fila de venta) indefinidamente."""
+        from core.services.dian_adapter import ClienteDIANReal
+        with self._base(DIAN_TIMEOUT="7"), \
+             patch("zeep.transports.Transport") as transport_mock, \
+             patch("zeep.Client"):
+            ClienteDIANReal()._cliente()
+            _, kwargs = transport_mock.call_args
+            self.assertEqual(kwargs.get("timeout"), 7.0)
+            self.assertEqual(kwargs.get("operation_timeout"), 7.0)

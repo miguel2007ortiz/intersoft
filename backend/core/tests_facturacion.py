@@ -463,6 +463,31 @@ class NotasCreditoTest(BaseFacturacionTest):
         self.assertTrue(Notificacion.objects.filter(
             empresa=self.empresa, tipo="factura").exists())
 
+    @patch("core.views_facturacion.enviar_nota_credito")
+    def test_crear_tras_rechazo_no_choca_con_numero_anterior(self, enviar):
+        """Regresion: numero=NC-<factura> es unique=True; tras una nota
+        rechazada, reintentar debia dar IntegrityError->500. Ahora la nueva
+        nota suma un sufijo y el reintento se resuelve como 400/201 normal."""
+        enviar.return_value = RespuestaDIAN(
+            aprobada=False, codigo_error="DATOS_INVALIDOS", mensaje="Cupo incorrecto.")
+        venta = self.crear_venta()
+        self.crear_factura(venta, estado="aprobada")
+        primera = self.api_como(self.admin).post(
+            "/api/notas-credito/", {"venta_id": str(venta.id), "motivo": "Devolucion"},
+            format="json")
+        self.assertEqual(primera.status_code, 201, primera.content)
+        self.assertEqual(primera.data["numero"], f"NC-{venta.numero_factura}")
+
+        enviar.return_value = RespuestaDIAN(
+            aprobada=True, cufe="NC-CUFE-2",
+            comprobante_pdf=b"%PDF-1.4", comprobante_xml="<xml/>")
+        segunda = self.api_como(self.admin).post(
+            "/api/notas-credito/", {"venta_id": str(venta.id), "motivo": "Devolucion 2"},
+            format="json")
+        self.assertEqual(segunda.status_code, 201, segunda.content)
+        self.assertEqual(segunda.data["numero"], f"NC-{venta.numero_factura}-2")
+        self.assertEqual(NotaCredito.objects.filter(venta_original=venta).count(), 2)
+
     def test_detalle_404_y_aislamiento(self):
         venta = self.crear_venta()
         self.crear_factura(venta, estado="aprobada")

@@ -294,7 +294,15 @@ class ClienteDIANReal:
             sesion = Session()
             sesion.auth = (os.environ.get('DIAN_USUARIO', ''),
                            os.environ.get('DIAN_CLAVE', ''))
-            self._client = Client(self.wsdl, transport=Transport(session=sesion))
+            # Sin timeout, un WSDL o servicio DIAN colgado bloquea el hilo
+            # (y, si el caller mantiene un select_for_update, la fila de BD)
+            # indefinidamente. `timeout` cubre la carga del WSDL,
+            # `operation_timeout` cada llamada SOAP.
+            timeout = float(os.environ.get('DIAN_TIMEOUT', '20'))
+            self._client = Client(
+                self.wsdl,
+                transport=Transport(session=sesion, timeout=timeout,
+                                    operation_timeout=timeout))
         return self._client
 
     def abrir_documento(self, xml: bytes, nit: str) -> dict:
