@@ -16,6 +16,13 @@ antes de iniciar una tarea** (ver la sección de consulta en `AGENTS.md`).
   registrar una decisión nueva en `decisiones.md`.
 - [plantillas/revision-merge.md](plantillas/revision-merge.md) — prompt para que
   el supervisor revise una rama y apruebe el merge a `main`.
+- [plantillas/antipatrones-opencode.md](plantillas/antipatrones-opencode.md) —
+  checklist de 10 anti-patrones (extraídos de los 15 hallazgos reales) para
+  que OpenCode se autorevise antes de reportar un fix como listo.
+- [plantillas/revision-antipatrones-claude.md](plantillas/revision-antipatrones-claude.md) —
+  la misma lista de 10 anti-patrones, en versión "qué grepear/leer" para que
+  el supervisor revise el diff antes de aprobar merge (complementa
+  `revision-merge.md`).
 
 ## Cómo se usa
 1. Al arrancar cada sesión, leer `docs/INDICE.md` (MOC del repo) y este índice.
