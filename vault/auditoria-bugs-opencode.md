@@ -2,7 +2,8 @@
 titulo: "Auditoría de bugs backend + plan de prompts para OpenCode"
 fecha: 2026-09-10
 estado: hallazgos 1-6, 8-10, 12 y 13 corregidos directamente por Claude (sin
-  pasar por OpenCode); 7 revisado sin bug activo
+  pasar por OpenCode); 7 revisado sin bug activo; 14 (CI backend, hallado en
+  gate de supervisor) corregido
 relacionado: [docs/RIESGOS.md, AGENTS.md]
 ---
 
@@ -57,6 +58,21 @@ suites (96 tests) y el build sigue dentro de presupuesto.
 Sin pendientes de esta auditoría: los 13 hallazgos están cerrados (12 con
 fix, #7 revisado sin bug activo). El plan de Fase 1/3/4 de OpenCode de más
 abajo queda como referencia histórica, no se ejecutó.
+
+**#14 (fuera de esta auditoría, hallado en el gate de supervisor):** al
+ejecutar `vault/plantillas/revision-merge.md` para revisar el merge de
+`intersoft_miguel` a `main`, se encontró que el job `backend` de
+`.github/workflows/ci.yml` nunca pasaba en verde: pone `DEBUG=False` a
+propósito (para ejercitar `SECRET_KEY`/`ALLOWED_HOSTS` obligatorios) pero
+no fija `SECURE_SSL_REDIRECT`/`SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`,
+que en `settings.py` son `True` por defecto con `DEBUG=False`. El runner
+sirve todo por HTTP plano (sin TLS), así que `SecurityMiddleware`
+devolvía 301 en cada request de test — 344 failures + 122 errors de 611
+en el último run sobre `origin/main` (`1c2f2f4`). Fix: las 3 banderas se
+fuerzan a `'False'` en el env del job (`commit b42a10f`), sin tocar
+`settings.py` ni ningún módulo cerrado de la auditoría. Verificado
+localmente reproduciendo el env exacto del pipeline: 625 tests en 0 tras
+el fix. Detalle completo en `docs/RIESGOS.md`.
 
 # Auditoría de bugs — InterSoft (backend)
 
@@ -283,3 +299,5 @@ para revisión.
       ver `docs/CAMBIOS-2026-09-10.md`
 - [x] Fase 4 (docs/CAMBIOS-*.md + PR body) — `docs/CAMBIOS-2026-09-10.md`,
       `docs/PR-BODY-12.md`, `docs/RIESGOS.md`
+- [x] #14 (fuera de la auditoría, gate de supervisor) — CI del job backend
+      nunca pasaba en verde por `SECURE_SSL_REDIRECT` — commit `b42a10f`

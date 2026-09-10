@@ -36,6 +36,7 @@ ninguna es un bug critico abierto que bloquee la entrega.
 | Config insegura en producción | Fail-fast: sin `SECRET_KEY` real o con `ALLOWED_HOSTS=*` la app **no arranca** con `DEBUG=False`; cookies/HSTS/HTTPS se endurecen solas. |
 | Reset de password con token eterno | Tokens expiran (30 min); pruebas con token expirado/inexistente. |
 | N+1 en listados | Optimización de consultas eliminando `select_related`/`prefetch_related` faltantes. |
+| CI del job backend nunca pasaba en verde (`DEBUG=False` sin fijar `SECURE_SSL_REDIRECT`/`SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`, que por defecto son `True` con `DEBUG=False`): `SecurityMiddleware` devolvía 301 en cada request del runner (sirve por HTTP plano, sin TLS), tumbando 344 tests + 122 errores de 611 en el último run sobre `origin/main`. Hallazgo #14, encontrado en el gate de supervisor (`vault/plantillas/revision-merge.md`), no en la auditoría original | Las 3 banderas se fuerzan a `'False'` en el env del job `backend` de `ci.yml`, sin tocar `settings.py` ni debilitar el fail-fast de `SECRET_KEY`/`ALLOWED_HOSTS` (`commit b42a10f`). Verificado localmente reproduciendo el env exacto del pipeline: suite completa (625 tests) en 0 tras el fix. |
 
 ### Frontend
 | Riesgo | Resolución |

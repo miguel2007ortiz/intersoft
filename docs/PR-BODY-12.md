@@ -1,4 +1,4 @@
-# fix: correcciones críticas de auditoría (XSS reporte, DIAN fuera de transacción, RBAC fino, contrato de error, ESLint real, +8)
+# fix: correcciones críticas de auditoría (XSS reporte, DIAN fuera de transacción, RBAC fino, contrato de error, ESLint real, +9)
 
 ## Resumen
 
@@ -20,6 +20,7 @@ código). Detalle completo, tabla de hallazgos y cuadro fix×gate en
 - `b1a2ca0` — #12 `numero_factura` ya no depende de que el caller bloquee `Empresa`
 - `e6752f0` — docs: hash del commit anterior en el vault
 - `197ba99` — #13 ESLint real (`@angular-eslint`) + 77 violaciones corregidas en `frontend/src/`
+- `b42a10f` — #14 (gate de supervisor) `SECURE_SSL_REDIRECT=False` en el job backend de CI, que redirigía 301 todo con `DEBUG=False`
 
 ## Checklist `AGENTS.md` §4 — resultado real de la Fase 3
 
@@ -31,6 +32,11 @@ código). Detalle completo, tabla de hallazgos y cuadro fix×gate en
 - [x] `python manage.py makemigrations --check --dry-run` → `No changes detected`
 - [x] `python manage.py test` → `Ran 625 tests` → `OK` (post-merge de `origin/main`)
 - [x] `coverage run manage.py test core && coverage report --fail-under=70` → `Ran 549 tests` → `OK`; cobertura total **94%**
+- [x] CI (`.github/workflows/ci.yml`, job `backend`) → verificado localmente
+  reproduciendo el env exacto del pipeline (`DEBUG=False` + variables del
+  job): tras `b42a10f` (#14), `625 tests` en `0` (antes del fix: `611
+  tests`, `344 failures + 122 errors` por `SECURE_SSL_REDIRECT`). Pendiente
+  confirmar en un run real de Actions al abrir el PR.
 
 ### Frontend
 
@@ -58,6 +64,14 @@ Todos los gates de esta ronda pasan sobre el estado final de la rama.
   fix" significa "no revisado" — la justificación de por qué no se tocó
   código está en `vault/auditoria-bugs-opencode.md` y en `docs/RIESGOS.md`
   (pendiente 8 de esa sección).
+- #14 no viene de la auditoría original sino del gate de supervisor
+  (`vault/plantillas/revision-merge.md`): el job `backend` de
+  `.github/workflows/ci.yml` nunca había pasado en verde (dos runs
+  registrados en GitHub Actions, ambos en `failure`) por
+  `SECURE_SSL_REDIRECT`/`SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` sin
+  fijar con `DEBUG=False`. El fix es solo de config de CI, no toca
+  `settings.py` ni ningún módulo cerrado; verificado localmente
+  reproduciendo el env exacto del pipeline (625 tests en 0).
 
 ## Rollback
 
@@ -65,6 +79,7 @@ En orden inverso al de aplicación (`git revert`, no `reset`, sobre rama ya
 pusheada):
 
 ```
+git revert b42a10f   # #14 SECURE_SSL_REDIRECT en CI
 git revert 197ba99   # #13 ESLint frontend
 git revert b1a2ca0   # #12 numero_factura
 git revert 9eee239   # #9 + #10 contrato de error
