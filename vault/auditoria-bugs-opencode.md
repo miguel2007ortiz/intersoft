@@ -1,9 +1,8 @@
 ---
 titulo: "Auditoría de bugs backend + plan de prompts para OpenCode"
 fecha: 2026-09-10
-estado: hallazgos 1-6, 8-10 y 12 corregidos directamente por Claude (sin
-  pasar por OpenCode); 7 revisado sin bug activo; 13 revisado sin fix
-  (infraestructura de lint frontend aparte)
+estado: hallazgos 1-6, 8-10, 12 y 13 corregidos directamente por Claude (sin
+  pasar por OpenCode); 7 revisado sin bug activo
 relacionado: [docs/RIESGOS.md, AGENTS.md]
 ---
 
@@ -40,18 +39,24 @@ sí sola sin depender de que quien la llame se acuerde de bloquear antes.
 Test de regresión con dos hilos guardando `Venta` en paralelo sin lock
 externo (`core/tests_fase5.py::ConcurrenciaNumeroFactura`).
 
-**#13 revisado, no se toca:** `npm run lint` de verdad es solo
-`prettier --check` sobre 4 archivos fijos, sin ESLint. No hay config de
-ESLint/`@angular-eslint` instalada en el proyecto. Ampliar el `--check` a
-todo `src/` sin más falla de inmediato (76 archivos hoy no pasan el formato
-de Prettier), y armar ESLint real + arreglar todas las violaciones que
-aparezcan es un trabajo de frontend aparte, no un fix quirúrgico de una
-línea — queda pendiente como mejora de infraestructura de lint, no como bug
-corregido en esta sesión.
+**#13 corregido:** se instaló `@angular-eslint` (`ng add
+@angular-eslint/schematics`, genera `eslint.config.js` con
+`tseslint.configs.recommended` + `stylistic` + reglas de plantilla Angular
+incluyendo accesibilidad), se cableó `npm run lint` a `ng lint &&
+prettier --check ...` y se corrigieron las 77 violaciones reales que
+aparecieron en todo `src/` (imports sin usar, `any`, funciones vacías,
+expresiones sueltas, y accesibilidad de plantillas: `label` sin control
+asociado, `click` sin equivalente de teclado, `role="option"` sin
+`aria-selected`). Los overlays de modal que solo cerraban con `(click)` en
+el fondo pasaron a `role="presentation"` + comparar
+`$event.target === $event.currentTarget` en vez de un `stopPropagation()`
+en el hijo, para no romper los listeners de `Escape`/tabulación que ya
+viven en `document:keydown`. `npm run lint` corre limpio sobre las 21
+suites (96 tests) y el build sigue dentro de presupuesto.
 
-Quedan pendientes: #13 (documentado arriba, sin fix aplicado). El plan de
-Fase 1/3/4 de OpenCode de más abajo queda como referencia histórica, no se
-ejecutó.
+Sin pendientes de esta auditoría: los 13 hallazgos están cerrados (12 con
+fix, #7 revisado sin bug activo). El plan de Fase 1/3/4 de OpenCode de más
+abajo queda como referencia histórica, no se ejecutó.
 
 # Auditoría de bugs — InterSoft (backend)
 
@@ -76,7 +81,7 @@ marcar aquí como hecho.
 | 10 | 🟢 | `core/views_ia.py` (respuesta `IA_NO_DISPONIBLE`) | El 502 de fallo de IA omite la clave `errores` del contrato estándar. |
 | 11 | 🟢 | `core/analytics.py` (`exportar_csv`) | Sin mitigación de CSV/formula injection (celdas que empiezan con `= + - @`). |
 | 12 | 🟢 | `core/models.py` (`_generar_numero_factura`) | Parámetro `bloqueada` muerto; `consecutivo` vía `COUNT(*)` por empresa; sin guard estructural fuera de las dos vistas que sí bloquean `Empresa`. |
-| 13 | 🟢 | `frontend/package.json` (`lint`) | `npm run lint` = `prettier --check` sobre 4 archivos fijos; sin ESLint real. |
+| 13 | 🟢 | `frontend/package.json` (`lint`) | `npm run lint` = `prettier --check` sobre 4 archivos fijos; sin ESLint real. — **Corregido**: `@angular-eslint` instalado, `eslint.config.js` con reglas de accesibilidad de plantillas, `lint` = `ng lint && prettier --check`, 77 violaciones corregidas en `src/`. |
 
 **Confirmado correcto (no tocar):** locks de POS/inventario/anulación
 (`views_ventas.py`), aislamiento multi-tenant por `.filter(empresa=...)` en
@@ -272,9 +277,9 @@ para revisión.
 - [x] (fuera del plan original) numero_factura auto-bloqueado (#12) —
       commit b1a2ca0
 - [x] #7 revisado — no es bug activo, sin fix (ver nota arriba)
-- [ ] #13 revisado — sin fix, requiere trabajo de infraestructura de lint
-      frontend aparte (ver nota arriba)
-- [ ] Fase 3 (gates completos AGENTS.md §4) — corridos parcialmente:
-      ruff + `python manage.py test core cuentas` en cada commit; falta
-      bandit, coverage --fail-under=70 y gates de frontend
-- [ ] Fase 4 (docs/CAMBIOS-*.md + PR body)
+- [x] #13 corregido — ESLint real (`@angular-eslint`) + 77 violaciones
+      arregladas en `src/` (ver nota arriba)
+- [x] Fase 3 (gates completos AGENTS.md §4) — backend y frontend completos,
+      ver `docs/CAMBIOS-2026-09-10.md`
+- [x] Fase 4 (docs/CAMBIOS-*.md + PR body) — `docs/CAMBIOS-2026-09-10.md`,
+      `docs/PR-BODY-12.md`, `docs/RIESGOS.md`

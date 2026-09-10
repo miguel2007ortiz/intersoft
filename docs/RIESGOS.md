@@ -48,7 +48,8 @@ ninguna es un bug critico abierto que bloquee la entrega.
 | Doble envío en formularios | `guardando` + `[disabled]` + "Guardando..." en CRUD y carga de datos. |
 | Fugas de `setTimeout`/debounce al destruir | `programarAviso(destroyRef, ...)` + `ngOnDestroy` en componentes con timers. |
 | Accesibilidad de errores | `role="alert"` en 39 mensajes de validación + banners; `aria-label` en buscadores; `autocomplete` en formularios. |
-| Bundle fuera de presupuesto | `ng build` con budgets (500 kB initial / 6 kB por estilo) — pasa en 311 kB. |
+| Bundle fuera de presupuesto | `ng build` con budgets (500 kB initial / 6 kB por estilo) — pasa en 320 kB. |
+| `npm run lint` sin ESLint real (solo `prettier --check` sobre 4 archivos fijos) | `@angular-eslint` instalado (`ng add @angular-eslint/schematics`); `eslint.config.js` con `tseslint.configs.recommended` + `stylistic` + reglas de plantilla y accesibilidad (`click-events-have-key-events`, `label-has-associated-control`, `role-has-required-aria`); `lint` = `ng lint && prettier --check`; 77 violaciones corregidas en todo `src/` (`commit 197ba99`). |
 | Sin CSP en cabeceras | `backend/core/csp.py`: o **Content-Security-Policy** emitida por el backend (toda respuesta, defensa en profundidad) y declarada en nginx para la SPA (`frontend/nginx.conf` en Docker y `docs/DESPLIEGUE.md`). Directivas: `default-src 'self'`, `script-src 'self'` (sin `unsafe-eval`), `style-src 'self' 'unsafe-inline'` (Angular inyecta estilos), `img-src 'self' data: blob:`, `connect-src 'self'` (mismo-origen; en despliegue separado se abre al dominio del API), `frame-ancestors 'none'`, `object-src 'none'`. Tests en `core/tests_csp.py`. |
 
 ### Entrega / repo
@@ -110,16 +111,8 @@ ninguna es un bug critico abierto que bloquee la entrega.
    verificado en dev (restore de 43 tablas OK). El checklist de despliegue
    (`docs/CHECKLIST-SEGURIDAD.md`, `docs/DESPLIEGUE.md`) ya referencia estos
    comandos; el agendado (cron/systemd) sigue siendo operativo del servidor.
-7. **`npm run lint` sin ESLint real**: tras el merge de `origin/main`, el
-   script ya corre `prettier --check` sobre **todo `src/`** (`"src/**/*.{ts,html,css}"`
-   + `vitest-base.config.ts` + `src/test-setup.ts`) y pasa en el estado actual
-   de la rama; lo que sigue pendiente es que **no hay `@angular-eslint`**
-   instalado ni configurado (el "lint" es solo formato, sin reglas estáticas:
-   `no-unused`, accesibilidad, `@angular-eslint/*`, etc.). Armar ESLint real
-   (instalar `@angular-eslint`, configurar reglas, corregir las violaciones
-   que aparezcan con fallback de reglas/supresiones justificadas) queda como
-   trabajo de infraestructura de frontend aparte — requiere aprobación
-   explícita del supervisor por ser dependencias nuevas en `package.json`.
+7. ~~**`npm run lint` sin ESLint real**~~ **Resuelto**: ver fila "Frontend"
+   arriba (`commit 197ba99`).
 8. **Doble fuente de `subtotal`/`total` en `Venta` — verificado, no es un
    riesgo activo**: la vista calcula esos valores al crear la venta y el
    signal `mantener_totales_venta` los recalcula desde `DetalleVenta` en

@@ -1,14 +1,13 @@
-# fix: correcciones críticas de auditoría (XSS reporte, DIAN fuera de transacción, RBAC fino, contrato de error, +7)
+# fix: correcciones críticas de auditoría (XSS reporte, DIAN fuera de transacción, RBAC fino, contrato de error, ESLint real, +8)
 
 ## Resumen
 
-Auditoría de 13 hallazgos reales en el backend (leídos directamente en
-código, sin supuestos), registrada en `vault/auditoria-bugs-opencode.md`.
-Se corrigieron 11 con test de regresión y commit atómico cada uno; #7 se
-revisó y se confirmó que no es un bug activo (sin cambio de código); #13
-queda documentado como deuda de infraestructura de frontend (armar ESLint
-real), fuera de alcance de un fix quirúrgico. Detalle completo, tabla de
-hallazgos y cuadro fix×gate en `docs/CAMBIOS-2026-09-10.md`.
+Auditoría de 13 hallazgos reales en backend (leídos directamente en código,
+sin supuestos) y frontend, registrada en `vault/auditoria-bugs-opencode.md`.
+Se corrigieron 12 con test de regresión (o gate verde) y commit atómico cada
+uno; #7 se revisó y se confirmó que no es un bug activo (sin cambio de
+código). Detalle completo, tabla de hallazgos y cuadro fix×gate en
+`docs/CAMBIOS-2026-09-10.md`.
 
 ## Commits incluidos
 
@@ -20,6 +19,7 @@ hallazgos y cuadro fix×gate en `docs/CAMBIOS-2026-09-10.md`.
 - `9eee239` — #9 contrato de error 500 inconsistente + #10 `IA_NO_DISPONIBLE` sin `errores`
 - `b1a2ca0` — #12 `numero_factura` ya no depende de que el caller bloquee `Empresa`
 - `e6752f0` — docs: hash del commit anterior en el vault
+- `197ba99` — #13 ESLint real (`@angular-eslint`) + 77 violaciones corregidas en `frontend/src/`
 
 ## Checklist `AGENTS.md` §4 — resultado real de la Fase 3
 
@@ -34,8 +34,8 @@ hallazgos y cuadro fix×gate en `docs/CAMBIOS-2026-09-10.md`.
 
 ### Frontend
 
-- [x] `npm run lint` → `All matched files use Prettier code style!`
-- [x] `npm run build` → build completo, bundle inicial 314.38 kB raw / 86.02 kB transferencia estimada (dentro de presupuesto)
+- [x] `npm run lint` → `ng lint` (`All files pass linting.`) + `prettier --check` → `All matched files use Prettier code style!`
+- [x] `npm run build` → build completo, bundle inicial 320.54 kB raw / 87.44 kB transferencia estimada (dentro de presupuesto)
 - [x] `npm run test:ci` → `Test Files 21 passed (21)`, `Tests 96 passed (96)`
 
 Todos los gates de esta ronda pasan sobre el estado final de la rama.
@@ -50,10 +50,14 @@ Todos los gates de esta ronda pasan sobre el estado final de la rama.
   (`django-error.util.ts`) ya toleraba variaciones de `codigo`/`errores`
   ausentes, así que no requirió cambios, pero vale doble chequeo visual en
   QA de los flujos de error 500 y del asistente IA caído.
-- #7 y #13 no tienen cambio de código: el riesgo de un reviewer es asumir
-  que "sin fix" significa "no revisado" — la justificación de por qué no se
-  tocó código está en `vault/auditoria-bugs-opencode.md` y en
-  `docs/RIESGOS.md` (pendientes 7 y 8 de esa sección).
+- #13 toca 31 archivos de frontend (config de ESLint + fixes mecánicos y de
+  accesibilidad); ningún cambio afecta lógica de negocio, solo linting,
+  tipos y semántica de plantillas — mitigado con la suite completa de
+  frontend en verde (21 archivos, 96 tests) tras el cambio.
+- #7 no tiene cambio de código: el riesgo de un reviewer es asumir que "sin
+  fix" significa "no revisado" — la justificación de por qué no se tocó
+  código está en `vault/auditoria-bugs-opencode.md` y en `docs/RIESGOS.md`
+  (pendiente 8 de esa sección).
 
 ## Rollback
 
@@ -61,6 +65,7 @@ En orden inverso al de aplicación (`git revert`, no `reset`, sobre rama ya
 pusheada):
 
 ```
+git revert 197ba99   # #13 ESLint frontend
 git revert b1a2ca0   # #12 numero_factura
 git revert 9eee239   # #9 + #10 contrato de error
 git revert 6aa83bd   # #8 estadisticas de ventas
