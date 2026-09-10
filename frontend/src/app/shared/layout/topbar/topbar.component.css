@@ -71,6 +71,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .usuario-bloque {
@@ -78,6 +79,7 @@
   align-items: center;
   gap: var(--e3);
   margin-left: auto;
+  flex-shrink: 0;
 }
 .usuario-info {
   display: flex;
@@ -123,5 +125,7 @@
 
 @media (max-width: 640px) {
   .usuario-nombre { display: none; }
-  .empresa { max-width: 38vw; }
+  .pill-rol { display: none; }
+  .empresa { max-width: 30vw; }
+  .marca { font-size: 18px; }
 }

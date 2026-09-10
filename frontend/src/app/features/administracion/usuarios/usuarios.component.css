@@ -25,7 +25,7 @@ p.gris { margin-top: var(--e1); }
   margin-top: var(--e2);
 }
 
-.sin-relleno { padding: 0; overflow: hidden; }
+.sin-relleno { padding: 0; overflow-x: auto; }
 
 .tabla { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .tabla th {

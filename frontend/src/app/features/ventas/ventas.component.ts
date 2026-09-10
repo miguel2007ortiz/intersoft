@@ -126,20 +126,20 @@ import { debounce } from '../../core/utils/temporizador.util';
   `,
   styles: [`
     .ventas { max-width: 1000px; margin: 0 auto; padding: var(--e5) var(--e4); }
-    .ventas-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--e5); }
+    .ventas-header { display: flex; justify-content: space-between; align-items: center; gap: var(--e3); flex-wrap: wrap; margin-bottom: var(--e5); }
     .ventas-header h1 { margin: 0; font-size: clamp(22px, 4vw, 28px); }
     .btn-primary {
       padding: 10px 20px; background: var(--primario); color: #fff;
       border: 0; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;
     }
 
-    .filtros { display: flex; gap: var(--e3); margin-bottom: var(--e4); }
+    .filtros { display: flex; flex-wrap: wrap; gap: var(--e3); margin-bottom: var(--e4); }
     .input {
       padding: 10px 14px; border: 1px solid var(--linea); border-radius: 8px;
-      font: inherit; font-size: 14px; background: #fff;
+      font: inherit; font-size: 14px; background: #fff; flex: 1 1 180px; min-width: 0;
     }
     .input:focus { outline: none; border-color: var(--primario); }
-    .input-estado { max-width: 200px; }
+    .input-estado { flex: 0 1 200px; min-width: 0; }
 
     .stats { display: flex; gap: var(--e4); margin-bottom: var(--e5); }
     .stat { background: var(--primario-suave); padding: 12px 20px; border-radius: 8px; }
