@@ -1209,6 +1209,21 @@ class MarketplaceCarritoTest(BaseMarketplaceTest):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.data["codigo"], "PRODUCTO_NO_ENCONTRADO")
 
+    def test_put_actualiza_cantidad_solo_con_cantidad(self):
+        api = self.api_como(self.comprador)
+        creado = api.post("/api/tienda/carrito/items/",
+                          {"producto": str(self.producto_a.id), "cantidad": 2},
+                          format="json")
+        item_id = creado.data["items"][0]["id"]
+
+        r = api.put(f"/api/tienda/carrito/items/{item_id}/",
+                    {"cantidad": 5}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["items"][0]["cantidad"], 5)
+
+        # El item recupera el producto correcto aunque el PUT no lo enviara.
+        self.assertEqual(r.data["items"][0]["producto"], self.producto_a.id)
+
 
 class FavoritoProductoTest(BaseMarketplaceTest):
     """Favoritos de productos del marketplace (por usuario, cualquier rol)."""
@@ -1368,6 +1383,82 @@ class MarketplaceCheckoutTest(BaseMarketplaceTest):
         self.assertEqual(Venta.objects.count(), 0)
         self.producto_a.refresh_from_db()
         self.assertEqual(self.producto_a.stock, 10)
+
+
+class CompletarCompradorTest(BaseMarketplaceTest):
+    """Completar datos del comprador: nuevo cliente o direccion faltante."""
+
+    def test_comprador_sin_direccion_completa_envio_y_luego_compra(self):
+        sin_direccion = User.objects.create_user(username="sindir2@test.co",
+                                                  email="sindir2@test.co",
+                                                  password="Clave12345")
+        Perfil.objects.create(usuario=sin_direccion, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        Cliente.objects.create(usuario=sin_direccion, empresa=None, nombre="Sin Direccion 2",
+                               tipo_documento="CC", numero_documento="1000000098")
+        api = self.api_como(sin_direccion)
+
+        # Con direccion vacia no puede comprar (mismo checkout que ya se prueba).
+        api.post("/api/tienda/carrito/items/",
+                 {"producto": str(self.producto_a.id), "cantidad": 1}, format="json")
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.data["codigo"], "SIN_DIRECCION_ENVIO")
+
+        # Completa la direccion a traves del mismo endpoint usado por el checkout.
+        resp = api.post("/api/tienda/completar-comprador/",
+                        {"tipo_documento": "CC", "numero_documento": "1000000098",
+                         "direccion": "Calle 1 # 2-3", "ciudad": "Medellin"},
+                        format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        # Ahora el checkout avanza y crea la venta con el envio.
+        resp = api.post("/api/tienda/checkout/", {"metodo_pago": "tarjeta"}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        envio = Envio.objects.get()
+        self.assertEqual(envio.direccion, "Calle 1 # 2-3")
+        self.assertEqual(envio.ciudad, "Medellin")
+
+    def test_comprador_con_direccion_completa_sigue_rechazado_con_409(self):
+        api = self.api_como(self.comprador)
+        resp = api.post("/api/tienda/completar-comprador/",
+                        {"tipo_documento": "CC", "numero_documento": "1000000000",
+                         "direccion": "Otra calle", "ciudad": "Bogota"},
+                        format="json")
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["codigo"], "CLIENTE_EXISTENTE")
+        self.cliente_comprador.refresh_from_db()
+        self.assertEqual(self.cliente_comprador.direccion, "Calle 10 # 5-20")
+
+    def test_comprador_sin_direccion_envio_incompleto_rechazado(self):
+        sin_direccion = User.objects.create_user(username="sindir3@test.co",
+                                                  email="sindir3@test.co",
+                                                  password="Clave12345")
+        Perfil.objects.create(usuario=sin_direccion, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        Cliente.objects.create(usuario=sin_direccion, empresa=None, nombre="Sin Direccion 3",
+                               tipo_documento="CC", numero_documento="1000000097")
+        api = self.api_como(sin_direccion)
+
+        resp = api.post("/api/tienda/completar-comprador/",
+                        {"tipo_documento": "CC", "numero_documento": "1000000097",
+                         "direccion": "", "ciudad": ""},
+                        format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_comprador_nuevo_sin_cliente_se_crea(self):
+        nuevo = User.objects.create_user(username="nuevo@test.co",
+                                         email="nuevo@test.co",
+                                         password="Clave12345")
+        Perfil.objects.create(usuario=nuevo, empresa=None,
+                              rol=Rol.de_nombre("CLIENTE"))
+        api = self.api_como(nuevo)
+        resp = api.post("/api/tienda/completar-comprador/",
+                        {"tipo_documento": "CC", "numero_documento": "1000000088",
+                         "telefono": "300", "direccion": "Av. Siempre Viva",
+                         "ciudad": "Cali"},
+                        format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertTrue(Cliente.objects.filter(usuario=nuevo).exists())
 
 
 # ============================ FASE 10: Envios ============================

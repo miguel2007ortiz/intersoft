@@ -27,7 +27,7 @@ from cuentas.permissions import EsPersonal
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
                      Cupon, DetalleVenta, Empresa, Envio, Favorito, IntentoPago,
                      MovimientoInventario, Producto, Venta)
-from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
+from .serializers_tienda import (CarritoItemCantidadSerializer, CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
                                   ComentarioProductoEscrituraSerializer,
                                   ComentarioProductoSerializer,
@@ -507,7 +507,7 @@ class CarritoItemView(APIView):
                         status=status.HTTP_201_CREATED)
 
     def put(self, request, item_id):
-        entrada = CarritoItemInputSerializer(data=request.data)
+        entrada = CarritoItemCantidadSerializer(data=request.data)
         if not entrada.is_valid():
             return Response(
                 {"codigo": "DATOS_INVALIDOS",
@@ -1265,10 +1265,27 @@ class CompletarCompradorView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if Cliente.objects.filter(usuario=request.user, deleted_at__isnull=True).exists():
-            return Response(
-                {"codigo": "CLIENTE_EXISTENTE", "detalle": "Ya tienes datos de comprador registrados."},
-                status=status.HTTP_409_CONFLICT)
+        cliente = Cliente.objects.filter(usuario=request.user, deleted_at__isnull=True).first()
+        if cliente:
+            # Ya tiene datos de comprador: solo se permite completar la
+            # direccion de envio si sigue vacia (el checkout la exige).
+            if cliente.direccion.strip() and cliente.ciudad.strip():
+                return Response(
+                    {"codigo": "CLIENTE_EXISTENTE", "detalle": "Ya tienes datos de comprador registrados."},
+                    status=status.HTTP_409_CONFLICT)
+            direccion = (request.data.get('direccion') or '').strip()
+            ciudad = (request.data.get('ciudad') or '').strip()
+            if not direccion or not ciudad:
+                return Response(
+                    {"codigo": "DATOS_INVALIDOS",
+                     "detalle": "Completa tu direccion y ciudad de envio.",
+                     "errores": {"direccion": ["Obligatoria."], "ciudad": ["Obligatoria."]}},
+                    status=status.HTTP_400_BAD_REQUEST)
+            cliente.direccion = direccion
+            cliente.ciudad = ciudad
+            cliente.save(update_fields=['direccion', 'ciudad'])
+            return Response({"detalle": "Direccion de envio actualizada."},
+                            status=status.HTTP_200_OK)
 
         entrada = CompletarCompradorSerializer(data=request.data, context={"usuario": request.user})
         if not entrada.is_valid():

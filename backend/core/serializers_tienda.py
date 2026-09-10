@@ -174,6 +174,12 @@ class CarritoItemInputSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
 
 
+class CarritoItemCantidadSerializer(serializers.Serializer):
+    """Solo la nueva cantidad: el PUT del carrito actua sobre un item ya
+    existente, el producto se deriva del propio item, no del payload."""
+    cantidad = serializers.IntegerField(min_value=1)
+
+
 class CarritoCuponSerializer(serializers.Serializer):
     cupon_id = serializers.UUIDField(required=False, allow_null=True)
 
