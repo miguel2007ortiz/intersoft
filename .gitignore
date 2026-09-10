@@ -52,3 +52,6 @@ service-account*.json
 Thumbs.db
 *.swp
 *~
+
+# ---------- Obsidian (preferencias del vault local, no se versionan) ----------
+.obsidian/
