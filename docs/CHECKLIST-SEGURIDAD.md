@@ -36,7 +36,7 @@ publicar. Refleja exactamente lo que el proyecto ya implementa (verificado en
       (sin migraciones pendientes).
 - [ ] Backup de la base previo a migrar y `python manage.py migrate --plan`
       antes de aplicar (ver `backend/README.md`).
-- [ ] `python manage.py test` → suite completa en verde (241 tests).
+- [ ] `python manage.py test` → suite completa en verde (625 tests).
 - [ ] Autenticación: JWT `ACCESS_TOKEN_LIFETIME=30m`, `REFRESH=7d`; bloqueo de
       login tras 5 intentos (`MAX_INTENTOS_LOGIN`) por 15 min
       (`MINUTOS_BLOQUEO`); throttle por IP en refresh/recuperación/registro

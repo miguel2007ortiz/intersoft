@@ -29,14 +29,14 @@ hallazgos y cuadro fix×gate en `docs/CAMBIOS-2026-09-10.md`.
 - [x] `bandit -c bandit.yaml -r . -q` → sin hallazgos, exit 0
 - [x] `python manage.py check` → `System check identified no issues (0 silenced).`
 - [x] `python manage.py makemigrations --check --dry-run` → `No changes detected`
-- [x] `python manage.py test` → `Ran 539 tests in 193.583s` → `OK`
-- [x] `coverage run manage.py test core && coverage report --fail-under=70` → `Ran 463 tests` → `OK`; cobertura total **93%**
+- [x] `python manage.py test` → `Ran 625 tests` → `OK` (post-merge de `origin/main`)
+- [x] `coverage run manage.py test core && coverage report --fail-under=70` → `Ran 549 tests` → `OK`; cobertura total **94%**
 
 ### Frontend
 
 - [x] `npm run lint` → `All matched files use Prettier code style!`
 - [x] `npm run build` → build completo, bundle inicial 314.38 kB raw / 86.02 kB transferencia estimada (dentro de presupuesto)
-- [x] `npm run test:ci` → `Test Files 17 passed (17)`, `Tests 78 passed (78)`
+- [x] `npm run test:ci` → `Test Files 21 passed (21)`, `Tests 96 passed (96)`
 
 Todos los gates de esta ronda pasan sobre el estado final de la rama.
 

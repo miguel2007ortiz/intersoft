@@ -1,7 +1,7 @@
 # Riesgos — InterSoft (resumido al cierre)
 
 Estado al cierre de la entrega. **Resueltos** = verificados por código y/o
-pruebas (539 backend + 78 frontend). **Pendientes** = mejoras/deudas conocidas,
+pruebas (625 backend + 96 frontend). **Pendientes** = mejoras/deudas conocidas,
 ninguna es un bug critico abierto que bloquee la entrega.
 
 ---
@@ -55,7 +55,7 @@ ninguna es un bug critico abierto que bloquee la entrega.
 | Riesgo | Resolución |
 |---|---|
 | Codificación/line endings inconsistentes | Verificado: todos los textos del repo UTF-8 sin BOM; `.editorconfig` raíz + `.gitattributes` (LF en git, CRLF solo en `.bat`). |
-| Dependencias backend no reproducibles | `requirements.txt` con versiones **exactas** (`==`) verificadas (241 tests). Frontend con `package-lock.json` + `npm ci`. |
+| Dependencias backend no reproducibles | `requirements.txt` con versiones **exactas** (`==`) verificadas (625 tests). Frontend con `package-lock.json` + `npm ci`. |
 | Sin regresión automática | Pipeline CI (`.github/workflows/ci.yml`): build Angular + tests frontend + `django check` + migraciones pendientes + suite backend sobre MySQL 8. |
 | Secretos, builds, media, logs en git | `.gitignore` raíz actualizado y verificado (`git check-ignore` ok / `git ls-files` sin `.env` ni claves). |
 
