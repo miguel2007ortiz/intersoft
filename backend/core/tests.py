@@ -25,6 +25,21 @@ def _cupon_vigente(empresa, codigo, porcentaje=10):
         fecha_fin=timezone.now() + timedelta(days=30))
 
 
+class ManejadorExcepcionesTest(TestCase):
+    """Regresion: el fallback de errores no controlados devolvia
+    {'detail': ...}, rompiendo el contrato {codigo, detalle, errores} que
+    el resto de la API (y el frontend) da por garantizado."""
+
+    def test_excepcion_no_controlada_respeta_el_contrato_de_error(self):
+        from .exceptions import manejador_excepciones
+        respuesta = manejador_excepciones(RuntimeError("boom"), {"view": None})
+        self.assertEqual(respuesta.status_code, 500)
+        self.assertEqual(respuesta.data["codigo"], "ERROR_INTERNO")
+        self.assertIn("errores", respuesta.data)
+        self.assertIsNone(respuesta.data["errores"])
+        self.assertIn("detalle", respuesta.data)
+
+
 class BaseCoreTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -822,6 +837,10 @@ class IAChatTest(BaseCatalogoTest):
         self.assertEqual(res.status_code, 502)
         cuerpo = res.json()
         self.assertEqual(cuerpo["codigo"], "IA_NO_DISPONIBLE")
+        # Contrato uniforme {codigo, detalle, errores} igual que el resto de
+        # la API (antes faltaba la clave 'errores' en este 502 puntual).
+        self.assertIn("errores", cuerpo)
+        self.assertIsNone(cuerpo["errores"])
         # Conserva la conversacion con el mensaje del usuario (para reintentar)
         mensajes = cuerpo["conversacion"]["mensajes"]
         self.assertEqual([m["rol"] for m in mensajes], ["usuario"])

@@ -145,6 +145,7 @@ class IAChatView(APIView):
                 {"codigo": "IA_NO_DISPONIBLE",
                  "detalle": "El asistente no pudo responder en este momento. "
                             "Tu mensaje quedo guardado y puedes reintentar.",
+                 "errores": None,
                  "conversacion": _serializar_conversacion(conversacion)},
                 status=status.HTTP_502_BAD_GATEWAY)
 
