@@ -1,25 +1,57 @@
 ---
 titulo: "Auditoría de bugs backend + plan de prompts para OpenCode"
 fecha: 2026-09-10
-estado: hallazgos 1-6 corregidos directamente por Claude (sin pasar por OpenCode);
-  7-13 siguen pendientes
+estado: hallazgos 1-6, 8-10 y 12 corregidos directamente por Claude (sin
+  pasar por OpenCode); 7 revisado sin bug activo; 13 revisado sin fix
+  (infraestructura de lint frontend aparte)
 relacionado: [docs/RIESGOS.md, AGENTS.md]
 ---
 
 **Nota (2026-09-10):** el plan de prompts de más abajo se escribió para
 ejecutarse con OpenCode, pero el usuario pidió arreglar los bugs
-directamente en esta sesión. Los hallazgos #1, #2, #3, #4, #5 y #6 ya están
-corregidos, con test de regresión y commit atómico en `intersoft_miguel`:
+directamente en esta sesión. Los hallazgos #1 a #6, #8, #9, #10 y #12 ya
+están corregidos, con test de regresión y commit atómico en
+`intersoft_miguel`:
 
 - #1 (XSS `exportar_html`) + #11 (CSV injection): `commit 75dbc90` (sesión previa).
 - #2 (DIAN dentro de lock) + #3 (`IntegrityError` nota crédito): `commit 17c1d0a` (sesión previa).
 - #4 (RBAC hardcodeado): `commit f03b3b5`.
 - #5 (pasarela cobra antes de reservar stock) + #6 (carrera en `_carrito_de`): `commit fcc873f`.
+- #8 (estadísticas de ventas infladas con anuladas/pendientes): `commit 6aa83bd`.
+- #9 (500 no controlado rompe el contrato de error) + #10 (`IA_NO_DISPONIBLE`
+  sin `errores`): `commit 9eee239`.
+- #12 (`_generar_numero_factura`): ver conclusión abajo.
 
-Quedan pendientes: #7, #8, #9, #10, #12, #13 (ver plan de Fase 2 de más abajo
-para #9/#10 vía "2E"; #7, #8, #12, #13 no tienen bloque de prompt propio
-todavía). El plan de Fase 1/3/4 de OpenCode de más abajo queda como
-referencia histórica, no se ejecutó.
+**#7 revisado, no es un bug activo:** el signal `mantener_totales_venta`
+recalcula `subtotal`/`total` desde `DetalleVenta` en cada post_save/post_delete
+y es la única fuente de verdad real; no hay ningún camino de código hoy que
+mute `descuento` sin tocar `DetalleVenta` en la misma operación (`VentaPOSView`
+y `CheckoutView` fijan ambos de forma consistente). No se aplica fix invasivo.
+
+**#12 corregido:** el parámetro `bloqueada` de `_generar_numero_factura` era
+código muerto (ningún caller lo pasaba en `True`, y el método no lo usaba
+para nada) y el `COUNT(*)` por empresa solo era libre de carreras si el
+caller ya tenía la fila de `Empresa` bloqueada — cierto hoy en
+`VentaPOSView` y `CheckoutView`, pero sin ninguna garantía estructural para
+un caller futuro. `Venta.save()` ahora bloquea la fila de la `Empresa`
+(`select_for_update`) y hace el conteo + el insert dentro del mismo
+`transaction.atomic()`, así que la generación del consecutivo es segura por
+sí sola sin depender de que quien la llame se acuerde de bloquear antes.
+Test de regresión con dos hilos guardando `Venta` en paralelo sin lock
+externo (`core/tests_fase5.py::ConcurrenciaNumeroFactura`).
+
+**#13 revisado, no se toca:** `npm run lint` de verdad es solo
+`prettier --check` sobre 4 archivos fijos, sin ESLint. No hay config de
+ESLint/`@angular-eslint` instalada en el proyecto. Ampliar el `--check` a
+todo `src/` sin más falla de inmediato (76 archivos hoy no pasan el formato
+de Prettier), y armar ESLint real + arreglar todas las violaciones que
+aparezcan es un trabajo de frontend aparte, no un fix quirúrgico de una
+línea — queda pendiente como mejora de infraestructura de lint, no como bug
+corregido en esta sesión.
+
+Quedan pendientes: #13 (documentado arriba, sin fix aplicado). El plan de
+Fase 1/3/4 de OpenCode de más abajo queda como referencia histórica, no se
+ejecutó.
 
 # Auditoría de bugs — InterSoft (backend)
 
@@ -232,10 +264,17 @@ para revisión.
 - [x] 2B nota-credito-integrityerror — commit 17c1d0a
 - [x] 2C dian-fuera-de-transaccion — commit 17c1d0a
 - [x] 2D rbac-permisos-finos — commit f03b3b5
-- [ ] 2E contrato-error-500 — pendiente
+- [x] 2E contrato-error-500 (#9, #10) — commit 9eee239
 - [x] (fuera del plan original) checkout cobra tras reservar stock + carrera
-      en _carrito_de — commit fcc873f
+      en _carrito_de (#5, #6) — commit fcc873f
+- [x] (fuera del plan original) estadisticas de ventas infladas (#8) —
+      commit 6aa83bd
+- [x] (fuera del plan original) numero_factura auto-bloqueado (#12) — commit
+      pendiente de registrar aqui tras el commit de esta sesion
+- [x] #7 revisado — no es bug activo, sin fix (ver nota arriba)
+- [ ] #13 revisado — sin fix, requiere trabajo de infraestructura de lint
+      frontend aparte (ver nota arriba)
 - [ ] Fase 3 (gates completos AGENTS.md §4) — corridos parcialmente:
-      ruff + `python manage.py test core cuentas` (529/529 OK) en cada
-      commit; falta bandit, coverage --fail-under=70 y gates de frontend
+      ruff + `python manage.py test core cuentas` en cada commit; falta
+      bandit, coverage --fail-under=70 y gates de frontend
 - [ ] Fase 4 (docs/CAMBIOS-*.md + PR body)

@@ -598,3 +598,34 @@ class ConcurrenciaCheckout(TransactionTestCase):
         # Uno gana (201); el otro con carrito vacio da CARRITO_VACIO (400).
         self.assertEqual(sorted(resultados.values()), [201, 400])
         self.assertEqual(Venta.objects.filter(cliente=self.cliente).count(), 1)
+
+
+class ConcurrenciaNumeroFactura(TransactionTestCase):
+    """El consecutivo de factura se auto-bloquea: no depende de que el
+    caller haya lockeado la Empresa antes de guardar la Venta (bug #12)."""
+
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre="Facturas SA", nit="900777001")
+        self.cliente = Cliente.objects.create(
+            empresa=self.empresa, nombre="Cliente F", tipo_documento="CC",
+            numero_documento="9044444444")
+
+    def _guardar_venta(self, resultados, indice):
+        # Guarda una Venta sin lockear Empresa desde afuera, tal como haria
+        # un caller futuro que se olvide de select_for_update.
+        venta = Venta(empresa=self.empresa, cliente=self.cliente, total=1000)
+        venta.save()
+        resultados[indice] = venta.numero_factura
+
+    def test_dos_ventas_simultaneas_no_repiten_numero_factura(self):
+        resultados = {}
+        hilos = [
+            threading.Thread(target=self._guardar_venta, args=(resultados, 0)),
+            threading.Thread(target=self._guardar_venta, args=(resultados, 1)),
+        ]
+        for h in hilos:
+            h.start()
+        for h in hilos:
+            h.join()
+        self.assertEqual(len(set(resultados.values())), 2)
+        self.assertEqual(Venta.objects.filter(empresa=self.empresa).count(), 2)
