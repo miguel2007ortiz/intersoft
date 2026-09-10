@@ -4,16 +4,23 @@ Bitácora de estado al corte para retomar sesión. **Supervisor (Claude) y
 ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 `vault/INDICE.md` (regla 1.1 de `AGENTS.md`).
 
-Última actualización: 2026-09-10 (actualizado tras cierre de #13 por Claude).
+Última actualización: 2026-09-10 (actualizado tras gate de supervisor:
+`vault/plantillas/revision-merge.md` corrido por Claude, PR #2 abierto y
+CI real en verde).
 
 ---
 
 ## Rama y repositorio
 
 - Rama de trabajo: `intersoft_miguel`, **en sync con `origin/intersoft_miguel`**
-  (HEAD `3c0ae5f`, último push de Claude).
-- `origin/main` en `1c2f2f4`; ya integrado (merge `d9494c5`). No hay `develop`
-  (el flujo usa `main` + ramas por dev).
+  (HEAD `8689c4d`, último push de Claude).
+- `origin/main` en `1c2f2f4`; `intersoft_miguel` está estrictamente adelante
+  (fast-forward posible, `git log origin/main..intersoft_miguel` no trae
+  nada de vuelta). No hay `develop` (el flujo usa `main` + ramas por dev).
+- **PR abierto**: https://github.com/miguel2007ortiz/intersoft/pull/2
+  (`intersoft_miguel` → `main`), cuerpo en `docs/PR-BODY-12.md`. Se abrió
+  para poder disparar CI real (`ci.yml` solo corre en push/PR contra
+  `main`/`develop`, no en push a una rama de feature) — **no está mergeado**.
 
 ## Gates al corte (verificados hoy)
 
@@ -29,14 +36,33 @@ ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 | Servidores | API `127.0.0.1:8000` y SPA `127.0.0.1:4200` arriba |
 | Seguridad | Sin `.env`/claves `.pem`/`.key` trackeados; `.obsidian` ignorado |
 
-## PENDIENTE 1 (supervisor) — revisar y aprobar merge a `main`
+## PENDIENTE 1 (supervisor) — RESUELTO: gate de revisión corrido, merge a `main` pendiente de tu aprobación explícita
 
-`intersoft_miguel` contiene todo lo de perfil/interlocutor (Fase 2/3/4:
-`IntentoPago` + pasarela `cobrar`, checkout reserva→cobro→confirmar, `Envio`
-en la reserva, `Grabacion`, backups/monitoreo, auditoría de bugs #1–#12) y los
-últimos docs (contadores 625/549/96, AGENTS.md vault §1.1, `vault/INDICE.md`,
-`vault/ACTUALIDAD.md`). **Revisión de diffs y merge a `main` = gate de Claude
-(no del ejecutor)**.
+Claude corrió `vault/plantillas/revision-merge.md` completo:
+
+- Diff `origin/main..intersoft_miguel` revisado (nada de vuelta, fast-forward
+  limpio); invariantes de `AGENTS.md` §3 no se tocaron por los fixes #1–#15.
+- CI real disparada abriendo el PR #2 (no había otra forma: `ci.yml` no
+  corre en push a rama de feature). En el primer run sobre `origin/main`
+  (`1c2f2f4`, sin los fixes de esta rama) el job `backend` **ya estaba en
+  rojo** (611 tests, 344 failures + 122 errors) — no es algo que esta rama
+  rompió, es preexistente y quedó sin detectar porque nadie había corrido
+  CI real antes.
+- Encontrados y corregidos 2 hallazgos nuevos, fuera de la auditoría
+  original, solo por correr el gate de CI real:
+  - **#14**: job `backend` de CI nunca pasaba (`SECURE_SSL_REDIRECT` sin
+    fijar con `DEBUG=False` → 301 en cada request) — `commit b42a10f`.
+  - **#15**: job `e2e` fallaba 100% determinista (test de Envios con el
+    usuario CLIENTE en vez del EMPLEADO) — `commit 8689c4d`.
+- Run final `34538821092` sobre el PR: **Frontend ✅, Backend ✅, E2E ✅**,
+  los 3 jobs en verde sobre el mismo commit (`8689c4d`).
+
+**Dictamen del supervisor: la rama está lista para mergear a `main`.**
+Falta un solo paso, deliberadamente no ejecutado por Claude: **la
+aprobación explícita tuya para el merge/push a `main`** (`AGENTS.md`
+línea 239: "`git push` a `main`/`develop`, merge de PR" requiere tu
+aprobación explícita). El PR #2 queda abierto esperando esa aprobación;
+Claude no lo mergeó.
 
 ## PENDIENTE 2 — RESUELTO: `#13` ESLint real (cerrado por Claude)
 

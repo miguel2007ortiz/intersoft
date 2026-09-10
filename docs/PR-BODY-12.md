@@ -21,6 +21,7 @@ código). Detalle completo, tabla de hallazgos y cuadro fix×gate en
 - `e6752f0` — docs: hash del commit anterior en el vault
 - `197ba99` — #13 ESLint real (`@angular-eslint`) + 77 violaciones corregidas en `frontend/src/`
 - `b42a10f` — #14 (gate de supervisor) `SECURE_SSL_REDIRECT=False` en el job backend de CI, que redirigía 301 todo con `DEBUG=False`
+- `8689c4d` — #15 (gate de supervisor) el e2e del panel de Envios ahora inicia sesión como personal (EMPLEADO), no como la compradora (CLIENTE)
 
 ## Checklist `AGENTS.md` §4 — resultado real de la Fase 3
 
@@ -32,11 +33,13 @@ código). Detalle completo, tabla de hallazgos y cuadro fix×gate en
 - [x] `python manage.py makemigrations --check --dry-run` → `No changes detected`
 - [x] `python manage.py test` → `Ran 625 tests` → `OK` (post-merge de `origin/main`)
 - [x] `coverage run manage.py test core && coverage report --fail-under=70` → `Ran 549 tests` → `OK`; cobertura total **94%**
-- [x] CI (`.github/workflows/ci.yml`, job `backend`) → verificado localmente
-  reproduciendo el env exacto del pipeline (`DEBUG=False` + variables del
-  job): tras `b42a10f` (#14), `625 tests` en `0` (antes del fix: `611
-  tests`, `344 failures + 122 errors` por `SECURE_SSL_REDIRECT`). Pendiente
-  confirmar en un run real de Actions al abrir el PR.
+- [x] CI real de GitHub Actions, run `34538821092` sobre el PR #2
+  (`intersoft_miguel` → `main`, HEAD `8689c4d`): job `Frontend` ✅ (42s),
+  job `Backend` ✅ (4m20s, tras `b42a10f` #14 — antes: `611 tests`, `344
+  failures + 122 errors` por `SECURE_SSL_REDIRECT`), job `E2E` ✅ (1m51s,
+  tras `8689c4d` #15 — antes: 1 test en rojo de forma determinista en los
+  3 runs anteriores). Los 3 jobs en verde sobre la misma rama/commit.
+  https://github.com/miguel2007ortiz/intersoft/pull/2
 
 ### Frontend
 
@@ -72,6 +75,12 @@ Todos los gates de esta ronda pasan sobre el estado final de la rama.
   fijar con `DEBUG=False`. El fix es solo de config de CI, no toca
   `settings.py` ni ningún módulo cerrado; verificado localmente
   reproduciendo el env exacto del pipeline (625 tests en 0).
+- #15 tampoco viene de la auditoría original: con #14 corregido, el job
+  `e2e` seguía en rojo de forma 100% determinista (2 runs + 1 rerun) por
+  un test que asumía que `ana@elprogreso.co` es ADMINISTRADOR, cuando
+  `seed_demo.py` la crea CLIENTE — `personalGuard` la redirige
+  correctamente, así que era el test el equivocado, no la app. Fix solo en
+  `frontend/e2e/tienda-flujo.spec.ts`; verificado local (3/3).
 
 ## Rollback
 

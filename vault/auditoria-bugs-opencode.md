@@ -2,8 +2,8 @@
 titulo: "Auditoría de bugs backend + plan de prompts para OpenCode"
 fecha: 2026-09-10
 estado: hallazgos 1-6, 8-10, 12 y 13 corregidos directamente por Claude (sin
-  pasar por OpenCode); 7 revisado sin bug activo; 14 (CI backend, hallado en
-  gate de supervisor) corregido
+  pasar por OpenCode); 7 revisado sin bug activo; 14 y 15 (gate de
+  supervisor, CI backend y e2e) corregidos
 relacionado: [docs/RIESGOS.md, AGENTS.md]
 ---
 
@@ -73,6 +73,20 @@ fuerzan a `'False'` en el env del job (`commit b42a10f`), sin tocar
 `settings.py` ni ningún módulo cerrado de la auditoría. Verificado
 localmente reproduciendo el env exacto del pipeline: 625 tests en 0 tras
 el fix. Detalle completo en `docs/RIESGOS.md`.
+
+**#15 (fuera de esta auditoría, mismo gate de supervisor):** con el job
+`backend` ya en verde, el job `e2e` seguía en rojo de forma 100%
+determinista (2 runs + 1 rerun, mismo resultado exacto) en
+`frontend/e2e/tienda-flujo.spec.ts`: el test del panel de Envios navegaba
+como `ana@elprogreso.co` esperando ver `/envios`, pero `seed_demo.py` la
+crea con rol **CLIENTE** (`Perfil.objects.create(..., rol=_rol('CLIENTE'))`),
+no ADMINISTRADOR como decía el comentario del spec (desactualizado).
+`personalGuard` bloquea correctamente a CLIENTE y la redirige de vuelta al
+marketplace — **no es un bug de RBAC ni de la app, es el test con el
+usuario equivocado**. Fix: el test ahora inicia sesión como
+`luis@elprogreso.co` (rol EMPLEADO), separado de la compradora que crea el
+envío (`commit 8689c4d`). Verificado local: e2e completo 3/3. Detalle en
+`docs/RIESGOS.md`.
 
 # Auditoría de bugs — InterSoft (backend)
 
@@ -301,3 +315,6 @@ para revisión.
       `docs/PR-BODY-12.md`, `docs/RIESGOS.md`
 - [x] #14 (fuera de la auditoría, gate de supervisor) — CI del job backend
       nunca pasaba en verde por `SECURE_SSL_REDIRECT` — commit `b42a10f`
+- [x] #15 (fuera de la auditoría, gate de supervisor) — e2e probaba el
+      panel de Envios con el usuario CLIENTE en vez del EMPLEADO — commit
+      `8689c4d`
