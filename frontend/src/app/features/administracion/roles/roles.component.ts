@@ -9,7 +9,7 @@
  * sin tocar codigo. Esto es lo que hace util a `permisoGuard(codigo)`.
  */
 
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal, OnInit } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { SeguridadService } from '../../../core/services/seguridad.service';
@@ -25,7 +25,7 @@ const CERRAR_AVISO_MS = 4000;
   templateUrl: './roles.component.html',
   styleUrl: './roles.component.css',
 })
-export class RolesComponent {
+export class RolesComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly seguridad = inject(SeguridadService);

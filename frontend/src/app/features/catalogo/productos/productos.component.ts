@@ -9,7 +9,7 @@
  * inventario, para que la trazabilidad no se rompa.
  */
 
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
@@ -27,7 +27,7 @@ const CERRAR_AVISO_MS = 4000;
   templateUrl: './productos.component.html',
   styleUrl: './productos.component.css',
 })
-export class ProductosComponent {
+export class ProductosComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly catalogo = inject(CatalogoService);

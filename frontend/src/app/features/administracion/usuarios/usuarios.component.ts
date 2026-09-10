@@ -10,7 +10,7 @@
  * backend, aqui solo se oculta el boton).
  */
 
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
@@ -26,7 +26,7 @@ const CERRAR_AVISO_MS = 4000;
   templateUrl: './usuarios.component.html',
   styleUrl: './usuarios.component.css',
 })
-export class UsuariosComponent {
+export class UsuariosComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly seguridad = inject(SeguridadService);
   private readonly destroyRef = inject(DestroyRef);

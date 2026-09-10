@@ -3,10 +3,16 @@
   para seguir visible mientras el Router ya pinta el panel.
 -->
 @if (welcome.activo()) {
-  <div class="fondo" role="status" aria-live="polite" (click)="cerrar()">
+  <div
+    class="fondo"
+    role="status"
+    aria-live="polite"
+    (click)="$event.target === $event.currentTarget && cerrar()"
+    (keydown.enter)="cerrar()"
+  >
     <span class="orbe orbe-1"></span>
     <span class="orbe orbe-2"></span>
-    <div class="tarjeta-bienvenida" (click)="$event.stopPropagation()">
+    <div class="tarjeta-bienvenida">
       <svg class="marca" viewBox="0 0 76 76" fill="none" aria-hidden="true">
         <circle class="marca-aro" cx="38" cy="38" r="34" />
         <path class="marca-check" d="M23 39.5 L33.5 50 L54 27" />

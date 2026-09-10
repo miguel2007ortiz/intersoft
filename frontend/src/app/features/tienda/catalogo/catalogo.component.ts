@@ -24,7 +24,6 @@ import {
   ElementRef,
   inject,
   signal,
-  computed,
   OnInit,
   OnDestroy,
   viewChild,
@@ -38,7 +37,6 @@ import {
   ProductoTienda,
   CategoriaTienda,
   ComentarioProducto,
-  Favorito,
 } from '../../../core/models/tienda.model';
 import { BrilloCursorDirective } from '../../../shared/directives/brillo-cursor.directive';
 import { RevelarAlEntrarDirective } from '../../../shared/directives/revelar-al-entrar.directive';
@@ -164,7 +162,7 @@ export class CatalogoComponent implements OnInit, OnDestroy {
         );
         this.heroSlides.set(ordenados.slice(0, 5));
       },
-      error: () => {},
+      error: () => undefined,
     });
   }
 
@@ -281,7 +279,7 @@ export class CatalogoComponent implements OnInit, OnDestroy {
   cargarCarrito(): void {
     this.tienda.obtenerCarrito().subscribe({
       next: (c) => this.totalItems.set(c.total_items),
-      error: () => {},
+      error: () => undefined,
     });
   }
 
@@ -361,7 +359,7 @@ export class CatalogoComponent implements OnInit, OnDestroy {
     if (!this.auth.estaAutenticado()) return;
     this.tienda.listarFavoritos().subscribe({
       next: (favoritos) => this.favoritosMap.set(new Set(favoritos.map((f) => f.producto))),
-      error: () => {},
+      error: () => undefined,
     });
   }
 
@@ -382,7 +380,11 @@ export class CatalogoComponent implements OnInit, OnDestroy {
     const alTerminar = () => {
       this.favoritosMap.update((set) => {
         const nuevo = new Set(set);
-        activando ? nuevo.add(id) : nuevo.delete(id);
+        if (activando) {
+          nuevo.add(id);
+        } else {
+          nuevo.delete(id);
+        }
         return nuevo;
       });
       this.favoritoCambioId.set(null);

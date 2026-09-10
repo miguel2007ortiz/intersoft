@@ -17,14 +17,12 @@ import { environment } from '../../../environments/environment';
 import { capturarErrorDjango } from '../utils/django-error.util';
 import {
   Carrito,
-  CarritoItem,
   CategoriaTienda,
   CheckoutResultado,
   ComentarioProducto,
   Cupon,
   DatosComentario,
   DatosComprador,
-  ErrorTienda,
   EstadoPago,
   Favorito,
   FavoritoEstado,

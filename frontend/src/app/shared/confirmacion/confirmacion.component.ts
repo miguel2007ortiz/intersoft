@@ -27,7 +27,11 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
   selector: 'app-confirmacion',
   template: `
     @if (confirmacion.abierta(); as datos) {
-      <div class="capa" (click)="cancelar()">
+      <div
+        class="capa"
+        role="presentation"
+        (click)="$event.target === $event.currentTarget && cancelar()"
+      >
         <div
           #panel
           class="dialogo"
@@ -35,7 +39,6 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
           aria-modal="true"
           aria-labelledby="confirmacion-titulo"
           aria-describedby="confirmacion-mensaje"
-          (click)="$event.stopPropagation()"
         >
           <h2 id="confirmacion-titulo" class="titulo">
             @if (datos.destructivo) {

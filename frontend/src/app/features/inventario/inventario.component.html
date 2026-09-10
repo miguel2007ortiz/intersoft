@@ -17,33 +17,43 @@
         <h2>Ajuste manual de inventario</h2>
         <div class="form-grid">
           <div>
-            <label>Producto</label>
-            <select [(ngModel)]="ajusteProducto" class="input">
-              <option value="">Seleccionar...</option>
-              @for (p of productos(); track p.id) {
-                <option [value]="p.id">{{ p.nombre }} ({{ p.sku }}) — stock: {{ p.stock }}</option>
-              }
-            </select>
+            <label>
+              Producto
+              <select [(ngModel)]="ajusteProducto" class="input">
+                <option value="">Seleccionar...</option>
+                @for (p of productos(); track p.id) {
+                  <option [value]="p.id">
+                    {{ p.nombre }} ({{ p.sku }}) — stock: {{ p.stock }}
+                  </option>
+                }
+              </select>
+            </label>
           </div>
           <div>
-            <label>Tipo</label>
-            <select [(ngModel)]="ajusteTipo" class="input">
-              <option value="entrada">Entrada (+)</option>
-              <option value="salida">Salida (-)</option>
-            </select>
+            <label>
+              Tipo
+              <select [(ngModel)]="ajusteTipo" class="input">
+                <option value="entrada">Entrada (+)</option>
+                <option value="salida">Salida (-)</option>
+              </select>
+            </label>
           </div>
           <div>
-            <label>Cantidad</label>
-            <input type="number" [(ngModel)]="ajusteCantidad" min="1" class="input" />
+            <label>
+              Cantidad
+              <input type="number" [(ngModel)]="ajusteCantidad" min="1" class="input" />
+            </label>
           </div>
           <div class="full">
-            <label>Motivo</label>
-            <input
-              type="text"
-              [(ngModel)]="ajusteMotivo"
-              placeholder="Ej: Conteo fisico, reposicion, merma..."
-              class="input"
-            />
+            <label>
+              Motivo
+              <input
+                type="text"
+                [(ngModel)]="ajusteMotivo"
+                placeholder="Ej: Conteo fisico, reposicion, merma..."
+                class="input"
+              />
+            </label>
           </div>
         </div>
         @if (errorAjuste()) {

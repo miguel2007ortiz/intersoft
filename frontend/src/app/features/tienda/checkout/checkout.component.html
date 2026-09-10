@@ -43,65 +43,77 @@
       }
       <div class="fila-2">
         <div class="campo">
-          <label>Tipo de documento</label>
-          <select [(ngModel)]="datosComprador.tipo_documento" class="input">
-            <option value="CC">Cedula de ciudadania</option>
-            <option value="CE">Cedula de extranjeria</option>
-            <option value="NIT">NIT</option>
-            <option value="PAS">Pasaporte</option>
-          </select>
+          <label>
+            Tipo de documento
+            <select [(ngModel)]="datosComprador.tipo_documento" class="input">
+              <option value="CC">Cedula de ciudadania</option>
+              <option value="CE">Cedula de extranjeria</option>
+              <option value="NIT">NIT</option>
+              <option value="PAS">Pasaporte</option>
+            </select>
+          </label>
         </div>
         <div class="campo">
-          <label>Numero de documento</label>
-          <input type="text" [(ngModel)]="datosComprador.numero_documento" class="input" />
+          <label>
+            Numero de documento
+            <input type="text" [(ngModel)]="datosComprador.numero_documento" class="input" />
+          </label>
         </div>
       </div>
       <div class="campo">
-        <label>Telefono</label>
-        <input
-          type="text"
-          [(ngModel)]="datosComprador.telefono"
-          class="input"
-          placeholder="300 123 4567"
-        />
+        <label>
+          Telefono
+          <input
+            type="text"
+            [(ngModel)]="datosComprador.telefono"
+            class="input"
+            placeholder="300 123 4567"
+          />
+        </label>
       </div>
       <div class="campo">
-        <label>Direccion de envio</label>
-        <input
-          type="text"
-          [(ngModel)]="datosComprador.direccion"
-          class="input"
-          placeholder="Calle 10 # 20-30, Apto 502"
-        />
+        <label>
+          Direccion de envio
+          <input
+            type="text"
+            [(ngModel)]="datosComprador.direccion"
+            class="input"
+            placeholder="Calle 10 # 20-30, Apto 502"
+          />
+        </label>
       </div>
       <div class="fila-2">
         <div class="campo">
-          <label>Departamento</label>
-          <select
-            [(ngModel)]="departamentoSeleccionado"
-            (ngModelChange)="datosComprador.ciudad = ''"
-            class="input"
-          >
-            <option value="">Selecciona...</option>
-            @for (d of departamentos; track d.nombre) {
-              <option [value]="d.nombre">{{ d.nombre }}</option>
-            }
-          </select>
+          <label>
+            Departamento
+            <select
+              [(ngModel)]="departamentoSeleccionado"
+              (ngModelChange)="datosComprador.ciudad = ''"
+              class="input"
+            >
+              <option value="">Selecciona...</option>
+              @for (d of departamentos; track d.nombre) {
+                <option [value]="d.nombre">{{ d.nombre }}</option>
+              }
+            </select>
+          </label>
         </div>
         <div class="campo">
-          <label>Ciudad</label>
-          <select
-            [(ngModel)]="datosComprador.ciudad"
-            class="input"
-            [disabled]="!departamentoSeleccionado"
-          >
-            <option value="">
-              {{ departamentoSeleccionado ? 'Selecciona...' : 'Elige un departamento primero' }}
-            </option>
-            @for (ciu of ciudadesDisponibles(); track ciu) {
-              <option [value]="ciu">{{ ciu }}</option>
-            }
-          </select>
+          <label>
+            Ciudad
+            <select
+              [(ngModel)]="datosComprador.ciudad"
+              class="input"
+              [disabled]="!departamentoSeleccionado"
+            >
+              <option value="">
+                {{ departamentoSeleccionado ? 'Selecciona...' : 'Elige un departamento primero' }}
+              </option>
+              @for (ciu of ciudadesDisponibles(); track ciu) {
+                <option [value]="ciu">{{ ciu }}</option>
+              }
+            </select>
+          </label>
         </div>
       </div>
       <div class="acciones">
@@ -167,7 +179,7 @@
     </section>
 
     <section class="metodo-pago">
-      <label>Metodo de pago</label>
+      <span class="label-grupo">Metodo de pago</span>
       <div class="metodos">
         @for (m of metodosPago; track m.valor) {
           <button

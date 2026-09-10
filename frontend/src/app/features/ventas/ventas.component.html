@@ -105,14 +105,12 @@
 
     <!-- Modal de anulacion -->
     @if (ventaAnulando()) {
-      <div class="modal-overlay" (click)="cancelarAnulacion()">
-        <div
-          class="modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="anular-titulo"
-          (click)="$event.stopPropagation()"
-        >
+      <div
+        class="modal-overlay"
+        role="presentation"
+        (click)="$event.target === $event.currentTarget && cancelarAnulacion()"
+      >
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="anular-titulo">
           <h2 id="anular-titulo">Anular venta</h2>
           <p>
             Factura: <strong>{{ ventaAnulando()!.numero_factura }}</strong>
@@ -121,13 +119,15 @@
             Cliente: {{ ventaAnulando()!.cliente_nombre }} — Total:
             {{ ventaAnulando()!.total | number }}
           </p>
-          <label>Motivo de anulacion</label>
-          <textarea
-            [(ngModel)]="motivoAnulacion"
-            class="input"
-            rows="3"
-            placeholder="Describe el motivo..."
-          ></textarea>
+          <label>
+            Motivo de anulacion
+            <textarea
+              [(ngModel)]="motivoAnulacion"
+              class="input"
+              rows="3"
+              placeholder="Describe el motivo..."
+            ></textarea>
+          </label>
           @if (errorAnulacion()) {
             <div class="error-box">{{ errorAnulacion() }}</div>
           }

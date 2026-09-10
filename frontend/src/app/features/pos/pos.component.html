@@ -7,9 +7,9 @@
 
     <!-- Seleccion de cliente -->
     <section class="seccion">
-      <label>Cliente</label>
+      <label for="pos-cliente">Cliente</label>
       <div class="cliente-select">
-        <select [(ngModel)]="clienteSeleccionado" class="input">
+        <select id="pos-cliente" [(ngModel)]="clienteSeleccionado" class="input">
           <option value="">Seleccionar cliente...</option>
           @for (c of clientes(); track c.id) {
             @if (c.id === clienteGenericoId()) {
@@ -40,9 +40,10 @@
 
     <!-- Agregar producto -->
     <section class="seccion">
-      <label>Agregar producto</label>
+      <label for="pos-buscar-producto">Agregar producto</label>
       <div class="producto-add">
         <input
+          id="pos-buscar-producto"
           type="text"
           placeholder="Buscar por nombre o SKU..."
           [(ngModel)]="busquedaProducto"
@@ -109,18 +110,27 @@
     <section class="seccion resumen">
       <div class="descuento-notas">
         <div>
-          <label>Descuento ($)</label>
-          <input
-            type="number"
-            [(ngModel)]="descuento"
-            min="0"
-            (ngModelChange)="recalcular()"
-            class="input input-descuento"
-          />
+          <label>
+            Descuento ($)
+            <input
+              type="number"
+              [(ngModel)]="descuento"
+              min="0"
+              (ngModelChange)="recalcular()"
+              class="input input-descuento"
+            />
+          </label>
         </div>
         <div class="flex-1">
-          <label>Notas</label>
-          <textarea [(ngModel)]="notas" placeholder="Opcional..." class="input" rows="2"></textarea>
+          <label>
+            Notas
+            <textarea
+              [(ngModel)]="notas"
+              placeholder="Opcional..."
+              class="input"
+              rows="2"
+            ></textarea>
+          </label>
         </div>
       </div>
     </section>
@@ -142,7 +152,7 @@
 
     <!-- Metodo de pago -->
     <section class="seccion">
-      <label>Metodo de pago</label>
+      <span class="label-grupo">Metodo de pago</span>
       <div class="metodos-pago">
         @for (m of metodosPago; track m.valor) {
           <button

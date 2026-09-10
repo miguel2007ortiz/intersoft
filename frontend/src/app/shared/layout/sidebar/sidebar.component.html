@@ -3,7 +3,7 @@
   enlace es comodidad, no seguridad: la ruta sigue protegida por su guard.
 -->
 @if (abierto() && !esEscritorio()) {
-  <div class="fondo-drawer" (click)="cerrar.emit()"></div>
+  <div class="fondo-drawer" role="presentation" (click)="cerrar.emit()"></div>
 }
 
 <nav

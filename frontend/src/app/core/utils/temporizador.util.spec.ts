@@ -3,7 +3,7 @@ import { debounce, programarAviso } from './temporizador.util';
 
 const destroyRefFalso = (): { destroyRef: DestroyRef; destruir: () => void } => {
   const onDestroy = vi.fn();
-  let manejadores: (() => void)[] = [];
+  const manejadores: (() => void)[] = [];
   const destroyRef = {
     onDestroy: vi.fn((fn: () => void) => {
       onDestroy(fn);

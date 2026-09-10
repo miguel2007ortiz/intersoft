@@ -88,8 +88,12 @@
 
   <!-- Modal de gestion -->
   @if (envioEditando(); as env) {
-    <div class="modal-overlay" (click)="cancelar()">
-      <div class="modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div
+      class="modal-overlay"
+      role="presentation"
+      (click)="$event.target === $event.currentTarget && cancelar()"
+    >
+      <div class="modal" role="dialog" aria-modal="true">
         <h2>Gestionar envio</h2>
         <p class="modal-factura">
           <strong>{{ env.numero_factura }}</strong> — {{ env.cliente_nombre }}
