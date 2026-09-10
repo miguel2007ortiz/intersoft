@@ -4,23 +4,20 @@ Bitácora de estado al corte para retomar sesión. **Supervisor (Claude) y
 ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 `vault/INDICE.md` (regla 1.1 de `AGENTS.md`).
 
-Última actualización: 2026-09-10 (actualizado tras gate de supervisor:
-`vault/plantillas/revision-merge.md` corrido por Claude, PR #2 abierto y
-CI real en verde).
+Última actualización: 2026-09-10 (PR #2 mergeado a `main` con aprobación
+explícita del usuario).
 
 ---
 
 ## Rama y repositorio
 
-- Rama de trabajo: `intersoft_miguel`, **en sync con `origin/intersoft_miguel`**
-  (HEAD `8689c4d`, último push de Claude).
-- `origin/main` en `1c2f2f4`; `intersoft_miguel` está estrictamente adelante
-  (fast-forward posible, `git log origin/main..intersoft_miguel` no trae
-  nada de vuelta). No hay `develop` (el flujo usa `main` + ramas por dev).
-- **PR abierto**: https://github.com/miguel2007ortiz/intersoft/pull/2
-  (`intersoft_miguel` → `main`), cuerpo en `docs/PR-BODY-12.md`. Se abrió
-  para poder disparar CI real (`ci.yml` solo corre en push/PR contra
-  `main`/`develop`, no en push a una rama de feature) — **no está mergeado**.
+- **`main` actualizado**: PR #2 (`intersoft_miguel` → `main`) mergeado
+  (merge commit `6fe8aca`, aprobado explícitamente por el usuario tras el
+  dictamen del supervisor). `origin/main` pasó de `1c2f2f4` a `6fe8aca`.
+- Rama de trabajo `intersoft_miguel` (HEAD `71c1079`) queda intacta, sin
+  eliminar, ya integrada en `main`.
+- PR: https://github.com/miguel2007ortiz/intersoft/pull/2 — cuerpo en
+  `docs/PR-BODY-12.md`. Estado: **MERGED**.
 
 ## Gates al corte (verificados hoy)
 
@@ -36,7 +33,7 @@ CI real en verde).
 | Servidores | API `127.0.0.1:8000` y SPA `127.0.0.1:4200` arriba |
 | Seguridad | Sin `.env`/claves `.pem`/`.key` trackeados; `.obsidian` ignorado |
 
-## PENDIENTE 1 (supervisor) — RESUELTO: gate de revisión corrido, merge a `main` pendiente de tu aprobación explícita
+## PENDIENTE 1 (supervisor) — RESUELTO: gate de revisión corrido, PR #2 mergeado a `main`
 
 Claude corrió `vault/plantillas/revision-merge.md` completo:
 
@@ -58,11 +55,10 @@ Claude corrió `vault/plantillas/revision-merge.md` completo:
   los 3 jobs en verde sobre el mismo commit (`8689c4d`).
 
 **Dictamen del supervisor: la rama está lista para mergear a `main`.**
-Falta un solo paso, deliberadamente no ejecutado por Claude: **la
-aprobación explícita tuya para el merge/push a `main`** (`AGENTS.md`
-línea 239: "`git push` a `main`/`develop`, merge de PR" requiere tu
-aprobación explícita). El PR #2 queda abierto esperando esa aprobación;
-Claude no lo mergeó.
+El usuario dio la aprobación explícita (`gh pr merge 2 --merge`) y Claude
+ejecutó el merge: PR #2 en estado `MERGED`, merge commit `6fe8aca` sobre
+`origin/main`. `intersoft_miguel` queda intacta (no se borró). No hay
+pendientes de merge.
 
 ## PENDIENTE 2 — RESUELTO: `#13` ESLint real (cerrado por Claude)
 
@@ -93,6 +89,6 @@ post-fix pendiente de confirmar con gates frontend (build/test:ci).
 ## Flujo acordado
 
 1. Leer `AGENTS.md` §1.1 + `docs/INDICE.md` + `vault/INDICE.md` + este archivo.
-2. Decidir con el supervisor el orden: pendiente real es solo el **merge de
-   `intersoft_miguel` a `main`** (gate de revisión de Claude).
+2. `intersoft_miguel` ya está mergeada a `main` (PR #2, `6fe8aca`). Próximo
+   trabajo debería partir de `main` actualizado.
 3. No push a `main` sin revisión de Claude. Commits Conventional Commits.
