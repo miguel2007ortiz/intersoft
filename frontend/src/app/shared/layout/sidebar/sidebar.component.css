@@ -42,11 +42,21 @@
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
-.sidebar a:hover { background: var(--primario-suave); color: var(--tinta); }
-.sidebar a:hover svg { transform: scale(1.1); }
-.sidebar a.activo { background: var(--primario-suave); color: var(--primario-osc); }
+.sidebar a:hover {
+  background: var(--primario-suave);
+  color: var(--tinta);
+}
+.sidebar a:hover svg {
+  transform: scale(1.1);
+}
+.sidebar a.activo {
+  background: var(--primario-suave);
+  color: var(--primario-osc);
+}
 
 /* Barra de acento a la izquierda del enlace activo: mas facil de ubicar
    de un vistazo que solo el cambio de color de fondo. */
@@ -61,8 +71,13 @@
   background: var(--primario);
 }
 
-.sidebar a svg { flex-shrink: 0; transition: transform 0.15s ease; }
-.sidebar a span { transition: opacity 0.15s ease; }
+.sidebar a svg {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.sidebar a span {
+  transition: opacity 0.15s ease;
+}
 
 /* Fondo oscuro detras del drawer en movil */
 .fondo-drawer {
@@ -94,23 +109,50 @@
   overflow: hidden;
   transition: color 0.15s ease;
 }
-.btn-colapsar:hover { color: var(--primario-osc); }
-.icono-colapsar { flex-shrink: 0; transition: transform 0.2s ease; }
+.btn-colapsar:hover {
+  color: var(--primario-osc);
+}
+.icono-colapsar {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
 
 @media (min-width: 1024px) {
-  .btn-colapsar { display: flex; }
+  .btn-colapsar {
+    display: flex;
+  }
 }
 
 /* Modo contraido (manual, se recuerda en localStorage): solo iconos,
    con tooltip nativo via el atributo title de cada enlace. */
 @media (min-width: 1024px) {
-  .sidebar.colapsada { width: 72px; }
-  .sidebar.colapsada a { justify-content: center; padding: 12px; }
-  .sidebar.colapsada a span { opacity: 0; position: absolute; pointer-events: none; }
-  .sidebar.colapsada a.activo::before { left: 2px; }
-  .sidebar.colapsada .btn-colapsar { justify-content: center; padding: 12px; }
-  .sidebar.colapsada .btn-colapsar span { opacity: 0; position: absolute; pointer-events: none; }
-  .sidebar.colapsada .icono-colapsar { transform: rotate(180deg); }
+  .sidebar.colapsada {
+    width: 72px;
+  }
+  .sidebar.colapsada a {
+    justify-content: center;
+    padding: 12px;
+  }
+  .sidebar.colapsada a span {
+    opacity: 0;
+    position: absolute;
+    pointer-events: none;
+  }
+  .sidebar.colapsada a.activo::before {
+    left: 2px;
+  }
+  .sidebar.colapsada .btn-colapsar {
+    justify-content: center;
+    padding: 12px;
+  }
+  .sidebar.colapsada .btn-colapsar span {
+    opacity: 0;
+    position: absolute;
+    pointer-events: none;
+  }
+  .sidebar.colapsada .icono-colapsar {
+    transform: rotate(180deg);
+  }
 }
 
 /* <1024px: drawer fuera de pantalla, se abre desde el boton hamburguesa del topbar */
@@ -127,9 +169,15 @@
     overflow-y: auto;
     transition: transform 0.22s ease;
   }
-  .sidebar.abierta { transform: translateX(0); }
+  .sidebar.abierta {
+    transform: translateX(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar, .sidebar a svg, .icono-colapsar { transition: none; }
+  .sidebar,
+  .sidebar a svg,
+  .icono-colapsar {
+    transition: none;
+  }
 }

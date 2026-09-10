@@ -40,7 +40,7 @@
   border-radius: 8px;
   font: inherit;
   font-size: 14px;
-  background: #fff;
+  background: var(--blanco);
 }
 .input:focus {
   outline: none;
@@ -62,7 +62,7 @@
 }
 
 .ajuste-form {
-  background: #fff;
+  background: var(--blanco);
   border: 1px solid var(--linea);
   border-radius: 12px;
   padding: var(--e5);
@@ -104,7 +104,7 @@
 .btn-reintentar {
   padding: 8px 18px;
   border: 1px solid var(--linea);
-  background: #fff;
+  background: var(--blanco);
   border-radius: 8px;
   cursor: pointer;
   font: inherit;

@@ -1,3 +1,15 @@
+/**
+ * Checkout — datos de envio y pago
+ *
+ * Que hace: completa los datos del comprador (documento, direccion, ciudad),
+ * muestra el resumen y lanza el pago.
+ * Ruta: /checkout (authGuard).
+ * Por que asi: si el stock cambio mientras el cliente decidia, el backend
+ * responde con el detalle de que producto falta y cuanto hay, y la pantalla lo
+ * lista uno por uno en vez de dar un error generico. La direccion y la ciudad
+ * son obligatorias antes de habilitar el boton porque sin ellas no hay envio.
+ */
+
 import { DecimalPipe } from '@angular/common';
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -5,10 +17,13 @@ import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
 import {
   Carrito,
+  CheckoutPendiente,
   CheckoutResponse,
   DatosComprador,
   StockInsuficiente,
+  esCheckoutPendiente,
 } from '../../../core/models/tienda.model';
+import { CLAVE_REFERENCIA_PAGO, urlCheckoutPasarela } from '../../../core/utils/pasarela.util';
 import { DEPARTAMENTOS_COLOMBIA } from '../../../shared/data/colombia-ubicaciones';
 
 @Component({
@@ -25,6 +40,7 @@ export class CheckoutComponent implements OnInit {
   readonly cargando = signal(false);
   readonly error = signal('');
   readonly exito = signal<CheckoutResponse | null>(null);
+  readonly redirigiendo = signal(false);
   readonly erroresStock = signal<StockInsuficiente[]>([]);
   readonly metodoPago = signal('tarjeta');
   readonly mostrarFormComprador = signal(false);
@@ -81,11 +97,15 @@ export class CheckoutComponent implements OnInit {
 
     this.tienda.checkout(this.metodoPago()).subscribe({
       next: (r) => {
+        if (esCheckoutPendiente(r)) {
+          this.irAPasarela(r);
+          return;
+        }
         this.exito.set(r);
         this.cargando.set(false);
       },
       error: (e) => {
-        if (e.codigo === 'SIN_CLIENTE') {
+        if (e.codigo === 'SIN_CLIENTE' || e.codigo === 'SIN_DIRECCION_ENVIO') {
           this.mostrarFormComprador.set(true);
         } else if (e.codigo === 'STOCK_INSUFICIENTE') {
           this.erroresStock.set(e.productos || []);
@@ -95,6 +115,18 @@ export class CheckoutComponent implements OnInit {
         this.cargando.set(false);
       },
     });
+  }
+
+  /** Sale del sitio hacia el checkout de la pasarela.
+   *
+   * El pago no queda hecho al volver: lo confirma el webhook. Por eso se
+   * guarda la referencia antes de salir, para poder consultar el estado real
+   * en la pagina de retorno en vez de creerle a la URL de vuelta. */
+  private irAPasarela(pendiente: CheckoutPendiente): void {
+    sessionStorage.setItem(CLAVE_REFERENCIA_PAGO, pendiente.referencia);
+    this.redirigiendo.set(true);
+    this.cargando.set(false);
+    window.location.assign(urlCheckoutPasarela(pendiente.datos_checkout));
   }
 
   /** Vincula al usuario (sin importar su rol) con un Cliente del

@@ -1,3 +1,14 @@
+/**
+ * Asistente IA — chat de apoyo al negocio
+ *
+ * Que hace: conversacion con el asistente y sugerencias sobre los datos de la
+ * empresa (que reponer, que se vende poco).
+ * Ruta: /ia (authGuard + personalGuard).
+ * Por que asi: el historial vive en la pantalla y se pierde al salir, a
+ * proposito: es una consulta de apoyo, no un registro que haya que conservar.
+ * El backend responde con el contexto de la empresa del usuario, nunca de otra.
+ */
+
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
@@ -77,15 +88,17 @@ export class IaComponent {
     });
   }
 
-  private guardarReintento(conversacion: {
-    id: string; mensajes: MensajeIA[];
-  }): void {
+  private guardarReintento(conversacion: { id: string; mensajes: MensajeIA[] }): void {
     const mensajesOrdenados = [...conversacion.mensajes].sort((a, b) =>
-      a.created_at.localeCompare(b.created_at));
-    localStorage.setItem('ia.reintentar', JSON.stringify({
-      conversacion: { id: conversacion.id },
-      mensajesOrdenados,
-    }));
+      a.created_at.localeCompare(b.created_at),
+    );
+    localStorage.setItem(
+      'ia.reintentar',
+      JSON.stringify({
+        conversacion: { id: conversacion.id },
+        mensajesOrdenados,
+      }),
+    );
   }
 
   nuevaConversacion(): void {

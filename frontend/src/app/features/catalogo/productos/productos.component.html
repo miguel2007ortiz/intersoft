@@ -1,3 +1,7 @@
+<!--
+  Productos: tabla con stock y minimo, modal de alta/edicion con subida de
+  imagen. El stock no se edita aqui: se mueve por ventas e inventario.
+-->
 <app-panel-shell>
   <section class="contenedor pagina">
     <header class="cabecera">
@@ -6,7 +10,9 @@
         <p class="gris">Catalogo de tu empresa: precios, existencias y alertas de stock.</p>
       </div>
       @if (!formularioAbierto()) {
-        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo producto</button>
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">
+          + Nuevo producto
+        </button>
       }
     </header>
 
@@ -27,7 +33,13 @@
         <div class="fila-doble">
           <div class="campo">
             <label for="nombre">Nombre</label>
-            <input id="nombre" type="text" formControlName="nombre" placeholder="Tenis Run 42" autocomplete="off" />
+            <input
+              id="nombre"
+              type="text"
+              formControlName="nombre"
+              placeholder="Tenis Run 42"
+              autocomplete="off"
+            />
             @if (campoInvalido('nombre')) {
               <p class="mensaje-error" role="alert">Escribe el nombre del producto.</p>
             }
@@ -43,8 +55,12 @@
 
         <div class="campo">
           <label for="descripcion">Descripcion</label>
-          <textarea id="descripcion" formControlName="descripcion" rows="2"
-                    placeholder="Detalles del producto..."></textarea>
+          <textarea
+            id="descripcion"
+            formControlName="descripcion"
+            rows="2"
+            placeholder="Detalles del producto..."
+          ></textarea>
         </div>
 
         <div class="campo">
@@ -94,24 +110,50 @@
         }
 
         <div class="acciones-form">
-          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">
+            Cancelar
+          </button>
           <button type="submit" class="btn btn-primario" [disabled]="guardando()">
-            {{ guardando() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Crear producto') }}
+            {{ guardando() ? 'Guardando...' : editando() ? 'Guardar cambios' : 'Crear producto' }}
           </button>
         </div>
       </form>
     }
 
     <div class="barra-listado">
-      <input type="search" class="buscador" aria-label="Buscar productos" placeholder="Buscar por nombre o SKU..."
-             [value]="busqueda()" (input)="buscar($event)" />
+      <input
+        type="search"
+        class="buscador"
+        aria-label="Buscar productos"
+        placeholder="Buscar por nombre o SKU..."
+        [value]="busqueda()"
+        (input)="buscar($event)"
+      />
       <div class="filtros">
-        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'todos'"
-                (click)="filtrar('todos')">Todos</button>
-        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'activos'"
-                (click)="filtrar('activos')">Activos</button>
-        <button type="button" class="filtro" [class.activo]="filtroEstado() === 'inactivos'"
-                (click)="filtrar('inactivos')">Inactivos</button>
+        <button
+          type="button"
+          class="filtro"
+          [class.activo]="filtroEstado() === 'todos'"
+          (click)="filtrar('todos')"
+        >
+          Todos
+        </button>
+        <button
+          type="button"
+          class="filtro"
+          [class.activo]="filtroEstado() === 'activos'"
+          (click)="filtrar('activos')"
+        >
+          Activos
+        </button>
+        <button
+          type="button"
+          class="filtro"
+          [class.activo]="filtroEstado() === 'inactivos'"
+          (click)="filtrar('inactivos')"
+        >
+          Inactivos
+        </button>
       </div>
     </div>
 
@@ -119,17 +161,29 @@
       @if (cargando()) {
         <p class="gris centrado">Cargando productos...</p>
       } @else if (errorCarga()) {
-        <app-estado-vacio tipo="error" [titulo]="'No pudimos cargar los productos'"
-                          [mensaje]="errorCarga()" accionTexto="Reintentar"
-                          (accion)="cargar()"></app-estado-vacio>
+        <app-estado-vacio
+          tipo="error"
+          [titulo]="'No pudimos cargar los productos'"
+          [mensaje]="errorCarga()"
+          accionTexto="Reintentar"
+          (accion)="cargar()"
+        ></app-estado-vacio>
       } @else if (!productos().length && (busqueda() || filtroEstado() !== 'todos')) {
-        <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
-                          mensaje="No se encontraron productos para esa busqueda o filtro."
-                          accionTexto="Limpiar filtros" (accion)="limpiarFiltros()"></app-estado-vacio>
+        <app-estado-vacio
+          tipo="busqueda"
+          titulo="Sin resultados"
+          mensaje="No se encontraron productos para esa busqueda o filtro."
+          accionTexto="Limpiar filtros"
+          (accion)="limpiarFiltros()"
+        ></app-estado-vacio>
       } @else if (!productos().length) {
-        <app-estado-vacio tipo="vacio" titulo="Aun no hay productos"
-                          mensaje="Crea tu primer producto para comenzar a facturar."
-                          accionTexto="Nuevo producto" (accion)="abrirCreacion()"></app-estado-vacio>
+        <app-estado-vacio
+          tipo="vacio"
+          titulo="Aun no hay productos"
+          mensaje="Crea tu primer producto para comenzar a facturar."
+          accionTexto="Nuevo producto"
+          (accion)="abrirCreacion()"
+        ></app-estado-vacio>
       } @else {
         <table class="tabla">
           <thead>
@@ -173,7 +227,9 @@
                     {{ p.activo ? 'Desactivar' : 'Reactivar' }}
                   </button>
                   @if (!p.tiene_ventas) {
-                    <button type="button" class="enlace peligro" (click)="eliminar(p)">Eliminar</button>
+                    <button type="button" class="enlace peligro" (click)="eliminar(p)">
+                      Eliminar
+                    </button>
                   }
                 </td>
               </tr>

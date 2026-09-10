@@ -1,10 +1,22 @@
+/**
+ * Usuarios — alta, edicion y estado de las cuentas (Flujo 3)
+ *
+ * Que hace: lista los usuarios de la empresa, crea nuevos, edita nombre, rol y
+ * contrasena, y activa o desactiva cuentas.
+ * Ruta: /admin/usuarios (authGuard + adminGuard).
+ * Por que asi: al editar, la contrasena vacia significa "no la cambies": el
+ * campo se quita del envio antes del PUT, porque el backend rechaza una
+ * cadena vacia. Nunca se desactiva a uno mismo (eso lo impide tambien el
+ * backend, aqui solo se oculta el boton).
+ */
+
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
 import { programarAviso } from '../../../core/utils/temporizador.util';
-import { ErrorSeguridad, UsuarioAdmin } from '../../../core/models/seguridad.model';
+import { DatosUsuario, ErrorSeguridad, UsuarioAdmin } from '../../../core/models/seguridad.model';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -69,8 +81,10 @@ export class UsuariosComponent {
   abrirEdicion(usuario: UsuarioAdmin): void {
     this.editando.set(usuario);
     this.formulario.reset({
-      nombre: usuario.nombre, email: usuario.email,
-      rol: usuario.rol, password: '',
+      nombre: usuario.nombre,
+      email: usuario.email,
+      rol: usuario.rol,
+      password: '',
     });
     // En edicion la contrasena es opcional (solo si se quiere cambiar)
     this.formulario.controls.password.setValidators([Validators.minLength(8)]);
@@ -91,7 +105,10 @@ export class UsuariosComponent {
       this.formulario.markAllAsTouched();
       return;
     }
-    const datos = this.formulario.getRawValue();
+    const datos = this.formulario.getRawValue() as DatosUsuario;
+    // En edicion la contrasena es opcional: vacia = no se cambia (el backend
+    // rechaza '' en password aunque sea opcional).
+    if (!datos.password) delete datos.password;
     const enEdicion = this.editando();
     this.guardando.set(true);
 
@@ -122,7 +139,8 @@ export class UsuariosComponent {
     peticion.subscribe({
       next: (actualizado) => {
         this.usuarios.update((lista) =>
-          lista.map((u) => (u.id === actualizado.id ? actualizado : u)));
+          lista.map((u) => (u.id === actualizado.id ? actualizado : u)),
+        );
         this.exito.set(actualizado.activo ? 'Cuenta reactivada.' : 'Cuenta desactivada.');
         programarAviso(this.destroyRef, () => this.exito.set(null), CERRAR_AVISO_MS);
       },

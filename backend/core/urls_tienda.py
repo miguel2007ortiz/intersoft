@@ -29,6 +29,14 @@ urlpatterns = [
 
     # Checkout
     path("tienda/checkout/", views_tienda.CheckoutView.as_view()),
+
+    # Pagos (Fase 4): estado del intento + webhook de la pasarela.
+    # El webhook es publico a proposito (lo llama Wompi, no el navegador):
+    # su control de acceso es la firma del evento, no la sesion.
+    path("tienda/pagos/estado/", views_tienda.EstadoPagoView.as_view()),
+    path("tienda/pagos/webhook/wompi/",
+         views_tienda.WebhookPagoWompiView.as_view()),
+
     path("tienda/completar-comprador/", views_tienda.CompletarCompradorView.as_view()),
 
     # Pedidos del comprador

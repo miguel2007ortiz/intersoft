@@ -1,3 +1,7 @@
+<!--
+  Clientes: buscador con debounce, tabla paginada por el backend, modal de
+  alta/edicion y panel de detalle con el historial de compras.
+-->
 <app-panel-shell>
   <section class="contenedor pagina">
     <header class="cabecera">
@@ -5,14 +9,23 @@
         <h1>Clientes</h1>
         <p class="gris">
           @if (!cargando()) {
-            {{ total() }} {{ estado() === 'activos' ? 'clientes activos' : estado() === 'inactivos' ? 'clientes inactivos' : 'clientes en total' }}
+            {{ total() }}
+            {{
+              estado() === 'activos'
+                ? 'clientes activos'
+                : estado() === 'inactivos'
+                  ? 'clientes inactivos'
+                  : 'clientes en total'
+            }}
           } @else {
             Directorio de clientes de tu empresa con su historial de compras.
           }
         </p>
       </div>
       @if (!formularioAbierto()) {
-        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo cliente</button>
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">
+          + Nuevo cliente
+        </button>
       }
     </header>
 
@@ -33,7 +46,13 @@
         <div class="fila-doble">
           <div class="campo">
             <label for="nombre">Nombre o razon social</label>
-            <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Lopez" autocomplete="name" />
+            <input
+              id="nombre"
+              type="text"
+              formControlName="nombre"
+              placeholder="Ana Lopez"
+              autocomplete="name"
+            />
             @if (campoInvalido('nombre')) {
               <p class="mensaje-error" role="alert">Escribe el nombre (minimo 3 caracteres).</p>
             }
@@ -55,8 +74,12 @@
           </div>
           <div class="campo campo-doble-ancho">
             <label for="numero_documento">Numero de documento</label>
-            <input id="numero_documento" type="text" formControlName="numero_documento"
-                   placeholder="1020304050" />
+            <input
+              id="numero_documento"
+              type="text"
+              formControlName="numero_documento"
+              placeholder="1020304050"
+            />
             @if (campoInvalido('numero_documento')) {
               <p class="mensaje-error" role="alert">El numero de documento es obligatorio.</p>
             }
@@ -95,18 +118,29 @@
         }
 
         <div class="acciones-form">
-          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">
+            Cancelar
+          </button>
           <button type="submit" class="btn btn-primario" [disabled]="guardando()">
-            {{ guardando() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Crear cliente') }}
+            {{ guardando() ? 'Guardando...' : editando() ? 'Guardar cambios' : 'Crear cliente' }}
           </button>
         </div>
       </form>
     }
 
     <div class="buscador">
-      <input type="search" aria-label="Buscar clientes" placeholder="Buscar por nombre, documento o correo..."
-             [value]="busqueda()" (input)="buscar($event)" />
-      <select aria-label="Filtrar por estado" [value]="estado()" (change)="filtrarPorEstado($event)">
+      <input
+        type="search"
+        aria-label="Buscar clientes"
+        placeholder="Buscar por nombre, documento o correo..."
+        [value]="busqueda()"
+        (input)="buscar($event)"
+      />
+      <select
+        aria-label="Filtrar por estado"
+        [value]="estado()"
+        (change)="filtrarPorEstado($event)"
+      >
         <option value="activos">Activos</option>
         <option value="inactivos">Inactivos</option>
         <option value="todos">Todos</option>
@@ -117,17 +151,29 @@
       @if (cargando()) {
         <p class="gris centrado">Cargando clientes...</p>
       } @else if (errorCarga()) {
-        <app-estado-vacio tipo="error" [titulo]="'No pudimos cargar los clientes'"
-                          [mensaje]="errorCarga()" accionTexto="Reintentar"
-                          (accion)="cargar()"></app-estado-vacio>
+        <app-estado-vacio
+          tipo="error"
+          [titulo]="'No pudimos cargar los clientes'"
+          [mensaje]="errorCarga()"
+          accionTexto="Reintentar"
+          (accion)="cargar()"
+        ></app-estado-vacio>
       } @else if (!clientes().length && hayBusqueda()) {
-        <app-estado-vacio tipo="busqueda" titulo="Sin resultados"
-                          [mensaje]="'No se encontraron clientes para «' + busqueda() + '».'"
-                          accionTexto="Limpiar busqueda" (accion)="limpiarBusqueda()"></app-estado-vacio>
+        <app-estado-vacio
+          tipo="busqueda"
+          titulo="Sin resultados"
+          [mensaje]="'No se encontraron clientes para «' + busqueda() + '».'"
+          accionTexto="Limpiar busqueda"
+          (accion)="limpiarBusqueda()"
+        ></app-estado-vacio>
       } @else if (!clientes().length) {
-        <app-estado-vacio tipo="vacio" titulo="Todavia no hay clientes"
-                          mensaje="Registra tu primer cliente y empieza a facturar."
-                          accionTexto="Registrar el primero" (accion)="abrirCreacion()"></app-estado-vacio>
+        <app-estado-vacio
+          tipo="vacio"
+          titulo="Todavia no hay clientes"
+          mensaje="Registra tu primer cliente y empieza a facturar."
+          accionTexto="Registrar el primero"
+          (accion)="abrirCreacion()"
+        ></app-estado-vacio>
       } @else {
         <table class="tabla">
           <thead>
@@ -160,7 +206,9 @@
                 <td class="celda-acciones">
                   <button type="button" class="enlace" (click)="abrirEdicion(c)">Editar</button>
                   @if (c.activo) {
-                    <button type="button" class="enlace peligro" (click)="desactivar(c)">Desactivar</button>
+                    <button type="button" class="enlace peligro" (click)="desactivar(c)">
+                      Desactivar
+                    </button>
                   } @else {
                     <button type="button" class="enlace" (click)="reactivar(c)">Reactivar</button>
                   }
@@ -171,11 +219,23 @@
         </table>
         @if (totalPaginas() > 1) {
           <div class="paginador">
-            <button type="button" class="btn btn-secundario" [disabled]="pagina() <= 1"
-                    (click)="irPagina(pagina() - 1)">&larr; Anterior</button>
+            <button
+              type="button"
+              class="btn btn-secundario"
+              [disabled]="pagina() <= 1"
+              (click)="irPagina(pagina() - 1)"
+            >
+              &larr; Anterior
+            </button>
             <span class="gris">Pagina {{ pagina() }} de {{ totalPaginas() }}</span>
-            <button type="button" class="btn btn-secundario" [disabled]="pagina() >= totalPaginas()"
-                    (click)="irPagina(pagina() + 1)">Siguiente &rarr;</button>
+            <button
+              type="button"
+              class="btn btn-secundario"
+              [disabled]="pagina() >= totalPaginas()"
+              (click)="irPagina(pagina() + 1)"
+            >
+              Siguiente &rarr;
+            </button>
           </div>
         }
       }

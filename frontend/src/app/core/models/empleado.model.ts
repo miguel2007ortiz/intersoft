@@ -1,3 +1,12 @@
+/**
+ * Modelos de empleados
+ *
+ * Que hace: describe el empleado y el cuerpo que se manda al crearlo o editarlo.
+ * Donde se usa: EmpleadosService y /empleados.
+ * Por que asi: crear y leer son tipos distintos a proposito: al crear se manda
+ * contrasena y al leer nunca vuelve, y el tipo lo deja claro sin leer la API.
+ */
+
 /** Tipos del modulo Empleados (personal interno), separado de Clientes. */
 
 import { VentaResumen } from './catalogo.model';

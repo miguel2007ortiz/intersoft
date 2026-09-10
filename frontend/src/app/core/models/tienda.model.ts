@@ -1,3 +1,15 @@
+/**
+ * Modelos del marketplace — contrato con /api/tienda/
+ *
+ * Que hace: describe producto, categoria, carrito, cupon, pedido, comentario,
+ * favorito y los resultados del pago.
+ * Donde se usa: TiendaService y las pantallas de la tienda.
+ * Por que asi: los nombres son EXACTAMENTE los de la API (por ejemplo el
+ * favorito trae `producto` con el id y `producto_obj` con el producto entero).
+ * Si el backend cambia un campo, TypeScript marca el error en el sitio donde
+ * se usa, en vez de fallar callado en tiempo de ejecucion.
+ */
+
 /** Tipos de la fase 5: tienda virtual, carrito y checkout. */
 
 export interface ProductoTienda {
@@ -92,6 +104,47 @@ export interface CheckoutResponse {
   ventas: VentaResultado[];
   total: string;
   transaccion_id: string;
+}
+
+/** Datos publicos con los que se abre el Web Checkout de Wompi.
+ * Los calcula y firma el backend: aqui nunca viaja un secreto. */
+export interface DatosCheckoutPasarela {
+  url: string;
+  public_key: string;
+  currency: string;
+  amount_in_cents: number;
+  reference: string;
+  signature_integrity: string;
+  redirect_url: string;
+}
+
+/** Respuesta 202 del checkout cuando la pasarela es asincrona (Wompi):
+ * el cobro no termina en esta peticion, hay que ir a pagar fuera. */
+export interface CheckoutPendiente {
+  codigo: 'PAGO_PENDIENTE';
+  detalle: string;
+  referencia: string;
+  total: string;
+  pasarela: string;
+  datos_checkout: DatosCheckoutPasarela;
+}
+
+/** El checkout resuelve el pago (201/200) o lo deja pendiente (202). */
+export type CheckoutResultado = CheckoutResponse | CheckoutPendiente;
+
+export function esCheckoutPendiente(r: CheckoutResultado): r is CheckoutPendiente {
+  return r.codigo === 'PAGO_PENDIENTE';
+}
+
+/** Estado de un intento de pago, consultado al volver de la pasarela. */
+export interface EstadoPago {
+  codigo: string;
+  referencia: string;
+  estado: 'pendiente' | 'aprobado' | 'rechazado';
+  pasarela: string;
+  transaccion_id: string;
+  total: string;
+  ventas: VentaResultado[];
 }
 
 export interface StockInsuficiente {

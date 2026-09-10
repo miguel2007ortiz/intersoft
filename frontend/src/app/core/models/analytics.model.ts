@@ -1,3 +1,13 @@
+/**
+ * Modelos de analitica y reportes
+ *
+ * Que hace: describe los datos del dashboard y de /reportes: totales, series
+ * por fecha, ranking de productos y comparativas.
+ * Donde se usa: AnalyticsService, dashboard y reportes.
+ * Por que asi: los agregados los calcula el backend (una consulta) en vez de
+ * descargar las ventas y sumarlas en el navegador.
+ */
+
 /** Tipos de la fase 7: dashboard de analitica y reportes (solo ADMINISTRADOR). */
 
 export interface RangoFechas {

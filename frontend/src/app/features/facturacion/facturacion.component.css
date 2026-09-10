@@ -50,7 +50,7 @@
   border-radius: 8px;
   font: inherit;
   font-size: 14px;
-  background: #fff;
+  background: var(--blanco);
   transition: border-color 0.15s;
 }
 .input:focus {
@@ -142,7 +142,7 @@
   padding: 4px 10px;
   border: 1px solid var(--linea);
   border-radius: 6px;
-  background: #fff;
+  background: var(--blanco);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -170,7 +170,7 @@
   border-color: #b54708;
 }
 .btn-outline {
-  background: #fff;
+  background: var(--blanco);
 }
 
 .hint {
@@ -208,7 +208,7 @@
   justify-content: center;
 }
 .modal {
-  background: #fff;
+  background: var(--blanco);
   border-radius: 12px;
   padding: 24px;
   max-width: 500px;

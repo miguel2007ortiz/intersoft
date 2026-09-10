@@ -1,3 +1,14 @@
+/**
+ * Productos — catalogo interno de la empresa (Flujo 2)
+ *
+ * Que hace: crea y edita productos con precio, stock, minimo, categoria e
+ * imagen; permite desactivarlos.
+ * Ruta: /productos (authGuard + personalGuard).
+ * Por que asi: la imagen se sube como multipart al mismo endpoint; el stock
+ * NO se edita a mano desde aqui, se mueve por ventas y por movimientos de
+ * inventario, para que la trazabilidad no se rompa.
+ */
+
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -5,9 +16,8 @@ import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-sh
 import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
-import {
-  Categoria, ErrorCatalogo, Producto,
-} from '../../../core/models/catalogo.model';
+import { Categoria, ErrorCatalogo, Producto } from '../../../core/models/catalogo.model';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -19,6 +29,7 @@ const CERRAR_AVISO_MS = 4000;
 })
 export class ProductosComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly catalogo = inject(CatalogoService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -61,8 +72,7 @@ export class ProductosComponent {
   cargar(): void {
     this.cargando.set(true);
     this.errorCarga.set(null);
-    const activo = this.filtroEstado() === 'todos' ? undefined
-      : this.filtroEstado() === 'activos';
+    const activo = this.filtroEstado() === 'todos' ? undefined : this.filtroEstado() === 'activos';
     this.catalogo.listarProductos({ busqueda: this.busqueda(), activo }).subscribe({
       next: ({ resultados }) => {
         this.productos.set(resultados);
@@ -76,8 +86,7 @@ export class ProductosComponent {
   }
 
   cargarCategorias(): void {
-    this.catalogo.listarCategorias()
-      .subscribe(({ resultados }) => this.categorias.set(resultados));
+    this.catalogo.listarCategorias().subscribe(({ resultados }) => this.categorias.set(resultados));
   }
 
   buscar(evento: Event): void {
@@ -99,8 +108,13 @@ export class ProductosComponent {
   abrirCreacion(): void {
     this.editando.set(null);
     this.formulario.reset({
-      nombre: '', sku: '', descripcion: '', categoria_id: '',
-      precio: 0, stock: 0, stock_minimo: 10,
+      nombre: '',
+      sku: '',
+      descripcion: '',
+      categoria_id: '',
+      precio: 0,
+      stock: 0,
+      stock_minimo: 10,
     });
     this.imagenNueva.set(null);
     this.imagenPreview.set(null);
@@ -136,7 +150,9 @@ export class ProductosComponent {
   seleccionarImagen(evento: Event): void {
     const archivo = (evento.target as HTMLInputElement).files?.[0] ?? null;
     this.imagenNueva.set(archivo);
-    this.imagenPreview.set(archivo ? URL.createObjectURL(archivo) : this.editando()?.imagen ?? null);
+    this.imagenPreview.set(
+      archivo ? URL.createObjectURL(archivo) : (this.editando()?.imagen ?? null),
+    );
   }
 
   enviar(): void {
@@ -183,20 +199,27 @@ export class ProductosComponent {
     this.catalogo.cambiarEstadoProducto(producto.id, accion).subscribe({
       next: (actualizado) => {
         this.productos.update((lista) =>
-          lista.map((p) => (p.id === actualizado.id ? actualizado : p)));
-        this.exito.set(actualizado.activo
-          ? 'Producto visible en el catalogo.'
-          : 'Producto oculto del catalogo.');
+          lista.map((p) => (p.id === actualizado.id ? actualizado : p)),
+        );
+        this.exito.set(
+          actualizado.activo ? 'Producto visible en el catalogo.' : 'Producto oculto del catalogo.',
+        );
         this.avisarExito();
       },
       error: (e: ErrorCatalogo) => this.error.set(e.detalle ?? 'No se pudo cambiar el estado.'),
     });
   }
 
-  eliminar(producto: Producto): void {
-    if (!confirm(`¿Eliminar "${producto.nombre}"?`)) {
-      return;
-    }
+  async eliminar(producto: Producto): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Eliminar producto',
+      mensaje:
+        `Se eliminara "${producto.nombre}" del catalogo. Si ya tiene ventas ` +
+        'registradas no se podra borrar, pero puedes desactivarlo.',
+      confirmar: 'Eliminar producto',
+      destructivo: true,
+    });
+    if (!acepto) return;
     this.catalogo.eliminarProducto(producto.id).subscribe({
       next: () => {
         this.exito.set('Producto eliminado.');

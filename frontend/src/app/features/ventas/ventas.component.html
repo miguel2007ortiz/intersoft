@@ -106,8 +106,14 @@
     <!-- Modal de anulacion -->
     @if (ventaAnulando()) {
       <div class="modal-overlay" (click)="cancelarAnulacion()">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <h2>Anular venta</h2>
+        <div
+          class="modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="anular-titulo"
+          (click)="$event.stopPropagation()"
+        >
+          <h2 id="anular-titulo">Anular venta</h2>
           <p>
             Factura: <strong>{{ ventaAnulando()!.numero_factura }}</strong>
           </p>

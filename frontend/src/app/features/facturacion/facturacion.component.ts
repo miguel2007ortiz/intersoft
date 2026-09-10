@@ -1,5 +1,16 @@
+/**
+ * Facturacion electronica — DIAN (Flujo 2)
+ *
+ * Que hace: genera la factura electronica de una venta, muestra su estado
+ * (aceptada, rechazada, pendiente), permite reenviarla y emitir notas credito.
+ * Ruta: /facturacion (authGuard + personalGuard).
+ * Por que asi: el envio a la DIAN es asincrono: la pantalla muestra el estado
+ * que reporta el backend y ofrece reenviar, en vez de bloquear al usuario
+ * esperando una respuesta que puede tardar.
+ */
+
 import { DatePipe, DecimalPipe, SlicePipe } from '@angular/common';
-import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
+import { Component, DestroyRef, HostListener, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { FacturaElectronica, NotaCredito, Venta } from '../../core/models/catalogo.model';
@@ -199,5 +210,13 @@ export class FacturacionComponent implements OnInit {
         this.creandoNc.set(false);
       },
     });
+  }
+
+  /** Escape cierra el modal abierto: se espera de cualquier dialogo y evita
+   * tener que apuntar al boton "Cerrar" con el raton. */
+  @HostListener('document:keydown.escape')
+  cerrarConEscape(): void {
+    this.detalleVisible.set(false);
+    this.reenviarVisible.set(false);
   }
 }

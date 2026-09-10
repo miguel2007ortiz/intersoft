@@ -1,8 +1,24 @@
+/**
+ * Camaras — monitoreo del local
+ *
+ * Que hace: lista las camaras, su estado y los eventos registrados.
+ * Ruta: /monitoreo/camaras (authGuard + adminGuard).
+ * Por que asi: es una pantalla de consulta; el video y la conexion los sirve el
+ * backend, aqui solo se pinta lo que devuelve.
+ */
+
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MonitoreoService } from '../../core/services/monitoreo.service';
-import { Camara, CamaraEscritura, ErrorMonitoreo, Grabacion, GrabacionCamara } from '../../core/models/monitoreo.model';
+import {
+  Camara,
+  CamaraEscritura,
+  ErrorMonitoreo,
+  Grabacion,
+  GrabacionCamara,
+} from '../../core/models/monitoreo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { ConfirmacionService } from '../../core/services/confirmacion.service';
 
 /** Fase 9: panel de camaras de vigilancia (solo ADMINISTRADOR).
  * Muestra el video en vivo, el catalogo de grabaciones historicas
@@ -16,6 +32,7 @@ import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell
 })
 export class CamarasComponent implements OnInit {
   private readonly monitoreo = inject(MonitoreoService);
+  private readonly confirmacion = inject(ConfirmacionService);
 
   readonly camaras = signal<Camara[]>([]);
   readonly cargando = signal(true);
@@ -56,8 +73,12 @@ export class CamarasComponent implements OnInit {
     });
   }
 
-  abrirFormulario(): void { this.mostrandoForm.set(true); }
-  cerrarFormulario(): void { this.mostrandoForm.set(false); }
+  abrirFormulario(): void {
+    this.mostrandoForm.set(true);
+  }
+  cerrarFormulario(): void {
+    this.mostrandoForm.set(false);
+  }
 
   crearCamara(): void {
     if (!this.nombre().trim()) return;
@@ -71,10 +92,15 @@ export class CamarasComponent implements OnInit {
     this.monitoreo.crearCamara(datos).subscribe({
       next: () => {
         this.cerrarFormulario();
-        this.nombre.set(''); this.ubicacion.set(''); this.urlStream.set('');
+        this.nombre.set('');
+        this.ubicacion.set('');
+        this.urlStream.set('');
         this.cargarCamaras();
       },
-      error: (e: ErrorMonitoreo) => { this.error.set(e.detalle ?? 'No se pudo crear la camara.'); this.guardando.set(false); },
+      error: (e: ErrorMonitoreo) => {
+        this.error.set(e.detalle ?? 'No se pudo crear la camara.');
+        this.guardando.set(false);
+      },
       complete: () => this.guardando.set(false),
     });
   }
@@ -86,8 +112,14 @@ export class CamarasComponent implements OnInit {
     });
   }
 
-  eliminar(c: Camara): void {
-    if (!confirm(`Eliminar la camara "${c.nombre}"?`)) return;
+  async eliminar(c: Camara): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Eliminar camara',
+      mensaje: `Se eliminara la camara "${c.nombre}" y dejara de emitir video.`,
+      confirmar: 'Eliminar camara',
+      destructivo: true,
+    });
+    if (!acepto) return;
     this.monitoreo.eliminarCamara(c.id).subscribe({
       next: () => this.cargarCamaras(),
       error: (e: ErrorMonitoreo) => this.error.set(e.detalle ?? 'No se pudo eliminar la camara.'),
@@ -101,7 +133,10 @@ export class CamarasComponent implements OnInit {
     this.cargarGrabaciones();
   }
 
-  cerrarGrabadora(): void { this.camaraActiva.set(null); this.grabacion.set(null); }
+  cerrarGrabadora(): void {
+    this.camaraActiva.set(null);
+    this.grabacion.set(null);
+  }
 
   cargarGrabaciones(): void {
     const c = this.camaraActiva();
@@ -154,7 +189,10 @@ export class CamarasComponent implements OnInit {
     this.consultando.set(true);
     this.grabacion.set(null);
     this.monitoreo.grabacion(c.id, this.fecha(), this.hora()).subscribe({
-      next: (g) => { this.grabacion.set(g); this.consultando.set(false); },
+      next: (g) => {
+        this.grabacion.set(g);
+        this.consultando.set(false);
+      },
       error: (e: ErrorMonitoreo) => {
         const detalle = e.detalle ?? 'No se encontro la grabacion.';
         this.grabacion.set({ disponible: false, detalle });

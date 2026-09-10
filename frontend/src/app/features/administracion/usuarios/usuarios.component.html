@@ -1,3 +1,6 @@
+<!--
+  Usuarios (administracion). En edicion, contrasena vacia = no cambiarla.
+-->
 <app-panel-shell>
   <section class="contenedor pagina">
     <header class="cabecera">
@@ -6,7 +9,9 @@
         <p class="gris">Crea cuentas, asigna roles y desactiva accesos de tu empresa.</p>
       </div>
       @if (!formularioAbierto()) {
-        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">+ Nuevo usuario</button>
+        <button type="button" class="btn btn-primario" (click)="abrirCreacion()">
+          + Nuevo usuario
+        </button>
       }
     </header>
 
@@ -26,7 +31,13 @@
 
         <div class="campo">
           <label for="nombre">Nombre completo</label>
-          <input id="nombre" type="text" formControlName="nombre" placeholder="Ana Torres" autocomplete="name" />
+          <input
+            id="nombre"
+            type="text"
+            formControlName="nombre"
+            placeholder="Ana Torres"
+            autocomplete="name"
+          />
           @if (campoInvalido('nombre')) {
             <p class="mensaje-error" role="alert">Escribe el nombre (minimo 3 caracteres).</p>
           }
@@ -34,7 +45,13 @@
 
         <div class="campo">
           <label for="email">Correo electronico</label>
-          <input id="email" type="email" formControlName="email" placeholder="ana@empresa.co" autocomplete="email" />
+          <input
+            id="email"
+            type="email"
+            formControlName="email"
+            placeholder="ana@empresa.co"
+            autocomplete="email"
+          />
           @if (campoInvalido('email')) {
             <p class="mensaje-error" role="alert">Ingresa un correo valido.</p>
           }
@@ -51,9 +68,17 @@
           </div>
           <div class="campo">
             <label for="password">
-              Contrasena @if (editando()) {<span class="gris">(dejar vacio para no cambiar)</span>}
+              Contrasena
+              @if (editando()) {
+                <span class="gris">(dejar vacio para no cambiar)</span>
+              }
             </label>
-            <input id="password" type="password" formControlName="password" autocomplete="new-password" />
+            <input
+              id="password"
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+            />
             @if (campoInvalido('password')) {
               <p class="mensaje-error" role="alert">Minimo 8 caracteres.</p>
             }
@@ -65,9 +90,11 @@
         }
 
         <div class="acciones-form">
-          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">Cancelar</button>
+          <button type="button" class="btn btn-secundario" (click)="cerrarFormulario()">
+            Cancelar
+          </button>
           <button type="submit" class="btn btn-primario" [disabled]="guardando()">
-            {{ guardando() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Crear usuario') }}
+            {{ guardando() ? 'Guardando...' : editando() ? 'Guardar cambios' : 'Crear usuario' }}
           </button>
         </div>
       </form>
@@ -92,7 +119,9 @@
               <tr>
                 <td>{{ u.nombre || '(sin nombre)' }}</td>
                 <td>{{ u.email }}</td>
-                <td><span class="insignia">{{ u.rol }}</span></td>
+                <td>
+                  <span class="insignia">{{ u.rol }}</span>
+                </td>
                 <td>
                   <span class="insignia" [class.ok]="u.activo" [class.inactiva]="!u.activo">
                     {{ u.activo ? 'Activo' : 'Inactivo' }}
@@ -101,15 +130,21 @@
                 <td class="celda-acciones">
                   <button type="button" class="enlace" (click)="abrirEdicion(u)">Editar</button>
                   @if (u.email !== auth.usuario()?.email) {
-                    <button type="button" class="enlace" [class.peligro]="u.activo"
-                            (click)="alternarActivo(u)">
+                    <button
+                      type="button"
+                      class="enlace"
+                      [class.peligro]="u.activo"
+                      (click)="alternarActivo(u)"
+                    >
                       {{ u.activo ? 'Desactivar' : 'Reactivar' }}
                     </button>
                   }
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="5" class="centrado gris">Todavia no hay usuarios.</td></tr>
+              <tr>
+                <td colspan="5" class="centrado gris">Todavia no hay usuarios.</td>
+              </tr>
             }
           </tbody>
         </table>

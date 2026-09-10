@@ -1,3 +1,12 @@
+/**
+ * Modelos de monitoreo y camaras
+ *
+ * Que hace: describe camara, evento y estado del monitoreo.
+ * Donde se usa: MonitoreoService y /camaras.
+ * Por que asi: mantiene el nombre de campo de la API tal cual, igual que el
+ * resto de modelos del proyecto.
+ */
+
 /** Tipos de la fase 9: monitoreo de camaras y centro de notificaciones.
  * Exclusivo del ADMINISTRADOR. */
 

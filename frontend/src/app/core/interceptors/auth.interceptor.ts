@@ -1,3 +1,17 @@
+/**
+ * authInterceptor — pone el token en cada peticion y renueva la sesion sola
+ *
+ * Que hace: tres tareas en un solo sitio:
+ *   1. Anade la cabecera `Authorization: Bearer <token>` a toda peticion.
+ *   2. Si el backend responde 401 y habia sesion, pide un token nuevo con el
+ *      refresh y REINTENTA la peticion original; si el refresh tambien falla,
+ *      cierra sesion y manda a /login?expirada=1.
+ *   3. Si responde 403 con CAMBIO_PASSWORD_REQUERIDO, lleva a /cambiar-password.
+ * Donde se usa: se registra una sola vez en app.config.ts y aplica a todo.
+ * Por que asi: sin esto, cada servicio tendria que acordarse de poner el token
+ * y de manejar el vencimiento. Aqui esta escrito una vez y no se puede olvidar.
+ */
+
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
@@ -12,9 +26,10 @@ export const authInterceptor: HttpInterceptorFn = (peticion, siguiente) => {
   const esLogin = peticion.url.includes('/auth/login');
   const esRefresh = peticion.url.includes('/auth/refresh');
 
-  const conToken = token && !esRefresh
-    ? peticion.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
-    : peticion;
+  const conToken =
+    token && !esRefresh
+      ? peticion.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
+      : peticion;
 
   return siguiente(conToken).pipe(
     catchError((e: HttpErrorResponse) => {
@@ -37,9 +52,13 @@ export const authInterceptor: HttpInterceptorFn = (peticion, siguiente) => {
       // Fase Empleados: el middleware CambioPasswordMiddleware bloquea todo
       // con 403 salvo login/me/cambiar-password mientras haya password
       // pendiente; aqui solo redirige (esas 3 rutas nunca disparan esto).
-      const esRutaCambioPassword = peticion.url.includes('/auth/cambiar-password')
-        || peticion.url.includes('/auth/me');
-      if (e.status === 403 && e.error?.error === 'CAMBIO_PASSWORD_REQUERIDO' && !esRutaCambioPassword) {
+      const esRutaCambioPassword =
+        peticion.url.includes('/auth/cambiar-password') || peticion.url.includes('/auth/me');
+      if (
+        e.status === 403 &&
+        e.error?.error === 'CAMBIO_PASSWORD_REQUERIDO' &&
+        !esRutaCambioPassword
+      ) {
         router.navigate(['/cambiar-password']);
       }
       return throwError(() => e);

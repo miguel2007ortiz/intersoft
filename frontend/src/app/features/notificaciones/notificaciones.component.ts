@@ -1,3 +1,12 @@
+/**
+ * Notificaciones — avisos del sistema para el usuario
+ *
+ * Que hace: lista los avisos y permite marcarlos como leidos.
+ * Ruta: /monitoreo/notificaciones (authGuard + adminGuard).
+ * Por que asi: el contador que se ve en la topbar sale de aqui; al marcar leido
+ * se refresca para que el numero no se quede desfasado.
+ */
+
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MonitoreoService } from '../../core/services/monitoreo.service';
@@ -29,7 +38,8 @@ export class NotificacionesComponent implements OnInit {
     this.error.set(null);
     this.monitoreo.notificaciones().subscribe({
       next: (r) => this.notificaciones.set(r.resultados),
-      error: (e: ErrorMonitoreo) => this.error.set(e.detalle ?? 'Error al cargar las notificaciones.'),
+      error: (e: ErrorMonitoreo) =>
+        this.error.set(e.detalle ?? 'Error al cargar las notificaciones.'),
       complete: () => this.cargando.set(false),
     });
   }
@@ -45,7 +55,8 @@ export class NotificacionesComponent implements OnInit {
           );
         }
       },
-      error: (e: ErrorMonitoreo) => this.error.set(e.detalle ?? 'No se pudo marcar la notificacion.'),
+      error: (e: ErrorMonitoreo) =>
+        this.error.set(e.detalle ?? 'No se pudo marcar la notificacion.'),
     });
   }
 }

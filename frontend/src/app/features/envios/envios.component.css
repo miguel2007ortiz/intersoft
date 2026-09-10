@@ -31,7 +31,7 @@
   border-radius: 8px;
   font: inherit;
   font-size: 14px;
-  background: #fff;
+  background: var(--blanco);
   width: 100%;
 }
 .input:focus {
@@ -55,7 +55,7 @@
 }
 
 .envio-card {
-  background: #fff;
+  background: var(--blanco);
   border: 1px solid var(--linea);
   border-radius: 12px;
   padding: var(--e4);
@@ -151,7 +151,7 @@
 .btn-gestionar {
   padding: 7px 16px;
   border: 1px solid var(--linea);
-  background: #fff;
+  background: var(--blanco);
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
@@ -172,7 +172,7 @@
   z-index: 1000;
 }
 .modal {
-  background: #fff;
+  background: var(--blanco);
   border-radius: 14px;
   padding: var(--e6);
   width: min(480px, 90vw);
@@ -229,7 +229,7 @@
 .btn-transicion {
   padding: 7px 14px;
   border: 1px solid var(--linea);
-  background: #fff;
+  background: var(--blanco);
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
@@ -264,7 +264,7 @@
 .btn-cancelar {
   padding: 10px 20px;
   border: 1px solid var(--linea);
-  background: #fff;
+  background: var(--blanco);
   border-radius: 8px;
   cursor: pointer;
   font: inherit;

@@ -1,4 +1,7 @@
-.pagina { padding-top: var(--e6); padding-bottom: var(--e8); }
+.pagina {
+  padding-top: var(--e6);
+  padding-bottom: var(--e8);
+}
 
 .cabecera {
   display: flex;
@@ -7,19 +10,40 @@
   gap: var(--e4);
   margin-bottom: var(--e5);
 }
-h1 { margin: 0 0 var(--e1); font-size: clamp(24px, 4vw, 30px); }
-h2 { margin: 0 0 var(--e5); font-size: 20px; }
-.gris { color: var(--gris); font-size: 14.5px; }
-p.gris { margin: var(--e1) 0 0; }
+h1 {
+  margin: 0 0 var(--e1);
+  font-size: clamp(24px, 4vw, 30px);
+}
+h2 {
+  margin: 0 0 var(--e5);
+  font-size: 20px;
+}
+.gris {
+  color: var(--gris);
+  font-size: 14.5px;
+}
+p.gris {
+  margin: var(--e1) 0 0;
+}
 
-.formulario { max-width: 720px; margin-bottom: var(--e6); }
-.fila-doble, .fila-triple {
+.formulario {
+  max-width: 720px;
+  margin-bottom: var(--e6);
+}
+.fila-doble,
+.fila-triple {
   display: grid;
   gap: var(--e4);
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
-.fila-triple .campo-doble-ancho { grid-column: span 2; }
-.ayuda { color: var(--gris); font-size: 13px; margin: var(--e1) 0 0; }
+.fila-triple .campo-doble-ancho {
+  grid-column: span 2;
+}
+.ayuda {
+  color: var(--gris);
+  font-size: 13px;
+  margin: var(--e1) 0 0;
+}
 .acciones-form {
   display: flex;
   justify-content: flex-end;
@@ -27,7 +51,12 @@ p.gris { margin: var(--e1) 0 0; }
   margin-top: var(--e2);
 }
 
-.buscador { display: flex; gap: var(--e3); margin-bottom: var(--e4); flex-wrap: wrap; }
+.buscador {
+  display: flex;
+  gap: var(--e3);
+  margin-bottom: var(--e4);
+  flex-wrap: wrap;
+}
 .buscador input {
   width: 100%;
   max-width: 420px;
@@ -50,23 +79,48 @@ p.gris { margin: var(--e1) 0 0; }
 }
 
 .badge {
-  display: inline-block; padding: 3px 10px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
-.badge.activo { background: #ecfdf3; color: #067647; }
-.badge.inactivo { background: var(--papel); color: var(--gris); }
+.badge.activo {
+  background: #ecfdf3;
+  color: #067647;
+}
+.badge.inactivo {
+  background: var(--papel);
+  color: var(--gris);
+}
 
-.vacio-onboarding { padding: var(--e6) 0; }
-.vacio-onboarding p { margin-bottom: var(--e3); }
+.vacio-onboarding {
+  padding: var(--e6) 0;
+}
+.vacio-onboarding p {
+  margin-bottom: var(--e3);
+}
 
 .paginador {
-  display: flex; align-items: center; justify-content: center; gap: var(--e4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e4);
   padding: var(--e4);
 }
 
-.sin-relleno { padding: 0; overflow-x: auto; }
+.sin-relleno {
+  padding: 0;
+  overflow-x: auto;
+}
 
-.tabla { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
 .tabla th {
   text-align: left;
   background: var(--primario-suave);
@@ -82,10 +136,18 @@ p.gris { margin: var(--e1) 0 0; }
   border-top: 1px solid var(--linea);
   vertical-align: middle;
 }
-.tabla tbody tr:hover { background: var(--fila-hover); }
+.tabla tbody tr:hover {
+  background: var(--fila-hover);
+}
 
-.linea-dato { display: block; }
-.celda-acciones { display: flex; gap: var(--e3); white-space: nowrap; }
+.linea-dato {
+  display: block;
+}
+.celda-acciones {
+  display: flex;
+  gap: var(--e3);
+  white-space: nowrap;
+}
 
 .enlace {
   border: 0;
@@ -96,13 +158,27 @@ p.gris { margin: var(--e1) 0 0; }
   cursor: pointer;
   padding: 0;
 }
-.enlace:hover { text-decoration: underline; }
-.enlace.peligro { color: var(--error); }
+.enlace:hover {
+  text-decoration: underline;
+}
+.enlace.peligro {
+  color: var(--error);
+}
 
-.centrado { text-align: center; padding: var(--e5); }
+.centrado {
+  text-align: center;
+  padding: var(--e5);
+}
 
 @media (max-width: 720px) {
-  .cabecera { flex-direction: column; align-items: stretch; }
-  .tabla th:nth-child(4), .tabla td:nth-child(4),
-  .tabla th:nth-child(5), .tabla td:nth-child(5) { display: none; }
+  .cabecera {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tabla th:nth-child(4),
+  .tabla td:nth-child(4),
+  .tabla th:nth-child(5),
+  .tabla td:nth-child(5) {
+    display: none;
+  }
 }

@@ -4,8 +4,12 @@
     <h1>Checkout</h1>
   </header>
 
-  @if (cargando()) {
-    <div class="cargando">Procesando compra...</div>
+  @if (redirigiendo()) {
+    <div class="cargando" role="status" aria-live="polite">
+      Te estamos llevando a la pasarela de pago segura...
+    </div>
+  } @else if (cargando()) {
+    <div class="cargando" role="status" aria-live="polite">Procesando compra...</div>
   } @else if (exito()) {
     <div class="exito-box">
       <div class="exito-icono">✓</div>
@@ -104,7 +108,12 @@
         <button
           type="button"
           class="btn-pagar"
-          [disabled]="!datosComprador.numero_documento || guardandoComprador()"
+          [disabled]="
+            !datosComprador.numero_documento ||
+            !datosComprador.direccion ||
+            !datosComprador.ciudad ||
+            guardandoComprador()
+          "
           (click)="guardarDatosComprador()"
         >
           @if (guardandoComprador()) {

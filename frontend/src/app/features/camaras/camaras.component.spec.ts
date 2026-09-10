@@ -128,7 +128,10 @@ describe('CamarasComponent', () => {
     servicio.grabacionesCamera.mockReturnValue(
       of({
         resultados: [{ ...GRABACION, disponible: false, url: undefined }],
-        total: 1, pagina: 1, por_pagina: 50, total_paginas: 1,
+        total: 1,
+        pagina: 1,
+        por_pagina: 50,
+        total_paginas: 1,
       }),
     );
     const fixture = crear();
@@ -159,8 +162,12 @@ describe('CamarasComponent', () => {
     servicio.camaras.mockReturnValue(of({ resultados: [CAMARA] }));
     servicio.grabacionesCamera.mockReturnValue(of([])).mockReset();
     servicio.grabacionesCamera
-      .mockReturnValueOnce(of({ resultados: [GRABACION], total: 51, pagina: 1, por_pagina: 50, total_paginas: 2 }))
-      .mockReturnValueOnce(of({ resultados: [], total: 51, pagina: 2, por_pagina: 50, total_paginas: 2 }));
+      .mockReturnValueOnce(
+        of({ resultados: [GRABACION], total: 51, pagina: 1, por_pagina: 50, total_paginas: 2 }),
+      )
+      .mockReturnValueOnce(
+        of({ resultados: [], total: 51, pagina: 2, por_pagina: 50, total_paginas: 2 }),
+      );
     const fixture = crear();
     const comp = fixture.componentInstance;
     comp.seleccionar(CAMARA);

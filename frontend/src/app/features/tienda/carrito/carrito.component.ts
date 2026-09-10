@@ -1,3 +1,15 @@
+/**
+ * Carrito — revision de la compra antes de pagar
+ *
+ * Que hace: lista los items, cambia cantidades, quita productos, aplica cupon
+ * y muestra subtotal, descuento y total.
+ * Ruta: /carrito (authGuard).
+ * Por que asi: los totales los calcula y devuelve el backend en cada cambio;
+ * el frontend no suma por su cuenta para que el precio que ve el cliente sea
+ * exactamente el que se va a cobrar. Cambiar la cantidad manda solo la nueva
+ * cantidad: el producto ya lo sabe el item del carrito.
+ */
+
 import { DecimalPipe } from '@angular/common';
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';

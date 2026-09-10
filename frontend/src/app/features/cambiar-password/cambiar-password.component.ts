@@ -1,3 +1,15 @@
+/**
+ * Cambiar contrasena — obligatorio en el primer acceso
+ *
+ * Que hace: pide la contrasena actual y la nueva, con las mismas reglas del
+ * backend comprobadas mientras se escribe.
+ * Ruta: /cambiar-password (authGuard).
+ * Por que asi: aqui aterriza el usuario cuando el backend responde 403 con
+ * CAMBIO_PASSWORD_REQUERIDO (lo detecta authInterceptor). Es el caso del
+ * empleado recien creado por el administrador con una contrasena temporal:
+ * hasta cambiarla no puede usar el resto de la aplicacion.
+ */
+
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -58,18 +70,20 @@ export class CambiarPasswordComponent {
     this.cargando.set(true);
     this.error.set(null);
 
-    this.auth.cambiarPassword({
-      password_actual: this.passwordActual.value,
-      password_nueva: this.passwordNueva.value,
-    }).subscribe({
-      next: () => {
-        this.cargando.set(false);
-        this.router.navigate(['/dashboard']);
-      },
-      error: (e: ErrorAuth) => {
-        this.cargando.set(false);
-        this.error.set(e);
-      },
-    });
+    this.auth
+      .cambiarPassword({
+        password_actual: this.passwordActual.value,
+        password_nueva: this.passwordNueva.value,
+      })
+      .subscribe({
+        next: () => {
+          this.cargando.set(false);
+          this.router.navigate(['/dashboard']);
+        },
+        error: (e: ErrorAuth) => {
+          this.cargando.set(false);
+          this.error.set(e);
+        },
+      });
   }
 }

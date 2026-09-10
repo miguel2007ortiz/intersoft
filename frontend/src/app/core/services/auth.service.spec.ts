@@ -1,8 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -82,10 +79,9 @@ describe('AuthService', () => {
     const servicio = TestBed.inject(AuthService);
 
     const promesa = firstValueFrom(servicio.refrescarToken());
-    http.expectOne(`${api}/auth/refresh/`).error(
-      new ProgressEvent('error'),
-      { status: 401, statusText: 'Unauthorized' },
-    );
+    http
+      .expectOne(`${api}/auth/refresh/`)
+      .error(new ProgressEvent('error'), { status: 401, statusText: 'Unauthorized' });
 
     expect(await promesa).toBe(false);
   });

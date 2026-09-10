@@ -1,3 +1,15 @@
+/**
+ * Sidebar — menu lateral del panel
+ *
+ * Que hace: pinta los enlaces del menu segun quien esta dentro: las opciones de
+ * administracion solo salen para el administrador y las de operacion solo para
+ * el personal.
+ * Donde se usa: dentro de PanelShell.
+ * Por que asi: ocultar un enlace es comodidad, NO seguridad. Aunque el enlace
+ * no se vea, la ruta sigue protegida por su guard y el endpoint por el backend.
+ * Es el mismo criterio de los tres flujos aplicado a la vista.
+ */
+
 import { Component, OnDestroy, inject, input, output, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';

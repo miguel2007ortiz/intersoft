@@ -595,8 +595,17 @@ class ConcurrenciaCheckout(TransactionTestCase):
             h.start()
         for h in hilos:
             h.join()
-        # Uno gana (201); el otro con carrito vacio da CARRITO_VACIO (400).
-        self.assertEqual(sorted(resultados.values()), [201, 400])
+        # Uno gana (201). El otro es rechazado, pero con que codigo depende de
+        # donde lo pilla el lock del carrito: si el ganador aun esta cobrando,
+        # el intento sigue 'pendiente' (409 PAGO_EN_CURSO); si ya confirmo, o
+        # bien reutiliza el intento aprobado (200) o encuentra el carrito ya
+        # vacio (400). Fijar un unico codigo haria el test dependiente del
+        # timing; lo que debe cumplirse siempre es que solo se cobre una vez.
+        codigos = sorted(resultados.values())
+        self.assertEqual(len(codigos), 2)
+        self.assertIn(201, codigos)
+        perdedor = [c for c in codigos if c != 201][0]
+        self.assertIn(perdedor, (200, 400, 409))
         self.assertEqual(Venta.objects.filter(cliente=self.cliente).count(), 1)
 
 

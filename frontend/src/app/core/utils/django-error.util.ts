@@ -1,3 +1,14 @@
+/**
+ * capturarErrorDjango — un solo traductor de errores para toda la app
+ *
+ * Que hace: convierte la respuesta cruda de Django/DRF en un objeto con
+ * `codigo`, `detalle` y `errores` por campo, y distingue el caso sin conexion.
+ * Donde se usa: todos los servicios lo enchufan con `.pipe(capturarError())`.
+ * Por que asi: sustituyo siete implementaciones parecidas repartidas por los
+ * servicios. Con una sola, el mismo fallo se ve igual en todas las pantallas y
+ * se corrige en un unico sitio.
+ */
+
 import { HttpErrorResponse } from '@angular/common/http';
 import { OperatorFunction, catchError, throwError } from 'rxjs';
 
@@ -12,9 +23,7 @@ export interface ErrorDjango {
 
 /** Configuracion opcional por servicio: mensajes por codigo de estado y un
  * puente para que cada servicio anade sus campos extra al error final. */
-export interface TraduccionErrorDjango<
-  E extends ErrorDjango,
-> {
+export interface TraduccionErrorDjango<E extends ErrorDjango> {
   /** Mensaje por defecto segun el codigo de estado HTTP (0 = sin conexion). */
   mensajesPorStatus?: Record<number, string>;
   /** Permite a cada servicio enriquecer el error con campos propios
@@ -28,9 +37,7 @@ export interface TraduccionErrorDjango<
 export function capturarErrorDjango<T, E extends ErrorDjango = ErrorDjango>(
   config: TraduccionErrorDjango<E> = {},
 ): OperatorFunction<T, T> {
-  return catchError((e: HttpErrorResponse) =>
-    throwError(() => traducirDjango(e, config)),
-  );
+  return catchError((e: HttpErrorResponse) => throwError(() => traducirDjango(e, config)));
 }
 
 function traducirDjango<E extends ErrorDjango>(
@@ -40,18 +47,17 @@ function traducirDjango<E extends ErrorDjango>(
   const cuerpo = (e.error ?? {}) as Record<string, unknown>;
 
   if (e.status === 0) {
-    const base: ErrorDjango = { codigo: 'SIN_CONEXION', detalle: 'No hay conexion con el servidor.' };
-    return config.enriquecer
-      ? config.enriquecer(e, cuerpo, base)
-      : (base as E);
+    const base: ErrorDjango = {
+      codigo: 'SIN_CONEXION',
+      detalle: 'No hay conexion con el servidor.',
+    };
+    return config.enriquecer ? config.enriquecer(e, cuerpo, base) : (base as E);
   }
 
   const mensajeStatus = config.mensajesPorStatus?.[e.status];
   if (mensajeStatus) {
     const base: ErrorDjango = { detalle: mensajeStatus };
-    return config.enriquecer
-      ? config.enriquecer(e, cuerpo, base)
-      : (base as E);
+    return config.enriquecer ? config.enriquecer(e, cuerpo, base) : (base as E);
   }
 
   const base: ErrorDjango = {
@@ -59,9 +65,7 @@ function traducirDjango<E extends ErrorDjango>(
     detalle: extraerDetalle(cuerpo) ?? 'Ocurrio un error inesperado.',
     errores: (cuerpo['errores'] as ErrorDjango['errores']) ?? undefined,
   };
-  return config.enriquecer
-    ? config.enriquecer(e, cuerpo, base)
-    : (base as E);
+  return config.enriquecer ? config.enriquecer(e, cuerpo, base) : (base as E);
 }
 
 /** Si Django devuelve {errores: {campo: [msg,...]}}, muestra el primer
