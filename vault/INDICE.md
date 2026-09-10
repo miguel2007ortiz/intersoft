@@ -5,6 +5,7 @@ punto de entrada que **Claude (supervisor) y OpenCode (ejecutor) deben leer
 antes de iniciar una tarea** (ver la sección de consulta en `AGENTS.md`).
 
 ## Notas del vault
+- [ACTUALIDAD.md](ACTUALIDAD.md) — estado actual, pendientes y rama (leer primero al retomar).
 - [README.md](README.md) — qué es el vault y cómo se usa.
 - [decisiones.md](decisiones.md) — registro informal de decisiones y su contexto.
 - [auditoria-bugs-opencode.md](auditoria-bugs-opencode.md) — auditoría de bugs
