@@ -1,0 +1,121 @@
+<div class="carrito">
+  <header class="carrito-header">
+    <a routerLink="/catalogo" class="btn-volver">← Seguir comprando</a>
+    <h1>Mi Carrito</h1>
+  </header>
+
+  @if (cargando()) {
+    <div class="cargando">Cargando carrito...</div>
+  } @else if (error()) {
+    <div class="error-box">{{ error() }}</div>
+  } @else if (!carrito() || !carrito()!.items.length) {
+    <div class="vacio">
+      <p>Tu carrito esta vacio.</p>
+      <a routerLink="/catalogo" class="btn-seguir">Ver productos</a>
+    </div>
+  } @else {
+    <section class="items">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Precio</th>
+            <th>Cantidad</th>
+            <th>Subtotal</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of carrito()!.items; track item.id) {
+            <tr>
+              <td>
+                <strong>{{ item.producto_nombre }}</strong>
+              </td>
+              <td>{{ item.producto_precio | number }} COP</td>
+              <td>
+                <div class="cantidad-control">
+                  <button
+                    type="button"
+                    class="btn-cant"
+                    [disabled]="item.cantidad <= 1"
+                    (click)="cambiarCantidad(item, item.cantidad - 1)"
+                  >
+                    −
+                  </button>
+                  <span class="cant-valor">{{ item.cantidad }}</span>
+                  <button
+                    type="button"
+                    class="btn-cant"
+                    [disabled]="item.cantidad >= item.producto_stock"
+                    (click)="cambiarCantidad(item, item.cantidad + 1)"
+                  >
+                    +
+                  </button>
+                </div>
+                <span class="stock-label">Stock: {{ item.producto_stock }}</span>
+              </td>
+              <td class="subtotal">{{ item.subtotal | number }} COP</td>
+              <td>
+                <button type="button" class="btn-eliminar" (click)="eliminarItem(item)">✕</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+
+    <section class="cupon-seccion">
+      <label>Cupon de descuento</label>
+      @if (cuponAplicado()) {
+        <div class="cupon-activo">
+          <span>{{ cuponAplicado()!.codigo }} — {{ cuponAplicado()!.porcentaje }}% OFF</span>
+          <button type="button" class="btn-quitar-cupon" (click)="quitarCupon()">✕</button>
+        </div>
+      } @else {
+        <div class="cupon-input">
+          <input
+            type="text"
+            placeholder="Codigo del cupon"
+            [(ngModel)]="codigoCupon"
+            class="input"
+          />
+          <button
+            type="button"
+            class="btn-aplicar"
+            [disabled]="!codigoCupon || validandoCupon()"
+            (click)="aplicarCupon()"
+          >
+            @if (validandoCupon()) {
+              Validando...
+            } @else {
+              Aplicar
+            }
+          </button>
+        </div>
+        @if (errorCupon()) {
+          <span class="error-cupon">{{ errorCupon() }}</span>
+        }
+      }
+    </section>
+
+    <section class="resumen">
+      <div class="fila">
+        <span>Subtotal</span><span>{{ carrito()!.subtotal | number }} COP</span>
+      </div>
+      @if (Number(carrito()!.descuento) > 0) {
+        <div class="fila descuento">
+          <span>Descuento</span><span>-{{ carrito()!.descuento | number }} COP</span>
+        </div>
+      }
+      <div class="fila total">
+        <span>Total</span><span>{{ carrito()!.total | number }} COP</span>
+      </div>
+    </section>
+
+    <section class="acciones">
+      <button type="button" class="btn-checkout" (click)="irCheckout()">
+        Proceder al checkout
+      </button>
+    </section>
+  }
+</div>

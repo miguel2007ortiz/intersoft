@@ -1,0 +1,200 @@
+<app-panel-shell>
+  <div class="pos">
+    <header class="pos-header">
+      <h1>Punto de Venta</h1>
+      <a routerLink="/ventas" class="btn-link">Ver historial</a>
+    </header>
+
+    <!-- Seleccion de cliente -->
+    <section class="seccion">
+      <label>Cliente</label>
+      <div class="cliente-select">
+        <select [(ngModel)]="clienteSeleccionado" class="input">
+          <option value="">Seleccionar cliente...</option>
+          @for (c of clientes(); track c.id) {
+            @if (c.id === clienteGenericoId()) {
+              <option [value]="c.id">⚡ {{ c.nombre }} (venta rapida)</option>
+            } @else {
+              <option [value]="c.id">
+                {{ c.nombre }} ({{ c.tipo_documento }} {{ c.numero_documento }})
+              </option>
+            }
+          }
+        </select>
+        @if (errorClientes()) {
+          <span class="hint error"
+            >{{ errorClientes() }}
+            <button type="button" class="btn-reintentar" (click)="cargarClientes()">
+              Reintentar
+            </button>
+          </span>
+        } @else if (!clientes().length && !cargandoClientes()) {
+          <span class="hint">No hay clientes. <a routerLink="/clientes">Crear uno</a></span>
+        } @else {
+          <span class="hint"
+            >¿Compra a nombre de alguien? <a routerLink="/clientes">Registrar cliente</a></span
+          >
+        }
+      </div>
+    </section>
+
+    <!-- Agregar producto -->
+    <section class="seccion">
+      <label>Agregar producto</label>
+      <div class="producto-add">
+        <input
+          type="text"
+          placeholder="Buscar por nombre o SKU..."
+          [(ngModel)]="busquedaProducto"
+          (input)="buscarProductos()"
+          class="input flex-1"
+        />
+        @if (resultadosBusqueda().length) {
+          <div class="resultados-busqueda">
+            @for (p of resultadosBusqueda(); track p.id) {
+              <button type="button" class="resultado-item" (click)="agregarProducto(p)">
+                <span>{{ p.nombre }}</span>
+                <span class="precio">{{ p.precio | number }} — stock: {{ p.stock }}</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Lineas de venta -->
+    @if (lineas().length) {
+      <section class="seccion">
+        <table class="tabla-lineas">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Precio</th>
+              <th>Cantidad</th>
+              <th>Subtotal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lineas(); track l.producto) {
+              <tr>
+                <td>
+                  <strong>{{ l.nombre }}</strong>
+                  <span class="sku">{{ l.sku }}</span>
+                </td>
+                <td>{{ l.precio_unitario | number }}</td>
+                <td>
+                  <input
+                    type="number"
+                    [(ngModel)]="l.cantidad"
+                    min="1"
+                    [max]="l.stock_disponible"
+                    (ngModelChange)="recalcular()"
+                    class="input-cantidad"
+                  />
+                  <span class="stock-info">/{{ l.stock_disponible }}</span>
+                </td>
+                <td>{{ l.subtotal | number }}</td>
+                <td>
+                  <button type="button" class="btn-eliminar" (click)="eliminarLinea(l)">✕</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    }
+
+    <!-- Descuento y notas -->
+    <section class="seccion resumen">
+      <div class="descuento-notas">
+        <div>
+          <label>Descuento ($)</label>
+          <input
+            type="number"
+            [(ngModel)]="descuento"
+            min="0"
+            (ngModelChange)="recalcular()"
+            class="input input-descuento"
+          />
+        </div>
+        <div class="flex-1">
+          <label>Notas</label>
+          <textarea [(ngModel)]="notas" placeholder="Opcional..." class="input" rows="2"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Totales -->
+    <section class="seccion totales">
+      <div class="totales-fila">
+        <span>Subtotal</span><span>{{ subtotal() | number }}</span>
+      </div>
+      @if (descuento > 0) {
+        <div class="totales-fila descuento">
+          <span>Descuento</span><span>-{{ descuento | number }}</span>
+        </div>
+      }
+      <div class="totales-fila total">
+        <span>Total</span><span>{{ total() | number }}</span>
+      </div>
+    </section>
+
+    <!-- Metodo de pago -->
+    <section class="seccion">
+      <label>Metodo de pago</label>
+      <div class="metodos-pago">
+        @for (m of metodosPago; track m.valor) {
+          <button
+            type="button"
+            [class.activo]="metodoPago() === m.valor"
+            (click)="metodoPago.set(m.valor)"
+            class="btn-metodo"
+          >
+            {{ m.etiqueta }}
+          </button>
+        }
+      </div>
+    </section>
+
+    <!-- Errores -->
+    @if (error()) {
+      <div class="error-box">{{ error() }}</div>
+    }
+    @if (erroresStock().length) {
+      <div class="error-box">
+        <strong>Stock insuficiente:</strong>
+        @for (e of erroresStock(); track e.producto) {
+          <div>
+            {{ e.producto_nombre }}: solicita {{ e.solicitado }}, disponible {{ e.disponible }}
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Boton confirmar -->
+    <section class="seccion acciones">
+      <button
+        type="button"
+        class="btn-confirmar"
+        [disabled]="!puedeConfirmar() || cargando()"
+        (click)="confirmarVenta()"
+      >
+        @if (cargando()) {
+          Procesando...
+        } @else {
+          Confirmar venta
+        }
+      </button>
+    </section>
+
+    <!-- Exito -->
+    @if (ventaCreada()) {
+      <div class="exito-box">
+        <strong>Venta registrada!</strong>
+        Factura: {{ ventaCreada()!.numero_factura }} — Total: {{ ventaCreada()!.total | number }}
+        <button type="button" class="btn-nueva" (click)="nuevaVenta()">Nueva venta</button>
+      </div>
+    }
+  </div>
+</app-panel-shell>

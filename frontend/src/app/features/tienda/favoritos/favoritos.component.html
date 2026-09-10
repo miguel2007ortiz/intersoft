@@ -1,0 +1,117 @@
+<div class="favoritos">
+  <header class="barra aparecer">
+    <div class="contenedor barra-int">
+      <a routerLink="/" class="logo"
+        >Inter<span>Soft</span> <em class="logo-market">Marketplace</em></a
+      >
+      <nav class="acciones">
+        <a routerLink="/catalogo" class="btn btn-secundario">Volver al catalogo</a>
+        <a routerLink="/carrito" class="btn btn-primario">Ir al carrito</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="area aparecer">
+    <div class="encabezado">
+      <h1>Mis favoritos</h1>
+      <p class="sub">Los productos que guardaste para comprar despues.</p>
+    </div>
+
+    @if (cargando()) {
+      <section class="grid">
+        @for (_ of esqueletos; track $index) {
+          <div class="card card-esqueleto">
+            <div class="skeleton skeleton-img"></div>
+            <div class="skeleton skeleton-linea"></div>
+            <div class="skeleton skeleton-linea corta"></div>
+          </div>
+        }
+      </section>
+    } @else if (error()) {
+      <div class="error-box">{{ error() }}</div>
+    } @else if (productos().length === 0) {
+      <div class="vacio">
+        <p class="vacio-icono">♥</p>
+        <p>Aun no tienes productos favoritos.</p>
+        <a routerLink="/catalogo" class="btn btn-primario">Explorar catalogo</a>
+      </div>
+    } @else {
+      <section class="grid">
+        @for (p of productos(); track p.id; let i = $index) {
+          <div
+            class="card tarjeta aparecer"
+            [style.--retraso.ms]="(i % 12) * 60"
+            (click)="agregarAlCarrito(p)"
+            title="Click para agregar al carrito"
+          >
+            <div class="card-img">
+              @if (p.imagen && !imagenesFallidas().has(p.id)) {
+                <img
+                  [src]="p.imagen"
+                  [alt]="p.nombre"
+                  loading="lazy"
+                  (error)="marcarImagenFallida(p.id)"
+                />
+              } @else {
+                <div class="placeholder-img">{{ p.nombre.charAt(0) }}</div>
+              }
+              <button
+                type="button"
+                class="btn-corazon corazon-activo"
+                (click)="$event.stopPropagation(); quitar(p)"
+                aria-label="Quitar de favoritos"
+                title="Quitar de favoritos"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  aria-hidden="true"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div class="card-body">
+              <span class="card-categoria">{{ p.categoria_nombre || 'Sin categoria' }}</span>
+              <h3 class="card-nombre">{{ p.nombre }}</h3>
+              <p class="card-vendedor">Vendido por {{ p.empresa_nombre }}</p>
+              <div class="card-footer">
+                <span class="card-precio">{{ p.precio | number }} COP</span>
+                @if (p.stock > 0) {
+                  <button
+                    type="button"
+                    class="btn-agregar"
+                    [class.btn-agregar-ok]="agregadoId() === p.id"
+                    [disabled]="agregandoId() === p.id"
+                    (click)="$event.stopPropagation(); agregarAlCarrito(p)"
+                  >
+                    @if (agregandoId() === p.id) {
+                      Agregando...
+                    } @else if (agregadoId() === p.id) {
+                      ¡Añadido!
+                    } @else {
+                      Carrito
+                    }
+                  </button>
+                } @else {
+                  <span class="sin-stock">Sin stock</span>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </section>
+    }
+  </main>
+
+  @if (exito()) {
+    <div class="exito-toast">{{ exito() }}</div>
+  }
+</div>

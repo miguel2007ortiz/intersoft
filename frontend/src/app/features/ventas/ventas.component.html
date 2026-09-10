@@ -1,0 +1,149 @@
+<app-panel-shell>
+  <div class="ventas">
+    <header class="ventas-header">
+      <h1>Historial de Ventas</h1>
+      <a routerLink="/pos" class="btn-primary">Nueva venta (POS)</a>
+    </header>
+
+    <!-- Filtros -->
+    <section class="filtros">
+      <input
+        type="text"
+        placeholder="Buscar por factura o cliente..."
+        [(ngModel)]="busqueda"
+        (input)="buscarDebounced()"
+        class="input"
+      />
+      <select
+        [(ngModel)]="filtroEstado"
+        (ngModelChange)="cargarVentas()"
+        class="input input-estado"
+      >
+        <option value="">Todos los estados</option>
+        <option value="completada">Completadas</option>
+        <option value="anulada">Anuladas</option>
+      </select>
+    </section>
+
+    <!-- Estadisticas -->
+    @if (estadisticas()) {
+      <section class="stats">
+        <div class="stat">
+          <span class="stat-label">Total ventas</span>
+          <span class="stat-valor">{{ estadisticas()!.total_registros }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Monto total</span>
+          <span class="stat-valor">{{ estadisticas()!.total_ventas | number }}</span>
+        </div>
+      </section>
+    }
+
+    <!-- Lista -->
+    @if (cargando()) {
+      <p class="cargando">Cargando ventas...</p>
+    } @else if (error()) {
+      <app-estado-vacio
+        tipo="error"
+        [titulo]="'No pudimos cargar las ventas'"
+        [mensaje]="error()"
+        accionTexto="Reintentar"
+        (accion)="cargarVentas()"
+      ></app-estado-vacio>
+    } @else if (!ventas().length) {
+      @if (busqueda || filtroEstado) {
+        <app-estado-vacio
+          tipo="busqueda"
+          titulo="Sin resultados"
+          mensaje="No se encontraron ventas para esa busqueda o filtro."
+        ></app-estado-vacio>
+      } @else {
+        <app-estado-vacio
+          tipo="vacio"
+          titulo="Aun no hay ventas"
+          mensaje="Inicia una venta desde el punto de venta y aparecera aqui."
+        ></app-estado-vacio>
+      }
+    } @else {
+      <div class="tabla-wrap">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Factura</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (v of ventas(); track v.id) {
+              <tr>
+                <td class="factura">{{ v.numero_factura }}</td>
+                <td>{{ v.fecha | date: 'dd/MM/yy HH:mm' }}</td>
+                <td>{{ v.cliente_nombre }}</td>
+                <td>{{ v.total_items }}</td>
+                <td class="total">{{ v.total | number }}</td>
+                <td>
+                  <span class="badge" [class]="v.estado">{{ v.estado }}</span>
+                </td>
+                <td>
+                  @if (v.estado === 'completada') {
+                    <button type="button" class="btn-anular" (click)="iniciarAnulacion(v)">
+                      Anular
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- Modal de anulacion -->
+    @if (ventaAnulando()) {
+      <div class="modal-overlay" (click)="cancelarAnulacion()">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <h2>Anular venta</h2>
+          <p>
+            Factura: <strong>{{ ventaAnulando()!.numero_factura }}</strong>
+          </p>
+          <p>
+            Cliente: {{ ventaAnulando()!.cliente_nombre }} — Total:
+            {{ ventaAnulando()!.total | number }}
+          </p>
+          <label>Motivo de anulacion</label>
+          <textarea
+            [(ngModel)]="motivoAnulacion"
+            class="input"
+            rows="3"
+            placeholder="Describe el motivo..."
+          ></textarea>
+          @if (errorAnulacion()) {
+            <div class="error-box">{{ errorAnulacion() }}</div>
+          }
+          <div class="modal-acciones">
+            <button type="button" class="btn-cancelar" (click)="cancelarAnulacion()">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="btn-confirmar-anular"
+              [disabled]="!motivoAnulacion || motivoAnulacion.length < 3 || cargandoAnulacion()"
+              (click)="confirmarAnulacion()"
+            >
+              @if (cargandoAnulacion()) {
+                Anulando...
+              } @else {
+                Anular venta
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+</app-panel-shell>

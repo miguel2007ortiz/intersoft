@@ -1,16 +1,16 @@
 import { Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
+import {
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  NavigationStart,
+  Router,
+} from '@angular/router';
 
 @Component({
   selector: 'app-nav-progress',
-  template: `
-    @if (visible()) {
-      <div class="barra-progreso-contenedor" [class.completa]="completa()">
-        <div class="barra-progreso"></div>
-      </div>
-    }
-  `,
+  templateUrl: './nav-progress.component.html',
   styleUrl: './nav-progress.component.css',
 })
 export class NavProgressComponent {

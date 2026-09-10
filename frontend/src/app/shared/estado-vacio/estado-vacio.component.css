@@ -1,0 +1,53 @@
+:host {
+  display: block;
+}
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--e6) var(--e4);
+  gap: var(--e2);
+  color: var(--gris);
+}
+.estado.error {
+  color: #b42318;
+}
+.estado.error .mensaje {
+  color: #b42318;
+}
+.icono {
+  opacity: 0.55;
+  margin-bottom: var(--e1);
+}
+.titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: inherit;
+}
+.mensaje {
+  margin: 0;
+  font-size: 14px;
+  max-width: 46ch;
+}
+.accion {
+  margin-top: var(--e2);
+  padding: 8px 18px;
+  border: 1px solid var(--linea);
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto);
+}
+.error .accion {
+  color: #b42318;
+}
+.accion:hover {
+  border-color: var(--primario);
+  color: var(--primario);
+}

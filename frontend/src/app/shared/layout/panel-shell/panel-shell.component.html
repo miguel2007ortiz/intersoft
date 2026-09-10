@@ -1,0 +1,14 @@
+<div class="envoltorio" appBrilloCursor>
+  <app-topbar [menuAbierto]="menuMovilAbierto()" (alternarMenu)="alternarMenuMovil()" />
+
+  <div class="cuerpo">
+    <app-sidebar [abierto]="menuMovilAbierto()" (cerrar)="cerrarMenuMovil()" />
+
+    <main class="contenido">
+      <ng-content select="[panelHeader]" />
+      <ng-content />
+    </main>
+  </div>
+
+  <app-site-footer />
+</div>

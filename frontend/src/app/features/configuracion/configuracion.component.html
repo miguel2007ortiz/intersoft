@@ -1,0 +1,59 @@
+<app-panel-shell>
+  <section class="contenedor seccion">
+    <div class="tarjeta">
+      <h1>Configuracion</h1>
+      <p class="descripcion">Informacion de tu cuenta y de la empresa.</p>
+      <dl>
+        <div class="fila">
+          <dt>Nombre</dt>
+          <dd>{{ auth.usuario()?.nombre }}</dd>
+        </div>
+        <div class="fila">
+          <dt>Correo</dt>
+          <dd>{{ auth.usuario()?.email }}</dd>
+        </div>
+        <div class="fila">
+          <dt>Rol</dt>
+          <dd>{{ auth.usuario()?.rol }}</dd>
+        </div>
+        <div class="fila">
+          <dt>Empresa</dt>
+          <dd>{{ auth.usuario()?.empresa }}</dd>
+        </div>
+      </dl>
+
+      <h2>Apariencia</h2>
+      <div class="fila apariencia">
+        <div>
+          <dt>Modo noche</dt>
+          <p class="ayuda">Cambia entre tema claro y oscuro. Se guarda en este navegador.</p>
+        </div>
+        <button
+          type="button"
+          class="interruptor"
+          role="switch"
+          [attr.aria-checked]="tema.tema() === 'noche'"
+          [attr.aria-label]="'Modo noche'"
+          [class.activo]="tema.tema() === 'noche'"
+          (click)="tema.alternar()"
+        >
+          <span class="perilla"></span>
+        </button>
+      </div>
+      @if (auth.usuario()?.empresa === null || auth.usuario()?.empresa === undefined) {
+        <h2>Empresa</h2>
+        <div class="fila empresas">
+          <div>
+            <dt>¿Tienes un negocio?</dt>
+            <p class="ayuda">
+              Registra tu empresa y administra producto, inventario, ventas y mas desde el panel.
+            </p>
+          </div>
+          <a routerLink="/registro" class="btn-negocio">Crear negocio</a>
+        </div>
+      }
+
+      <p class="nota">Mas opciones de configuracion disponibles proximamente.</p>
+    </div>
+  </section>
+</app-panel-shell>

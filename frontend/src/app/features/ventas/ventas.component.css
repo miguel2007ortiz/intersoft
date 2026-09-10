@@ -1,0 +1,209 @@
+.ventas {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--e5) var(--e4);
+}
+.ventas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--e3);
+  flex-wrap: wrap;
+  margin-bottom: var(--e5);
+}
+.ventas-header h1 {
+  margin: 0;
+  font-size: clamp(22px, 4vw, 28px);
+}
+.btn-primary {
+  padding: 10px 20px;
+  background: var(--primario);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e3);
+  margin-bottom: var(--e4);
+}
+.input {
+  padding: 10px 14px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  background: #fff;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--primario);
+}
+.input-estado {
+  flex: 0 1 200px;
+  min-width: 0;
+}
+
+.stats {
+  display: flex;
+  gap: var(--e4);
+  margin-bottom: var(--e5);
+}
+.stat {
+  background: var(--primario-suave);
+  padding: 12px 20px;
+  border-radius: 8px;
+}
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: var(--gris);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.stat-valor {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.cargando {
+  color: var(--gris);
+  text-align: center;
+  padding: var(--e6);
+}
+
+.tabla-wrap {
+  overflow-x: auto;
+}
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.tabla th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--linea);
+  font-weight: 600;
+}
+.tabla td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--linea);
+}
+.factura {
+  font-family: monospace;
+  font-weight: 600;
+}
+.total {
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge.completada {
+  background: #ecfdf3;
+  color: #067647;
+}
+.badge.anulada {
+  background: #fef3f2;
+  color: #b42318;
+}
+.badge.pendiente {
+  background: #fef9ec;
+  color: #b54708;
+}
+
+.btn-anular {
+  padding: 5px 12px;
+  border: 1px solid #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.btn-anular:hover {
+  background: #fecdca;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: var(--e6);
+  width: min(480px, 90vw);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+}
+.modal h2 {
+  margin: 0 0 var(--e3);
+}
+.modal label {
+  display: block;
+  margin-top: var(--e3);
+  margin-bottom: var(--e2);
+  font-weight: 600;
+  font-size: 14px;
+}
+.modal .input {
+  width: 100%;
+  resize: vertical;
+}
+.error-box {
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: var(--e3);
+  color: #b42318;
+  font-size: 13px;
+}
+.modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e3);
+  margin-top: var(--e4);
+}
+.btn-cancelar {
+  padding: 10px 20px;
+  border: 1px solid var(--linea);
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn-confirmar-anular {
+  padding: 10px 20px;
+  border: 0;
+  background: #b42318;
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+.btn-confirmar-anular:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

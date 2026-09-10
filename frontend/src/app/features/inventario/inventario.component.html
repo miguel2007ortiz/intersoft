@@ -1,0 +1,183 @@
+<app-panel-shell>
+  <div class="inventario">
+    <header class="inv-header">
+      <h1>Inventario</h1>
+      <button type="button" class="btn-primary" (click)="mostrarAjuste.set(!mostrarAjuste())">
+        @if (mostrarAjuste()) {
+          Ver productos
+        } @else {
+          Ajustar stock
+        }
+      </button>
+    </header>
+
+    @if (mostrarAjuste()) {
+      <!-- Formulario de ajuste manual -->
+      <section class="seccion ajuste-form">
+        <h2>Ajuste manual de inventario</h2>
+        <div class="form-grid">
+          <div>
+            <label>Producto</label>
+            <select [(ngModel)]="ajusteProducto" class="input">
+              <option value="">Seleccionar...</option>
+              @for (p of productos(); track p.id) {
+                <option [value]="p.id">{{ p.nombre }} ({{ p.sku }}) — stock: {{ p.stock }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label>Tipo</label>
+            <select [(ngModel)]="ajusteTipo" class="input">
+              <option value="entrada">Entrada (+)</option>
+              <option value="salida">Salida (-)</option>
+            </select>
+          </div>
+          <div>
+            <label>Cantidad</label>
+            <input type="number" [(ngModel)]="ajusteCantidad" min="1" class="input" />
+          </div>
+          <div class="full">
+            <label>Motivo</label>
+            <input
+              type="text"
+              [(ngModel)]="ajusteMotivo"
+              placeholder="Ej: Conteo fisico, reposicion, merma..."
+              class="input"
+            />
+          </div>
+        </div>
+        @if (errorAjuste()) {
+          <div class="error-box">{{ errorAjuste() }}</div>
+        }
+        @if (exitoAjuste()) {
+          <div class="exito-box">{{ exitoAjuste() }}</div>
+        }
+        <button
+          type="button"
+          class="btn-confirmar"
+          (click)="aplicarAjuste()"
+          [disabled]="!ajusteProducto || !ajusteCantidad || !ajusteMotivo || cargandoAjuste()"
+        >
+          @if (cargandoAjuste()) {
+            Aplicando...
+          } @else {
+            Aplicar ajuste
+          }
+        </button>
+      </section>
+    } @else {
+      <!-- Lista de productos -->
+      <section class="filtros">
+        <input
+          type="text"
+          aria-label="Buscar producto"
+          placeholder="Buscar producto..."
+          [(ngModel)]="busquedaProducto"
+          (input)="buscarProductosDebounced()"
+          class="input"
+        />
+        <label class="filtro-stock">
+          <input
+            type="checkbox"
+            [(ngModel)]="filtroStockBajo"
+            (ngModelChange)="cargarProductos()"
+          />
+          Solo stock bajo
+        </label>
+      </section>
+
+      @if (cargando()) {
+        <p class="cargando">Cargando inventario...</p>
+      } @else if (error()) {
+        <div class="estado-error" role="alert">
+          <p>{{ error() }}</p>
+          <button type="button" class="btn-reintentar" (click)="cargarProductos()">
+            Reintentar
+          </button>
+        </div>
+      } @else if (!productos().length) {
+        <p class="vacio">No hay productos en inventario.</p>
+      } @else {
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>SKU</th>
+                <th>Categoria</th>
+                <th>Precio</th>
+                <th>Stock</th>
+                <th>Minimo</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (p of productos(); track p.id) {
+                <tr [class.stock-bajo]="p.stock_bajo">
+                  <td>{{ p.nombre }}</td>
+                  <td class="sku">{{ p.sku }}</td>
+                  <td>{{ p.categoria || '—' }}</td>
+                  <td>{{ p.precio | number }}</td>
+                  <td class="stock">{{ p.stock }}</td>
+                  <td>{{ p.stock_minimo }}</td>
+                  <td>
+                    @if (p.stock_bajo) {
+                      <span class="badge alerta">Stock bajo</span>
+                    } @else {
+                      <span class="badge ok">OK</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <!-- Historial de movimientos -->
+      @if (errorMovimientos()) {
+        <div class="estado-error" role="alert">
+          <p>{{ errorMovimientos() }}</p>
+          <button type="button" class="btn-reintentar" (click)="cargarMovimientos()">
+            Reintentar
+          </button>
+        </div>
+      } @else if (movimientos().length) {
+        <section class="seccion">
+          <h2>Ultimos movimientos</h2>
+          <div class="tabla-wrap">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Tipo</th>
+                  <th>Cantidad</th>
+                  <th>Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (m of movimientos(); track m.id) {
+                  <tr>
+                    <td>{{ m.created_at | date: 'dd/MM/yy HH:mm' }}</td>
+                    <td>{{ m.producto_nombre }}</td>
+                    <td>
+                      <span class="badge-tipo" [class]="m.tipo">{{ m.tipo }}</span>
+                    </td>
+                    <td>{{ m.tipo === 'salida' ? '-' : '+' }}{{ m.cantidad }}</td>
+                    <td>{{ m.motivo }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      } @else {
+        <section class="seccion">
+          <h2>Ultimos movimientos</h2>
+          <p class="vacio">No hay movimientos registrados.</p>
+        </section>
+      }
+    }
+  </div>
+</app-panel-shell>

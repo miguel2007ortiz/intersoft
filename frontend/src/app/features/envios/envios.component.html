@@ -1,0 +1,169 @@
+<app-panel-shell>
+  <div class="envios">
+    <header class="envios-header">
+      <h1>Envios</h1>
+      <span class="contador">{{ envios().length }} en esta lista</span>
+    </header>
+
+    <section class="filtros">
+      <select
+        [(ngModel)]="filtroEstado"
+        (ngModelChange)="cargarEnvios()"
+        class="input input-estado"
+        aria-label="Filtrar por estado"
+      >
+        <option value="">Todos los estados</option>
+        @for (e of ENVIO_ESTADOS; track e.valor) {
+          <option [value]="e.valor">{{ e.etiqueta }}</option>
+        }
+      </select>
+    </section>
+
+    @if (cargando()) {
+      <p class="cargando">Cargando envios...</p>
+    } @else if (error()) {
+      <app-estado-vacio
+        tipo="error"
+        titulo="No pudimos cargar los envios"
+        [mensaje]="error()"
+        accionTexto="Reintentar"
+        (accion)="cargarEnvios()"
+      ></app-estado-vacio>
+    } @else if (!envios().length) {
+      @if (filtroEstado) {
+        <app-estado-vacio
+          tipo="busqueda"
+          titulo="Sin envios en ese estado"
+          mensaje="Prueba con otro estado o limpia el filtro."
+        ></app-estado-vacio>
+      } @else {
+        <app-estado-vacio
+          tipo="vacio"
+          titulo="No hay envios"
+          mensaje="Las ventas del marketplace con direccion de entrega apareceran aqui."
+        ></app-estado-vacio>
+      }
+    } @else {
+      <div class="lista">
+        @for (env of envios(); track env.id) {
+          <article class="envio-card aparecer">
+            <header class="envio-cabecera">
+              <div>
+                <strong class="factura">{{ env.numero_factura }}</strong>
+                <span class="cliente">{{ env.cliente_nombre }}</span>
+              </div>
+              <span class="badge" [class]="'estado-' + env.estado">{{ env.estado_display }}</span>
+            </header>
+
+            <div class="envio-datos">
+              <p class="direccion">
+                {{ env.direccion }}, {{ env.ciudad
+                }}{{ env.departamento ? ', ' + env.departamento : '' }}
+              </p>
+              <p class="guia">
+                @if (env.transportadora || env.numero_guia) {
+                  <span>{{ env.transportadora || 'Sin transportadora' }}</span>
+                  <span>Guia: {{ env.numero_guia || '—' }}</span>
+                } @else {
+                  <span>Transportadora y guia por asignar</span>
+                }
+              </p>
+              @if (env.fecha_entrega_estimada) {
+                <p class="entrega">
+                  Entrega estimada: {{ env.fecha_entrega_estimada | date: 'd MMM y' }}
+                </p>
+              }
+            </div>
+
+            <footer class="envio-pie">
+              <button type="button" class="btn-gestionar" (click)="gestionar(env)">
+                Gestionar envio
+              </button>
+            </footer>
+          </article>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Modal de gestion -->
+  @if (envioEditando(); as env) {
+    <div class="modal-overlay" (click)="cancelar()">
+      <div class="modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+        <h2>Gestionar envio</h2>
+        <p class="modal-factura">
+          <strong>{{ env.numero_factura }}</strong> — {{ env.cliente_nombre }}
+        </p>
+
+        <div class="modal-estado">
+          <span class="badge" [class]="'estado-' + env.estado">{{ env.estado_display }}</span>
+        </div>
+
+        @if (estadosSiguientes().length) {
+          <fieldset class="modal-transiciones">
+            <legend>Avanzar estado</legend>
+            <div class="transiciones">
+              @for (siguiente of estadosSiguientes(); track siguiente) {
+                <button
+                  type="button"
+                  class="btn-transicion"
+                  [class.seleccionado]="nuevoEstado() === siguiente"
+                  (click)="elegirEstado(siguiente)"
+                >
+                  {{ etiquetaEstado(siguiente) }}
+                </button>
+              }
+            </div>
+          </fieldset>
+        } @else {
+          <p class="estado-terminal">Este envio esta en un estado final.</p>
+        }
+
+        <label for="transportadora">Transportadora</label>
+        <input
+          id="transportadora"
+          type="text"
+          [(ngModel)]="transportadora"
+          class="input"
+          placeholder="Ej: Servientrega"
+        />
+
+        <label for="numero-guia">Numero de guia</label>
+        <input
+          id="numero-guia"
+          type="text"
+          [(ngModel)]="numeroGuia"
+          class="input"
+          placeholder="Ej: SV-123456"
+        />
+
+        <label for="fecha-estimada">Fecha estimada de entrega</label>
+        <input id="fecha-estimada" type="date" [(ngModel)]="fechaEstimada" class="input" />
+
+        <label for="notas-envio">Notas internas</label>
+        <textarea
+          id="notas-envio"
+          [(ngModel)]="notas"
+          class="input notas"
+          rows="3"
+          placeholder="Observaciones solo para el equipo de la empresa..."
+        ></textarea>
+
+        @if (errorGuardado()) {
+          <div class="error-box" role="alert">{{ errorGuardado() }}</div>
+        }
+
+        <div class="modal-acciones">
+          <button type="button" class="btn-cancelar" (click)="cancelar()">Cancelar</button>
+          <button type="button" class="btn-guardar" [disabled]="guardando()" (click)="guardar()">
+            @if (guardando()) {
+              Guardando...
+            } @else {
+              Guardar cambios
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</app-panel-shell>

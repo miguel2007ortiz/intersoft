@@ -1,0 +1,69 @@
+<app-panel-shell>
+  <div class="alertas">
+    <header class="alertas-header">
+      <h1>Alertas de Stock</h1>
+      <span class="contador">{{ alertas().length }} activas</span>
+    </header>
+
+    @if (cargando()) {
+      <p class="cargando">Cargando alertas...</p>
+    } @else if (error()) {
+      <div class="estado-error" role="alert">
+        <p>{{ error() }}</p>
+        <button type="button" class="btn-reintentar" (click)="cargarAlertas()">Reintentar</button>
+      </div>
+    } @else if (!alertas().length) {
+      <div class="vacio">
+        <svg
+          viewBox="0 0 24 24"
+          width="48"
+          height="48"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" />
+          <path
+            d="M18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"
+          />
+        </svg>
+        <p>No hay alertas pendientes.</p>
+      </div>
+    } @else {
+      <div class="lista-alertas">
+        @for (a of alertas(); track a.id) {
+          <div class="alerta-card">
+            <div class="alerta-icono">
+              <svg
+                viewBox="0 0 24 24"
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" />
+                <path
+                  d="M18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"
+                />
+              </svg>
+            </div>
+            <div class="alerta-info">
+              <p class="alerta-mensaje">{{ a.mensaje }}</p>
+              <span class="alerta-fecha">{{ a.created_at | date: 'dd/MM/yy HH:mm' }}</span>
+            </div>
+            <div class="alerta-acciones">
+              <button type="button" class="btn-revisar" (click)="marcarRevisada(a)">
+                Marcar resuelta
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</app-panel-shell>

@@ -1,0 +1,125 @@
+.alertas {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--e5) var(--e4);
+}
+.alertas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--e5);
+}
+.alertas-header h1 {
+  margin: 0;
+  font-size: clamp(22px, 4vw, 28px);
+}
+.contador {
+  background: #fef3f2;
+  color: #b42318;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cargando {
+  color: var(--gris);
+  text-align: center;
+  padding: var(--e6);
+}
+
+.estado-error {
+  text-align: center;
+  padding: var(--e6) var(--e4);
+  color: #b42318;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e3);
+}
+.estado-error p {
+  margin: 0;
+}
+.btn-reintentar {
+  padding: 8px 18px;
+  border: 1px solid var(--linea);
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn-reintentar:hover {
+  border-color: var(--primario);
+  color: var(--primario);
+}
+
+.vacio {
+  text-align: center;
+  padding: var(--e8) var(--e4);
+  color: var(--gris);
+}
+.vacio svg {
+  margin-bottom: var(--e3);
+  opacity: 0.4;
+}
+.vacio p {
+  margin: 0;
+  font-size: 16px;
+}
+
+.lista-alertas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+
+.alerta-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e4);
+  background: #fff;
+  border: 1px solid #fecdca;
+  border-left: 4px solid #f97316;
+  border-radius: 10px;
+  padding: var(--e4);
+  transition: box-shadow 0.15s;
+}
+.alerta-card:hover {
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1);
+}
+
+.alerta-icono {
+  color: #f97316;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.alerta-info {
+  flex: 1;
+}
+.alerta-mensaje {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.alerta-fecha {
+  font-size: 12px;
+  color: var(--gris);
+}
+
+.btn-revisar {
+  padding: 6px 14px;
+  border: 1px solid #d1fadf;
+  background: #ecfdf3;
+  color: #067647;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-revisar:hover {
+  background: #d1fadf;
+}

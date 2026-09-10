@@ -1,0 +1,285 @@
+.envios {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--e5) var(--e4);
+}
+.envios-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--e5);
+}
+.envios-header h1 {
+  margin: 0;
+  font-size: clamp(22px, 4vw, 28px);
+}
+.contador {
+  background: var(--primario-suave);
+  color: var(--primario);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.filtros {
+  margin-bottom: var(--e4);
+}
+.input {
+  padding: 10px 14px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  background: #fff;
+  width: 100%;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--primario);
+}
+.input-estado {
+  max-width: 260px;
+}
+
+.cargando {
+  color: var(--gris);
+  text-align: center;
+  padding: var(--e6);
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+
+.envio-card {
+  background: #fff;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  padding: var(--e4);
+  transition: box-shadow 0.15s;
+}
+.envio-card:hover {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+.envio-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+  padding-bottom: var(--e3);
+  border-bottom: 1px solid var(--linea);
+}
+.factura {
+  font-family: monospace;
+}
+.cliente {
+  display: block;
+  font-size: 12.5px;
+  color: var(--gris);
+  margin-top: 2px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.estado-pendiente {
+  background: #fef9ec;
+  color: #b54708;
+}
+.estado-preparando {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.estado-despachado {
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+.estado-en_transito {
+  background: #eef2ff;
+  color: #4338ca;
+}
+.estado-entregado {
+  background: #ecfdf3;
+  color: #067647;
+}
+.estado-no_entregado {
+  background: #fef3f2;
+  color: #b42318;
+}
+.estado-devuelto {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.envio-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--e3);
+}
+.envio-datos p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--tinta);
+}
+.guia {
+  display: flex;
+  gap: var(--e4);
+  font-size: 13px !important;
+  color: var(--gris) !important;
+}
+.entrega {
+  font-size: 13px !important;
+  color: var(--gris) !important;
+}
+
+.envio-pie {
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-gestionar {
+  padding: 7px 16px;
+  border: 1px solid var(--linea);
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn-gestionar:hover {
+  border-color: var(--primario);
+  color: var(--primario);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: var(--e6);
+  width: min(480px, 90vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+}
+.modal h2 {
+  margin: 0 0 var(--e2);
+}
+.modal-factura {
+  margin: 0 0 var(--e3);
+  font-size: 14px;
+  color: var(--gris);
+}
+.modal label {
+  display: block;
+  margin-top: var(--e3);
+  margin-bottom: var(--e2);
+  font-weight: 600;
+  font-size: 14px;
+}
+.modal .input {
+  margin-bottom: 0;
+}
+.notas {
+  resize: vertical;
+}
+.modal-estado {
+  margin-bottom: var(--e3);
+}
+.estado-terminal {
+  font-size: 13px;
+  color: var(--gris);
+  margin: 0 0 var(--e2);
+}
+
+.modal-transiciones {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--e2);
+}
+.modal-transiciones legend {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: var(--e2);
+  padding: 0;
+}
+.transiciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+.btn-transicion {
+  padding: 7px 14px;
+  border: 1px solid var(--linea);
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.btn-transicion:hover {
+  border-color: var(--primario);
+  color: var(--primario);
+}
+.btn-transicion.seleccionado {
+  background: var(--primario);
+  border-color: var(--primario);
+  color: #fff;
+}
+
+.error-box {
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: var(--e3);
+  color: #b42318;
+  font-size: 13px;
+}
+.modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e3);
+  margin-top: var(--e4);
+}
+.btn-cancelar {
+  padding: 10px 20px;
+  border: 1px solid var(--linea);
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn-guardar {
+  padding: 10px 20px;
+  border: 0;
+  background: var(--primario);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+.btn-guardar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
