@@ -14,6 +14,8 @@ antes de iniciar una tarea** (ver la sección de consulta en `AGENTS.md`).
 ## Plantillas
 - [plantillas/decision-nueva.md](plantillas/decision-nueva.md) — plantilla para
   registrar una decisión nueva en `decisiones.md`.
+- [plantillas/revision-merge.md](plantillas/revision-merge.md) — prompt para que
+  el supervisor revise una rama y apruebe el merge a `main`.
 
 ## Cómo se usa
 1. Al arrancar cada sesión, leer `docs/INDICE.md` (MOC del repo) y este índice.
