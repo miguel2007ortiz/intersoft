@@ -1,5 +1,6 @@
 import re
 from datetime import timedelta
+from types import SimpleNamespace
 
 from django.contrib.auth.models import User
 from django.core import mail
@@ -11,7 +12,8 @@ from django.utils import timezone
 
 from core.models import Empresa
 
-from .models import ActividadUsuario, Perfil, Rol, RolPermiso, TokenRecuperacion
+from .models import ActividadUsuario, Perfil, Permiso, Rol, RolPermiso, TokenRecuperacion
+from .permissions import EsAdministrador, EsPersonal
 
 
 class BaseCuentasTest(TestCase):
@@ -61,6 +63,61 @@ class RolesYPermisosTest(BaseCuentasTest):
         _, perfil = self.crear_cuenta(rol="EMPLEADO")
         self.assertTrue(perfil.tiene_permiso("ventas.gestionar"))
         self.assertFalse(perfil.tiene_permiso("usuarios.gestionar"))
+
+
+class PermisosClasesTest(BaseCuentasTest):
+    """Regresion: EsAdministrador/EsPersonal solo comparaban
+    perfil.rol.nombre contra literales fijos, asi que un rol personalizado
+    por-empresa (feature soportada por el modelo Rol) nunca pasaba, sin
+    importar los permisos reales que tuviera asignados."""
+
+    def _request_con_perfil(self, perfil):
+        return SimpleNamespace(user=SimpleNamespace(perfil=perfil))
+
+    def test_rol_personalizado_con_permiso_de_usuarios_pasa_es_administrador(self):
+        call_command("seed_roles")
+        rol_gerente = Rol.objects.create(nombre="GERENTE", empresa=self.empresa)
+        RolPermiso.objects.create(
+            rol=rol_gerente, permiso=Permiso.objects.get(codigo="usuarios.gestionar"))
+        user = User.objects.create_user(username="g@test.co", email="g@test.co",
+                                        password="Clave12345")
+        perfil = Perfil.objects.create(usuario=user, empresa=self.empresa, rol=rol_gerente)
+        self.assertTrue(
+            EsAdministrador().has_permission(self._request_con_perfil(perfil), None))
+
+    def test_rol_personalizado_sin_permisos_no_pasa_es_administrador(self):
+        call_command("seed_roles")
+        rol_vacio = Rol.objects.create(nombre="AUDITOR", empresa=self.empresa)
+        user = User.objects.create_user(username="a@test.co", email="a@test.co",
+                                        password="Clave12345")
+        perfil = Perfil.objects.create(usuario=user, empresa=self.empresa, rol=rol_vacio)
+        self.assertFalse(
+            EsAdministrador().has_permission(self._request_con_perfil(perfil), None))
+
+    def test_rol_personalizado_con_algun_permiso_pasa_es_personal(self):
+        call_command("seed_roles")
+        rol_cajero = Rol.objects.create(nombre="CAJERO", empresa=self.empresa)
+        RolPermiso.objects.create(
+            rol=rol_cajero, permiso=Permiso.objects.get(codigo="ventas.gestionar"))
+        user = User.objects.create_user(username="c@test.co", email="c@test.co",
+                                        password="Clave12345")
+        perfil = Perfil.objects.create(usuario=user, empresa=self.empresa, rol=rol_cajero)
+        self.assertTrue(
+            EsPersonal().has_permission(self._request_con_perfil(perfil), None))
+
+    def test_rol_cliente_sin_permisos_no_pasa_es_personal(self):
+        _, perfil = self.crear_cuenta(rol="CLIENTE")
+        self.assertFalse(
+            EsPersonal().has_permission(self._request_con_perfil(perfil), None))
+
+    def test_perfil_con_rol_none_no_revienta(self):
+        """rol es PROTECT y no-nulo en el modelo, pero un perfil mal
+        migrado/creado a mano puede tener rol_id colgante; antes
+        perfil.rol lanzaba AttributeError (500) en vez de negar el acceso."""
+        perfil_sin_rol = SimpleNamespace(deleted_at=None, rol=None)
+        request = self._request_con_perfil(perfil_sin_rol)
+        self.assertFalse(EsAdministrador().has_permission(request, None))
+        self.assertFalse(EsPersonal().has_permission(request, None))
 
 
 class LoginTest(BaseCuentasTest):
