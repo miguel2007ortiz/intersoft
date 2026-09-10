@@ -1,11 +1,21 @@
+/**
+ * Roles y permisos — el administrador arma sus propios roles (Flujo 3)
+ *
+ * Que hace: crea roles y les marca permisos de un catalogo que trae el
+ * backend (por ejemplo `empleado.leer`, `venta.anular`).
+ * Ruta: /admin/roles (authGuard + adminGuard).
+ * Por que asi: los permisos no estan escritos a mano en el frontend; se piden
+ * al backend. Si manana el backend anade un permiso nuevo, aparece aqui solo,
+ * sin tocar codigo. Esto es lo que hace util a `permisoGuard(codigo)`.
+ */
+
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { SeguridadService } from '../../../core/services/seguridad.service';
 import { programarAviso } from '../../../core/utils/temporizador.util';
-import {
-  ErrorSeguridad, PermisoCatalogo, RolAdmin,
-} from '../../../core/models/seguridad.model';
+import { ErrorSeguridad, PermisoCatalogo, RolAdmin } from '../../../core/models/seguridad.model';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 const CERRAR_AVISO_MS = 4000;
 
@@ -17,6 +27,7 @@ const CERRAR_AVISO_MS = 4000;
 })
 export class RolesComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly seguridad = inject(SeguridadService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -144,10 +155,16 @@ export class RolesComponent {
     });
   }
 
-  eliminar(rol: RolAdmin): void {
-    if (!confirm(`¿Eliminar el rol "${rol.nombre}"? Esta accion no se puede deshacer.`)) {
-      return;
-    }
+  async eliminar(rol: RolAdmin): Promise<void> {
+    const acepto = await this.confirmacion.pedir({
+      titulo: 'Eliminar rol',
+      mensaje:
+        `Se eliminara el rol "${rol.nombre}". Los usuarios que lo tengan ` +
+        'asignado perderan esos permisos.',
+      confirmar: 'Eliminar rol',
+      destructivo: true,
+    });
+    if (!acepto) return;
     this.seguridad.eliminarRol(rol.id).subscribe({
       next: () => {
         this.exito.set('Rol eliminado.');

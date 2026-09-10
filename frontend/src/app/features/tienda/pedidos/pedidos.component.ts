@@ -1,3 +1,13 @@
+/**
+ * Mis pedidos — historial de compras del cliente
+ *
+ * Que hace: lista los pedidos con su estado (pagado, en preparacion, enviado)
+ * y abre el detalle con los productos y el envio.
+ * Ruta: /pedidos (authGuard).
+ * Por que asi: el estado lo manda el backend ya traducido a texto para el
+ * cliente; la pantalla no interpreta codigos internos del pedido.
+ */
+
 import { DecimalPipe, DatePipe } from '@angular/common';
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';

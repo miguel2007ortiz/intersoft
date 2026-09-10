@@ -174,6 +174,12 @@ class CarritoItemInputSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
 
 
+class CarritoItemCantidadSerializer(serializers.Serializer):
+    """Solo la nueva cantidad: el PUT del carrito actua sobre un item ya
+    existente, el producto se deriva del propio item, no del payload."""
+    cantidad = serializers.IntegerField(min_value=1)
+
+
 class CarritoCuponSerializer(serializers.Serializer):
     cupon_id = serializers.UUIDField(required=False, allow_null=True)
 
@@ -237,7 +243,11 @@ class PedidoCompradorSerializer(serializers.ModelSerializer):
         model = Venta
         fields = ["id", "numero_factura", "fecha", "empresa_nombre",
                   "subtotal", "descuento", "total", "estado",
-                  "metodo_pago", "detalles", "envio", "created_at"]
+                  "metodo_pago", "estado_pago", "pasarela", "pagado_en",
+                  "detalles", "envio", "created_at"]
+        # El comprador ve el estado de su pago y la pasarela, pero NO el
+        # transaccion_id (identificador interno de la pasarela que no se le
+        # debe filtrar).
 
     def get_envio(self, obj):
         # Ventas anteriores a esta funcionalidad (o del canal POS, que no

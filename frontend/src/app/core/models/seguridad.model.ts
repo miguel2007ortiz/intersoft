@@ -1,3 +1,12 @@
+/**
+ * Modelos de usuarios, roles y permisos (Flujo 3)
+ *
+ * Que hace: describe usuario, rol, permiso y los cuerpos de alta y edicion.
+ * Donde se usa: SeguridadService y las pantallas de /admin.
+ * Por que asi: en la edicion la contrasena es opcional (`password?`), porque
+ * dejar el campo vacio significa "no la cambies" y entonces ni se envia.
+ */
+
 /** Tipos de la fase 2: administracion de seguridad (solo ADMINISTRADOR). */
 
 export interface UsuarioAdmin {

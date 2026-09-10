@@ -9,7 +9,7 @@ Reglas clave:
 
 from decimal import Decimal
 import hashlib
-import os
+import json
 import uuid as uuid_mod
 
 from django.core.cache import cache
@@ -27,9 +27,9 @@ from cuentas.permissions import EsPersonal
 from . import cache_key
 
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
-                     Cupon, DetalleVenta, Empresa, Envio, Favorito, MovimientoInventario,
-                     Producto, Venta)
-from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
+                     Cupon, DetalleVenta, Empresa, Envio, Favorito, IntentoPago,
+                     MovimientoInventario, Producto, Venta)
+from .serializers_tienda import (CarritoItemCantidadSerializer, CarritoItemInputSerializer, CarritoSerializer,
                                   CarritoCuponSerializer, CategoriaTiendaSerializer,
                                   ComentarioProductoEscrituraSerializer,
                                   ComentarioProductoSerializer,
@@ -37,6 +37,9 @@ from .serializers_tienda import (CarritoItemInputSerializer, CarritoSerializer,
                                   CuponValidarSerializer, FavoritoSerializer,
                                   PedidoCompradorSerializer,
                                   ProductoTiendaSerializer)
+from .services import (a_centavos, cobrar, respuesta_desde_transaccion_wompi,
+                       secreto_eventos_wompi, validar_firma_webhook_wompi,
+                       verificar_transaccion_wompi)
 
 
 def _obtener_empresa(request):
@@ -400,22 +403,32 @@ class CuponValidarView(APIView):
 
 # ------------------------------ Carrito ----------------------------------
 
-def _carrito_de(request, bloquear=False):
-    """Carrito del comprador (marketplace): se identifica por usuario.
+def _carrito_de_usuario(usuario, bloquear=False):
+    """Carrito del comprador a partir del usuario.
+
+    Existe como variante de ``_carrito_de`` porque el webhook de la pasarela
+    resuelve un pago sin ninguna request del comprador: llega de la pasarela,
+    no del navegador. El unico dato de identidad disponible ahi es el usuario
+    del ``IntentoPago``.
 
     Con `bloquear=True` toma SELECT FOR UPDATE sobre la fila del carrito para
     serializar operaciones concurrentes del mismo comprador (agregar items,
     actualizar cantidades o aplicar cupon).
     """
     qs = Carrito.objects.select_for_update() if bloquear else Carrito.objects
-    carrito = qs.filter(usuario=request.user).first()
+    carrito = qs.filter(usuario=usuario).first()
     if carrito is None:
-        carrito = Carrito.objects.create(usuario=request.user, empresa=None)
+        carrito = Carrito.objects.create(usuario=usuario, empresa=None)
     elif carrito.empresa_id is not None:
         # Se migra un carrito con empresa antigua al modelo de marketplace.
         carrito.empresa = None
         carrito.save(update_fields=['empresa'])
     return carrito
+
+
+def _carrito_de(request, bloquear=False):
+    """Carrito del comprador (marketplace): se identifica por usuario."""
+    return _carrito_de_usuario(request.user, bloquear=bloquear)
 
 
 def _carrito_serializado(carrito):
@@ -497,7 +510,7 @@ class CarritoItemView(APIView):
                         status=status.HTTP_201_CREATED)
 
     def put(self, request, item_id):
-        entrada = CarritoItemInputSerializer(data=request.data)
+        entrada = CarritoItemCantidadSerializer(data=request.data)
         if not entrada.is_valid():
             return Response(
                 {"codigo": "DATOS_INVALIDOS",
@@ -616,22 +629,179 @@ class CarritoCuponView(APIView):
         return Response(_carrito_serializado(carrito))
 
 
+# -------------------- Resolucion de un intento de pago --------------------
+#
+# Un cobro se resuelve por dos caminos que hacen exactamente lo mismo:
+#
+# - Sincrono: la pasarela responde 'aprobado'/'rechazado' en el propio POST de
+#   checkout (es el caso del mock).
+# - Asincrono: la pasarela responde 'pendiente' y el resultado llega despues
+#   por webhook, sin request del comprador (es el caso de Wompi).
+#
+# Por eso confirmar y revertir viven aqui, a nivel de modulo y tomando el
+# ``IntentoPago`` en vez de la request: si cada camino tuviera su copia, un
+# arreglo en uno se olvidaria en el otro y el stock quedaria descuadrado.
+#
+# Las dos funciones son idempotentes: bloquean el intento y solo actuan si
+# sigue 'pendiente'. Es un requisito duro, no una precaucion: las pasarelas
+# reenvian el mismo webhook varias veces hasta recibir un 2xx, y confirmar dos
+# veces descontaria el stock o cerraria el carrito dos veces.
+
+def _resolver_intento_bloqueado(intento):
+    """Recarga el intento con SELECT FOR UPDATE. None si ya no esta pendiente.
+
+    Debe llamarse dentro de un ``transaction.atomic()``.
+    """
+    actual = IntentoPago.objects.select_for_update().filter(
+        pk=intento.pk).first()
+    if actual is None or actual.estado != 'pendiente':
+        return None
+    return actual
+
+
+def _confirmar_intento(intento, resultado):
+    """Confirma el pago de un intento: ventas pagadas y carrito vaciado.
+
+    Devuelve la lista de ventas confirmadas, o None si el intento ya estaba
+    resuelto (reintento del webhook, doble checkout).
+    """
+    with transaction.atomic():
+        intento = _resolver_intento_bloqueado(intento)
+        if intento is None:
+            return None
+
+        # Solo las ventas reservadas por ESTE intento: filtrar por usuario y
+        # estado barreria tambien pendientes de checkouts anteriores y las
+        # marcaria pagadas con una transaccion que no les corresponde.
+        ventas = list(Venta.objects.filter(
+            intento_pago=intento,
+            estado_pago='pendiente',
+        ).order_by('created_at'))
+        for v in ventas:
+            v.estado = 'completada'
+            v.estado_pago = 'aprobado'
+            v.pasarela = resultado.pasarela
+            v.transaccion_id = resultado.transaccion_id
+            v.pagado_en = timezone.now()
+            v.save(update_fields=[
+                'estado', 'estado_pago', 'pasarela',
+                'transaccion_id', 'pagado_en',
+            ])
+
+        intento.estado = 'aprobado'
+        intento.transaccion_id = resultado.transaccion_id
+        intento.pasarela = resultado.pasarela
+        intento.respuesta_cruda = json.dumps(resultado.crudo, default=str)
+        intento.save(update_fields=[
+            'estado', 'transaccion_id', 'pasarela', 'respuesta_cruda'])
+
+        # El carrito solo se vacia al confirmar el cobro: si el pago se cae,
+        # el comprador conserva su carrito para reintentar.
+        carrito = _carrito_de_usuario(intento.usuario, bloquear=True)
+        carrito.items.all().delete()
+        carrito.cupon = None
+        carrito.save(update_fields=['cupon'])
+
+        ActividadUsuario.registrar(
+            intento.usuario, "CHECKOUT_MARKETPLACE",
+            f"{len(ventas)} venta(s) aprobada(s) - Total "
+            f"${sum(v.total for v in ventas)} - {resultado.transaccion_id}")
+
+    return ventas
+
+
+def _revertir_intento(intento, resultado):
+    """Revierte la reserva de stock de un pago no aprobado (Fase 2).
+
+    - Restaura las unidades reservadas de cada producto.
+    - Registra un movimiento de reversion (entrada) por cada linea.
+    - Marca las ventas pendientes como estado_pago 'reversado' (auditoria,
+      NO cobrables; no cuentan en analitica ni en total_compras).
+    - NO vacia el carrito: el comprador puede reintentar o modificar.
+
+    Devuelve la lista de ventas revertidas, o None si el intento ya estaba
+    resuelto.
+    """
+    with transaction.atomic():
+        intento = _resolver_intento_bloqueado(intento)
+        if intento is None:
+            return None
+
+        # Acotado al intento por el mismo motivo que la confirmacion: revertir
+        # por usuario+estado devolveria stock de ventas de otros checkouts.
+        ventas = list(Venta.objects.filter(
+            intento_pago=intento,
+            estado='pendiente',
+            estado_pago='pendiente',
+        ))
+        for v in ventas:
+            for detalle in v.detalles.select_related('producto'):
+                p = detalle.producto
+                p.stock += detalle.cantidad
+                p.save(update_fields=['stock'])
+                _registrar_movimiento(
+                    p, intento.usuario, 'entrada', detalle.cantidad,
+                    f"Reversion pago rechazado {v.numero_factura}")
+            v.estado = 'pendiente'
+            v.estado_pago = 'reversado'
+            v.save(update_fields=['estado', 'estado_pago'])
+
+        intento.estado = 'rechazado'
+        intento.transaccion_id = resultado.transaccion_id
+        intento.pasarela = resultado.pasarela
+        intento.respuesta_cruda = json.dumps(resultado.crudo, default=str)
+        intento.save(update_fields=[
+            'estado', 'transaccion_id', 'pasarela', 'respuesta_cruda'])
+
+    return ventas
+
+
+def _ventas_serializadas(ventas):
+    """Resumen de ventas para las respuestas de checkout y estado de pago."""
+    return [{
+        "venta_id": str(v.id),
+        "numero_factura": v.numero_factura,
+        "empresa_id": str(v.empresa_id),
+        "empresa_nombre": v.empresa.nombre,
+        "total": str(v.total),
+    } for v in ventas]
+
+
 # ------------------------------ Checkout ---------------------------------
 
 class CheckoutView(APIView):
     """POST convierte el carrito en ventas (checkout tipo marketplace).
 
     El carrito puede llevar productos de varias empresas. Se genera UNA
-    venta por cada empresa vendedora, todas dentro de una misma transaccion.
+    venta por cada empresa vendedora.
 
-    Flujo:
-    1. Valida stock de cada item con select_for_update.
-    2. Si stock_insuficiente, rechaza con la lista de productos afectados.
-    3. Agrupa los items por empresa vendedora y crea una venta por cada una,
-       descontando stock y registrando movimientos (transaction.atomic).
-    4. Aplica descuento del cupon solo si pertenece a la empresa vendedora.
-    5. Simula pasarela de pago (mock configurable por env).
-    6. Limpia el carrito.
+    Flujo (Fase 2 - reservar -> cobrar -> confirmar) en TRES tramos:
+
+    1. RESERVA (transaction.atomic con locks cortos):
+       valida stock de cada item con select_for_update; si hay stock
+       insuficiente rechaza SIN cobrar ni tocar la pasarela. Crea las ventas
+       en estado 'pendiente' / estado_pago 'pendiente', descuenta stock y
+       registra los movimientos. NO vacia el carrito todavia. Termina y suelta
+       los locks ANTES de llamar a la pasarela: asi no se mantiene ningun lock
+       durante la latencia de un proveedor real.
+
+    2. COBRO (FUERA de cualquier transaction.atomic y de los locks):
+       llama al adaptador de pasarela (mock hoy). Una llamada de red a un
+       proveedor externo nunca debe ejecutarse con filas bloqueadas por
+       select_for_update, porque el lock quedaria tomado todo el tiempo de
+       latencia del proveedor. Por eso la reserva y la confirmacion son dos
+       transacciones separadas y el cobro corre entre ambas, sin locks.
+
+    3. CONFIRMACION (transaction.atomic):
+       - aprobado: ventas -> estado 'completada' / estado_pago 'aprobado',
+         se fijan pasarela, transaccion_id y pagado_en; se vacia el carrito.
+       - rechazado: se revierte la reserva (stock y movimientos), las ventas
+         quedan estado_pago 'reversado' (registro de auditoria, NO cobrable),
+         el carrito NO se vacia y se responde 402 PAGO_RECHAZADO.
+
+    Idempotencia (Fase 3): el checkout acepta una 'idempotencia_clave'. Si ya
+    existe un IntentoPago con esa clave y resolucion, se devuelve el resultado
+    previo sin volver a cobrar (no se duplica el cobro ni la venta).
     """
     permission_classes = [IsAuthenticated]
 
@@ -644,29 +814,24 @@ class CheckoutView(APIView):
                  "opciones": [c for c, _ in Venta.METODO_PAGO_CHOICES]},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        mock_habilitado = os.environ.get('PASARELA_MOCK', 'True').lower() == 'true'
-        if mock_habilitado:
-            pasarelarespuesta = {
-                'aprobada': True,
-                'transaccion_id': f"MOCK-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-                'mensaje': 'Pago aprobado (mock)',
-            }
-        else:
-            pasarelarespuesta = {
-                'aprobada': False,
-                'transaccion_id': None,
-                'mensaje': 'Pasarela no configurada',
-            }
+        # Clave de idempotencia: la aporta el cliente o se deriva del contenido
+        # del carrito, de modo que un checkout reintentado no cobre dos veces.
+        idempotencia_clave = (request.data.get('idempotencia_clave', '')
+                              or self._clave_de_carrito(request))
 
-        if not pasarelarespuesta['aprobada']:
-            return Response(
-                {"codigo": "PAGO_RECHAZADO",
-                 "detalle": pasarelarespuesta['mensaje']},
-                status=status.HTTP_402_PAYMENT_REQUIRED)
+        # ---------------- 0. Deduplicacion por clave ----------------
+        # Solo cortamos (sin volver a cobrar) cuando el intento previo con la
+        # misma clave ya fue APROBADO: asi un reintento no cobra ni crea venta
+        # dos veces. Un pago rechazado/pendiente permite reintentar (Fase 2:
+        # el carrito NO se vacia y el comprador puede corregir el metodo).
+        intento_previo = IntentoPago.objects.filter(
+            usuario=request.user, idempotencia_clave=idempotencia_clave,
+        ).first()
+        if intento_previo and intento_previo.estado == 'aprobado':
+            return self._respuesta_desde_intento(intento_previo)
 
-        # Transaccion unica: bloquea el carrito del comprador (evita doble
-        # checkout concurrente), los productos y la fila de cada empresa
-        # vendedora (serializa el correlativo de numero_factura).
+        # ---------------- 1. Reserva (locks cortos) ----------------
+        referencias_empresa = []
         with transaction.atomic():
             carrito = _carrito_de(request, bloquear=True)
 
@@ -713,9 +878,6 @@ class CheckoutView(APIView):
                     })
                     continue
                 if not producto.activo:
-                    # Se pudo agregar al carrito cuando estaba activo, pero
-                    # el vendedor lo desactivo antes del checkout: no se
-                    # vende, se reporta igual que stock insuficiente.
                     fallidos.append({
                         'producto': str(producto.id),
                         'producto_nombre': producto.nombre,
@@ -734,6 +896,7 @@ class CheckoutView(APIView):
                 item.producto = producto
 
             if fallidos:
+                # La pasarela NUNCA fue llamada (stock agotado).
                 return Response(
                     {"codigo": "STOCK_INSUFICIENTE",
                      "detalle": "Algunos productos no tienen stock suficiente.",
@@ -746,8 +909,40 @@ class CheckoutView(APIView):
                 por_vendedor.setdefault(item.producto.empresa_id, []).append(item)
 
             cupon = carrito.cupon if (carrito.cupon and carrito.cupon.esta_vigente) else None
+            monto_total = Decimal('0')
 
-            ventas = []
+            # Serializacion de la reserva por clave de idempotencia: se bloquea
+            # el carrito (select_for_update) al inicio. Dos checkouts
+            # concurrentes del MISMO carrito quedan serializados por ese lock.
+            # Al entrar el segundo tras el commit del primero, detecta si ya
+            # existe un IntentoPago para esta clave y actua en consecuencia.
+            intento = IntentoPago.objects.filter(
+                usuario=request.user,
+                idempotencia_clave=idempotencia_clave,
+            ).first()
+            if intento:
+                if intento.estado == 'aprobado':
+                    return self._respuesta_desde_intento(intento)
+                if intento.estado == 'pendiente':
+                    # Ya hay un cobro en curso con esta misma clave: no se
+                    # reserva de nuevo ni se vuelve a cobrar.
+                    return Response(
+                        {"codigo": "PAGO_EN_CURSO",
+                         "detalle": "Ya hay un pago en proceso para este "
+                                    "carrito. Espera unos segundos."},
+                        status=status.HTTP_409_CONFLICT)
+                # estado 'rechazado': reintento legitimo -> volver a intentar.
+                intento.estado = 'pendiente'
+                intento.save(update_fields=['estado'])
+            else:
+                intento = IntentoPago.objects.create(
+                    usuario=request.user,
+                    idempotencia_clave=idempotencia_clave,
+                    monto_total=Decimal('0'),
+                    moneda='COP',
+                    estado='pendiente',
+                )
+
             for empresa_id, lineas in por_vendedor.items():
                 empresa = Empresa.objects.select_for_update().filter(
                     pk=empresa_id).first()
@@ -759,6 +954,7 @@ class CheckoutView(APIView):
                 if cupon and cupon.empresa_id == empresa_id:
                     descuento = subtotal * cupon.porcentaje / Decimal('100')
                 total = max(subtotal - descuento, Decimal('0'))
+                monto_total += total
 
                 venta = Venta.objects.create(
                     empresa=empresa,
@@ -767,11 +963,10 @@ class CheckoutView(APIView):
                     subtotal=subtotal,
                     descuento=descuento,
                     total=total,
-                    estado='completada',
+                    estado='pendiente',          # se confirma al cobrar
+                    estado_pago='pendiente',     # se confirma al cobrar
                     metodo_pago=metodo_pago,
-                    notas=(f"Checkout tienda - Transaccion: "
-                           f"{pasarelarespuesta['transaccion_id']}"
-                           + (f" - Cupon: {cupon.codigo}" if cupon and cupon.empresa_id == empresa_id else '')),
+                    intento_pago=intento,
                 )
 
                 for item in lineas:
@@ -785,7 +980,7 @@ class CheckoutView(APIView):
                     item.producto.save(update_fields=['stock'])
                     _registrar_movimiento(
                         item.producto, request.user, 'salida', item.cantidad,
-                        f"Checkout tienda {venta.numero_factura}")
+                        f"Reserva checkout tienda {venta.numero_factura}")
 
                 Envio.objects.create(
                     venta=venta,
@@ -793,29 +988,252 @@ class CheckoutView(APIView):
                     ciudad=cliente.ciudad,
                 )
 
-                ventas.append(venta)
+                referencias_empresa.append(
+                    f"{empresa.nombre}:{venta.numero_factura}")
 
-            carrito.items.all().delete()
-            carrito.cupon = None
-            carrito.save(update_fields=['cupon'])
+            # Persistimos el monto real de la reserva en el intento ya creado.
+            intento.monto_total = monto_total
+            intento.save(update_fields=['monto_total'])
 
-            ActividadUsuario.registrar(
-                request.user, "CHECKOUT_MARKETPLACE",
-                f"{len(ventas)} venta(s) - Total ${sum(v.total for v in ventas)}")
+
+
+        # ---------------- 2. Cobro (FUERA de locks) ----------------
+        try:
+            resultado = cobrar(
+                monto=monto_total,
+                moneda='COP',
+                metodo_pago=metodo_pago,
+                referencia="|".join(referencias_empresa),
+                idempotencia_clave=idempotencia_clave,
+            )
+        except Exception:  # pragma: no cover - defensivo
+            return Response(
+                {"codigo": "PAGO_ERROR",
+                 "detalle": "No se pudo procesar el pago. Intenta de nuevo."},
+                status=status.HTTP_502_BAD_GATEWAY)
+
+        # ------- 3. Pendiente / Confirmacion / Reversion -------
+        if resultado.estado == 'pendiente':
+            # Pasarela asincrona (Wompi): el cobro lo completa el comprador en
+            # el Web Checkout y el resultado llega despues por webhook. Aqui NO
+            # se toca nada: la reserva de stock se mantiene, el intento sigue
+            # 'pendiente' (un segundo checkout con la misma clave recibe 409) y
+            # el carrito no se vacia hasta que el webhook confirme el cobro.
+            return Response({
+                "codigo": "PAGO_PENDIENTE",
+                "detalle": resultado.mensaje,
+                "referencia": idempotencia_clave,
+                "total": str(monto_total),
+                "pasarela": resultado.pasarela,
+                "datos_checkout": resultado.datos_checkout,
+            }, status=status.HTTP_202_ACCEPTED)
+
+        if not resultado.aprobada:
+            _revertir_intento(intento, resultado)
+            return Response(
+                {"codigo": "PAGO_RECHAZADO",
+                 "detalle": resultado.mensaje},
+                status=status.HTTP_402_PAYMENT_REQUIRED)
+
+        ventas = _confirmar_intento(intento, resultado)
+        if ventas is None:
+            # Otro request (o un webhook) resolvio este intento mientras se
+            # cobraba: no se confirma dos veces, se devuelve lo ya registrado.
+            intento.refresh_from_db()
+            return self._respuesta_desde_intento(intento)
 
         return Response({
             "codigo": "EXITO",
             "detalle": "Compra realizada exitosamente.",
-            "ventas": [{
-                "venta_id": str(v.id),
-                "numero_factura": v.numero_factura,
-                "empresa_id": str(v.empresa_id),
-                "empresa_nombre": v.empresa.nombre,
-                "total": str(v.total),
-            } for v in ventas],
+            "ventas": _ventas_serializadas(ventas),
             "total": str(sum(v.total for v in ventas)),
-            "transaccion_id": pasarelarespuesta['transaccion_id'],
+            "transaccion_id": resultado.transaccion_id,
         }, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _clave_de_carrito(request):
+        """Deriva una clave de idempotencia estable a partir del carrito.
+
+        Combina el usuario y un hash del contenido (producto|cantidad|cupon),
+        de modo que dos checkouts con exactamente el mismo contenido comparten
+        clave (deduplicacion), y al cambiar el carrito cambia la clave.
+        """
+        carrito = _carrito_de(request)
+        items = sorted(
+            (str(i.producto_id), i.cantidad) for i in carrito.items.all())
+        cupon = str(carrito.cupon_id) if carrito.cupon_id else ''
+        material = f"{request.user.id}|{items}|{cupon}"
+        return hashlib.sha256(material.encode('utf-8')).hexdigest()[:32]
+
+    def _respuesta_desde_intento(self, intento):
+        """Reutiliza el resultado de un intento ya resuelto (idempotencia)."""
+        if intento.estado == 'aprobado':
+            # Por intento, no por transaccion_id: es la relacion explicita y
+            # no depende de que la pasarela haya devuelto un id.
+            ventas = list(Venta.objects.filter(intento_pago=intento)
+                          .select_related('empresa').order_by('created_at'))
+            return Response({
+                "codigo": "EXITO",
+                "detalle": "Compra ya registrada (checkout reiterado).",
+                "ventas": _ventas_serializadas(ventas),
+                "total": str(sum(v.total for v in ventas)),
+                "transaccion_id": intento.transaccion_id,
+            }, status=status.HTTP_200_OK)
+        return Response(
+            {"codigo": "PAGO_RECHAZADO",
+             "detalle": "El pago fue rechazado previamente."},
+            status=status.HTTP_402_PAYMENT_REQUIRED)
+
+
+# --------------------- Webhook y estado del pago (Fase 4) -----------------
+
+class WebhookPagoWompiView(APIView):
+    """POST endpoint publico donde Wompi notifica ``transaction.updated``.
+
+    Es el unico camino por el que un pago real pasa a 'aprobado'. El comprador
+    nunca lo toca: cuando vuelve del Web Checkout solo consulta el estado.
+    Confiar en el retorno del navegador seria confiar en el cliente, y
+    cualquiera podria darse por pagado manipulando la URL de vuelta.
+
+    Controles, en orden:
+
+    1. Sin ``WOMPI_EVENTS_SECRET`` configurado se responde 503 y no se procesa
+       nada. Un webhook sin secreto es un endpoint publico que marca ventas
+       como pagadas: es preferible caerse a aceptar eventos sin firmar.
+    2. Se valida la firma del evento contra ese secreto. Sin firma valida, 401.
+    3. Se reconsulta la transaccion a la API de Wompi. La firma solo cubre los
+       campos de ``signature.properties``, asi que el resto del cuerpo no es de
+       fiar; la respuesta de la API si lo es. Si la reconsulta no esta
+       disponible se usa el cuerpo ya validado.
+    4. Se compara el monto cobrado con el reservado. Si no cuadra no se
+       confirma nada: se prefiere dejar la venta pendiente y revisarla a mano
+       antes que entregar mercancia por un monto que no corresponde.
+
+    Siempre responde 200 en los casos que un reintento no arreglaria (evento
+    de otro tipo, referencia desconocida, intento ya resuelto): Wompi reintenta
+    mientras no reciba 2xx y no tiene sentido hacerlo repetir un evento que ya
+    esta atendido.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        secreto = secreto_eventos_wompi()
+        if not secreto:
+            return Response(
+                {"codigo": "WEBHOOK_NO_CONFIGURADO",
+                 "detalle": "Falta WOMPI_EVENTS_SECRET en el servidor."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        evento = request.data if isinstance(request.data, dict) else {}
+        checksum = ((evento.get('signature') or {}).get('checksum')
+                    or request.headers.get('X-Event-Checksum', ''))
+        if not validar_firma_webhook_wompi(evento, secreto, str(checksum)):
+            return Response(
+                {"codigo": "FIRMA_INVALIDA",
+                 "detalle": "La firma del evento no es valida."},
+                status=status.HTTP_401_UNAUTHORIZED)
+
+        if evento.get('event') != 'transaction.updated':
+            return Response(
+                {"codigo": "EVENTO_IGNORADO", "detalle": "Evento no aplicable."},
+                status=status.HTTP_200_OK)
+
+        transaccion = (evento.get('data') or {}).get('transaction') or {}
+        referencia = str(transaccion.get('reference', ''))
+        intento = IntentoPago.objects.filter(
+            idempotencia_clave=referencia).first()
+        if intento is None:
+            # No hay a que aplicarlo. Reintentar no lo arreglaria.
+            return Response(
+                {"codigo": "REFERENCIA_DESCONOCIDA",
+                 "detalle": "No hay un intento de pago con esa referencia."},
+                status=status.HTTP_200_OK)
+
+        # Fuente autoritativa: la API de Wompi. Si no responde (sin
+        # credenciales o red caida) se usa el cuerpo, que ya paso la firma.
+        transaccion_id = str(transaccion.get('id', ''))
+        verificada = (verificar_transaccion_wompi(transaccion_id)
+                      if transaccion_id else None)
+        resultado = verificada or respuesta_desde_transaccion_wompi(transaccion)
+        datos = resultado.crudo if isinstance(resultado.crudo, dict) else {}
+
+        recibido = datos.get('amount_in_cents', transaccion.get('amount_in_cents'))
+        if recibido is not None:
+            try:
+                cuadra = int(recibido) == a_centavos(intento.monto_total)
+            except (TypeError, ValueError):
+                cuadra = False
+            if not cuadra:
+                return Response(
+                    {"codigo": "MONTO_NO_COINCIDE",
+                     "detalle": "El monto notificado no coincide con la reserva.",
+                     "esperado_centavos": a_centavos(intento.monto_total),
+                     "recibido_centavos": recibido},
+                    status=status.HTTP_409_CONFLICT)
+
+        if resultado.estado == 'pendiente':
+            # Wompi tambien notifica transiciones intermedias. No se resuelve
+            # la venta hasta que el estado sea definitivo.
+            return Response(
+                {"codigo": "PAGO_PENDIENTE",
+                 "detalle": "La transaccion sigue en curso."},
+                status=status.HTTP_200_OK)
+
+        if resultado.aprobada:
+            ventas = _confirmar_intento(intento, resultado)
+            codigo = "PAGO_CONFIRMADO"
+        else:
+            ventas = _revertir_intento(intento, resultado)
+            codigo = "PAGO_REVERSADO"
+
+        if ventas is None:
+            return Response(
+                {"codigo": "YA_PROCESADO",
+                 "detalle": "Este intento de pago ya estaba resuelto."},
+                status=status.HTTP_200_OK)
+
+        return Response(
+            {"codigo": codigo, "ventas": len(ventas),
+             "transaccion_id": resultado.transaccion_id},
+            status=status.HTTP_200_OK)
+
+
+class EstadoPagoView(APIView):
+    """GET estado de un intento de pago del comprador autenticado.
+
+    Lo consulta el frontend cuando el comprador vuelve del Web Checkout, en
+    lugar de leer el resultado de la URL de retorno: el estado real lo fija el
+    webhook, no el navegador.
+
+    Siempre acotado a ``usuario=request.user``: nadie puede consultar el pago
+    de otro comprador pasando una referencia ajena.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        referencia = request.query_params.get('referencia', '').strip()
+        intentos = IntentoPago.objects.filter(usuario=request.user)
+        if referencia:
+            intentos = intentos.filter(idempotencia_clave=referencia)
+        intento = intentos.order_by('-created_at').first()
+        if intento is None:
+            return Response(
+                {"codigo": "NO_ENCONTRADO",
+                 "detalle": "No hay un intento de pago con esa referencia."},
+                status=status.HTTP_404_NOT_FOUND)
+
+        ventas = list(Venta.objects.filter(intento_pago=intento)
+                      .select_related('empresa').order_by('created_at'))
+        return Response({
+            "codigo": "OK",
+            "referencia": intento.idempotencia_clave,
+            "estado": intento.estado,
+            "pasarela": intento.pasarela,
+            "transaccion_id": intento.transaccion_id,
+            "total": str(intento.monto_total),
+            "ventas": _ventas_serializadas(ventas),
+        })
 
 
 # ------------------------------ Pedidos del comprador ---------------------
@@ -850,10 +1268,27 @@ class CompletarCompradorView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if Cliente.objects.filter(usuario=request.user, deleted_at__isnull=True).exists():
-            return Response(
-                {"codigo": "CLIENTE_EXISTENTE", "detalle": "Ya tienes datos de comprador registrados."},
-                status=status.HTTP_409_CONFLICT)
+        cliente = Cliente.objects.filter(usuario=request.user, deleted_at__isnull=True).first()
+        if cliente:
+            # Ya tiene datos de comprador: solo se permite completar la
+            # direccion de envio si sigue vacia (el checkout la exige).
+            if cliente.direccion.strip() and cliente.ciudad.strip():
+                return Response(
+                    {"codigo": "CLIENTE_EXISTENTE", "detalle": "Ya tienes datos de comprador registrados."},
+                    status=status.HTTP_409_CONFLICT)
+            direccion = (request.data.get('direccion') or '').strip()
+            ciudad = (request.data.get('ciudad') or '').strip()
+            if not direccion or not ciudad:
+                return Response(
+                    {"codigo": "DATOS_INVALIDOS",
+                     "detalle": "Completa tu direccion y ciudad de envio.",
+                     "errores": {"direccion": ["Obligatoria."], "ciudad": ["Obligatoria."]}},
+                    status=status.HTTP_400_BAD_REQUEST)
+            cliente.direccion = direccion
+            cliente.ciudad = ciudad
+            cliente.save(update_fields=['direccion', 'ciudad'])
+            return Response({"detalle": "Direccion de envio actualizada."},
+                            status=status.HTTP_200_OK)
 
         entrada = CompletarCompradorSerializer(data=request.data, context={"usuario": request.user})
         if not entrada.is_valid():

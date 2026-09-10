@@ -1,8 +1,5 @@
 import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -67,14 +64,12 @@ describe('authInterceptor', () => {
       errorCapturado = true;
     });
 
-    ctrl.expectOne(`/api/clientes/`).flush(
-      { detalle: 'token vencido' },
-      { status: 401, statusText: 'Unauthorized' },
-    );
-    ctrl.expectOne(`${api}/auth/refresh/`).error(
-      new ProgressEvent('error'),
-      { status: 401, statusText: 'Unauthorized' },
-    );
+    ctrl
+      .expectOne(`/api/clientes/`)
+      .flush({ detalle: 'token vencido' }, { status: 401, statusText: 'Unauthorized' });
+    ctrl
+      .expectOne(`${api}/auth/refresh/`)
+      .error(new ProgressEvent('error'), { status: 401, statusText: 'Unauthorized' });
 
     await new Promise((resolver) => setTimeout(resolver));
 

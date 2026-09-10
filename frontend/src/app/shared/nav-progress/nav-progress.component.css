@@ -19,7 +19,14 @@
   top: 0;
   height: 100%;
   width: 40%;
-  background: linear-gradient(90deg, transparent, var(--primario) 20%, #6c9bf2 50%, var(--primario) 80%, transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primario) 20%,
+    #6c9bf2 50%,
+    var(--primario) 80%,
+    transparent
+  );
   box-shadow: 0 0 12px var(--brillo);
   animation: deslizar-progreso 1.1s ease-in-out infinite;
 }

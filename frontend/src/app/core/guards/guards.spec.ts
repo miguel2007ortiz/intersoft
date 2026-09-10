@@ -47,7 +47,8 @@ describe('Guards de rutas', () => {
   it('authGuard en /login redirige a esa misma ruta (sin bucle)', () => {
     vi.spyOn(TestBed.inject(AuthService), 'estaAutenticado').mockReturnValue(false);
     ejecutarConInyeccion(() =>
-      authGuard({} as ActivatedRouteSnapshot, { url: '/login' } as RouterStateSnapshot));
+      authGuard({} as ActivatedRouteSnapshot, { url: '/login' } as RouterStateSnapshot),
+    );
     expect(crearArbol).toHaveBeenCalledWith(['/login'], {
       queryParams: { redirigir: '/login' },
     });

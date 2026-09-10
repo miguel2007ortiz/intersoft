@@ -1,3 +1,15 @@
+/**
+ * TiendaService — toda la API del marketplace en un solo servicio
+ *
+ * Que hace: catalogo publico, carrito, cupones, checkout, pagos, pedidos,
+ * comentarios y favoritos. Cada metodo devuelve un Observable ya tipado.
+ * Donde se usa: pantallas de /catalogo, /carrito, /checkout, /pedidos y
+ * /favoritos.
+ * Por que asi: los errores pasan por `capturarErrorDjango`, que convierte la
+ * respuesta cruda de Django en un objeto con `detalle` legible; por eso las
+ * pantallas pueden hacer `e.detalle` y mostrarlo tal cual al usuario.
+ */
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
@@ -7,12 +19,13 @@ import {
   Carrito,
   CarritoItem,
   CategoriaTienda,
-  CheckoutResponse,
+  CheckoutResultado,
   ComentarioProducto,
   Cupon,
   DatosComentario,
   DatosComprador,
   ErrorTienda,
+  EstadoPago,
   Favorito,
   FavoritoEstado,
   Pedido,
@@ -120,7 +133,7 @@ export class TiendaService {
 
   actualizarItem(itemId: string, cantidad: number): Observable<Carrito> {
     return this.http
-      .put<Carrito>(`${this.api}/carrito/items/${itemId}/`, { producto: itemId, cantidad })
+      .put<Carrito>(`${this.api}/carrito/items/${itemId}/`, { cantidad })
       .pipe(capturarError<Carrito>());
   }
 
@@ -137,10 +150,21 @@ export class TiendaService {
   }
 
   // ---- Checkout ----
-  checkout(metodoPago: string): Observable<CheckoutResponse> {
+  /** Con la pasarela mock devuelve la compra ya hecha (201). Con una pasarela
+   * real devuelve 202 y los datos para abrir su checkout: el pago se confirma
+   * despues por webhook, no en esta respuesta. */
+  checkout(metodoPago: string): Observable<CheckoutResultado> {
     return this.http
-      .post<CheckoutResponse>(`${this.api}/checkout/`, { metodo_pago: metodoPago })
-      .pipe(capturarError<CheckoutResponse>());
+      .post<CheckoutResultado>(`${this.api}/checkout/`, { metodo_pago: metodoPago })
+      .pipe(capturarError<CheckoutResultado>());
+  }
+
+  /** Estado del intento de pago. Es lo que se consulta al volver de la
+   * pasarela: el resultado real lo fija el webhook, no la URL de retorno. */
+  estadoPago(referencia: string): Observable<EstadoPago> {
+    return this.http
+      .get<EstadoPago>(`${this.api}/pagos/estado/`, { params: { referencia } })
+      .pipe(capturarError<EstadoPago>());
   }
 
   // ---- Comprador ----

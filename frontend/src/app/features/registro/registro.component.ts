@@ -1,3 +1,13 @@
+/**
+ * Registro de empresa — alta de una tienda nueva y su administrador
+ *
+ * Que hace: crea la empresa y el usuario propietario en un solo formulario.
+ * Ruta: /registro (publica).
+ * Por que asi: el correo se comprueba contra el backend mientras se escribe
+ * (emailUnicoValidator) para no perder los datos del formulario por un
+ * duplicado detectado al final.
+ */
+
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';

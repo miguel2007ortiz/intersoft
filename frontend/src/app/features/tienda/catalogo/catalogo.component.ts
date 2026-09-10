@@ -1,4 +1,23 @@
-﻿import { DatePipe, DecimalPipe } from '@angular/common';
+﻿/**
+ * Marketplace — vitrina publica de productos de todas las empresas
+ *
+ * Que hace: buscador con sugerencias, filtros por categoria y orden, carrusel
+ * de destacados, detalle del producto con comentarios, boton de anadir al
+ * carrito y corazon de favoritos.
+ * Rutas: '/' y '/catalogo'. Es PUBLICA: se puede mirar sin iniciar sesion.
+ * Por que asi:
+ *   - Sin sesion, el corazon abre el dialogo propio invitando a iniciar sesion
+ *     (antes usaba confirm(), que el navegador puede bloquear y dejaba el clic
+ *     sin ninguna respuesta visible).
+ *   - `favoritosMap` es un Set de ids: comprobar si un producto es favorito es
+ *     inmediato aunque haya cientos de tarjetas.
+ *   - "Comprar ahora" navega al checkout DENTRO de la respuesta del POST, no
+ *     antes, para no llegar al pago con el carrito todavia vacio.
+ *   - Si falla guardar un favorito se muestra un aviso flotante (`avisoError`)
+ *     y no el cuadro de error grande, que taparia toda la rejilla.
+ */
+
+import { DatePipe, DecimalPipe } from '@angular/common';
 import {
   Component,
   DestroyRef,
@@ -14,6 +33,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import {
   ProductoTienda,
   CategoriaTienda,
@@ -40,6 +60,7 @@ import { programarAviso } from '../../../core/utils/temporizador.util';
 export class CatalogoComponent implements OnInit, OnDestroy {
   private readonly tienda = inject(TiendaService);
   private readonly auth = inject(AuthService);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -65,6 +86,9 @@ export class CatalogoComponent implements OnInit, OnDestroy {
   // ---- Favoritos ----
   /** Producto al que se le esta aplicando/quitando el corazon ahora mismo. */
   readonly favoritoCambioId = signal<string | null>(null);
+  /** Aviso flotante cuando falla el corazon. No se usa `error` porque ese
+   * signal reemplaza toda la rejilla de productos por un cuadro de error. */
+  readonly avisoError = signal('');
   /** IDs marcados como favorito por el usuario (mapa id -> true). */
   readonly favoritosMap = signal<Set<string>>(new Set());
 
@@ -297,7 +321,13 @@ export class CatalogoComponent implements OnInit, OnDestroy {
   }
 
   /** Suma una cantidad y, si hace falta, abre el checkout. Devuelve el carrito. */
-  private agregarAlCarritoConCantidad(producto: ProductoTienda, cantidad: number): void {
+  /** Agrega un producto al carrito. Si se pasa `luego`, se invoca tras
+   * confirmar que el item quedo guardado (evita navegar antes del POST). */
+  private agregarAlCarritoConCantidad(
+    producto: ProductoTienda,
+    cantidad: number,
+    luego?: () => void,
+  ): void {
     this.agregandoId.set(producto.id);
     this.error.set('');
     this.tienda.agregarItem(producto.id, cantidad).subscribe({
@@ -306,6 +336,7 @@ export class CatalogoComponent implements OnInit, OnDestroy {
         this.agregandoId.set(null);
         this.agregadoId.set(producto.id);
         programarAviso(this.destroyRef, () => this.agregadoId.set(null), 1200);
+        luego?.();
       },
       error: (e) => {
         this.error.set(e.detalle || 'Error al agregar.');
@@ -320,8 +351,9 @@ export class CatalogoComponent implements OnInit, OnDestroy {
       this.router.navigate(['/login'], { queryParams: { redirigir: '/checkout' } });
       return;
     }
-    this.agregarAlCarritoConCantidad(producto, this.cantidad());
-    this.router.navigate(['/checkout']);
+    this.agregarAlCarritoConCantidad(producto, this.cantidad(), () =>
+      this.router.navigate(['/checkout']),
+    );
   }
 
   /** Carga los favoritos del usuario autenticado para pintar los corazones. */
@@ -362,23 +394,33 @@ export class CatalogoComponent implements OnInit, OnDestroy {
       programarAviso(this.destroyRef, () => this.exito.set(''), 2500);
     };
 
+    // Si falla se avisa: antes el corazon se quedaba igual sin explicacion y
+    // parecia que los favoritos no funcionaban.
+    const alFallar = (e: { detalle?: string }) => {
+      this.favoritoCambioId.set(null);
+      this.avisoError.set(e?.detalle || 'No se pudo actualizar tus favoritos. Intenta de nuevo.');
+      programarAviso(this.destroyRef, () => this.avisoError.set(''), 4000);
+    };
+
     if (activando) {
-      this.tienda.agregarFavorito(id).subscribe({
-        next: alTerminar,
-        error: () => this.favoritoCambioId.set(null),
-      });
+      this.tienda.agregarFavorito(id).subscribe({ next: alTerminar, error: alFallar });
     } else {
-      this.tienda.quitarFavorito(id).subscribe({
-        next: alTerminar,
-        error: () => this.favoritoCambioId.set(null),
-      });
+      this.tienda.quitarFavorito(id).subscribe({ next: alTerminar, error: alFallar });
     }
   }
 
-  /** Sin sesion: pregunta si quiere ir al login antes de guardar el favorito. */
-  private preguntarLogin(): void {
-    const ir = window.confirm('Para guardar favoritos debes iniciar sesion. ¿Quieres ir al login?');
-    if (ir) this.router.navigate(['/login']);
+  /** Sin sesion: pregunta si quiere ir al login antes de guardar el favorito.
+   * Usa el dialogo propio (no `confirm()` nativo, que el navegador puede
+   * bloquear y deja la accion sin ninguna respuesta visible) y vuelve al
+   * catalogo despues de iniciar sesion. */
+  private async preguntarLogin(): Promise<void> {
+    const ir = await this.confirmacion.pedir({
+      titulo: 'Inicia sesion para guardar favoritos',
+      mensaje: 'Los favoritos se guardan en tu cuenta. ¿Quieres iniciar sesion ahora?',
+      confirmar: 'Iniciar sesion',
+      cancelar: 'Seguir mirando',
+    });
+    if (ir) this.router.navigate(['/login'], { queryParams: { redirigir: '/catalogo' } });
   }
 
   /** Valida la cantidad tecleada (1..stock) antes de guardarla. */

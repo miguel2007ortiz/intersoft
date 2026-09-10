@@ -1,11 +1,24 @@
+/**
+ * MonitoreoService — camaras y eventos
+ *
+ * Que hace: consulta las camaras registradas, su estado y los eventos.
+ * Donde se usa: /camaras.
+ * Por que asi: el frontend solo consulta; el registro y la conexion de las
+ * camaras los gestiona el backend.
+ */
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { capturarErrorDjango } from '../utils/django-error.util';
 import {
-  Camara, CamaraEscritura, GrabacionCamara,
-  Notificacion, ResultadoGrabaciones, ResultadoListaMonitoreo,
+  Camara,
+  CamaraEscritura,
+  GrabacionCamara,
+  Notificacion,
+  ResultadoGrabaciones,
+  ResultadoListaMonitoreo,
 } from '../models/monitoreo.model';
 
 /** Servicio de la fase 9: monitoreo de camaras y notificaciones.
@@ -18,61 +31,64 @@ export class MonitoreoService {
   camaras(activas?: boolean): Observable<ResultadoListaMonitoreo<Camara>> {
     const params: Record<string, string> = {};
     if (activas !== undefined) params['activas'] = activas ? '1' : '0';
-    return this.http.get<ResultadoListaMonitoreo<Camara>>(
-      `${this.api}/camaras/`, { params }).pipe(capturarErrorMonitoreo());
+    return this.http
+      .get<ResultadoListaMonitoreo<Camara>>(`${this.api}/camaras/`, { params })
+      .pipe(capturarErrorMonitoreo());
   }
 
   crearCamara(datos: CamaraEscritura): Observable<Camara> {
-    return this.http.post<Camara>(`${this.api}/camaras/`, datos)
-      .pipe(capturarErrorMonitoreo());
+    return this.http.post<Camara>(`${this.api}/camaras/`, datos).pipe(capturarErrorMonitoreo());
   }
 
   detalleCamara(id: string): Observable<Camara> {
-    return this.http.get<Camara>(`${this.api}/camaras/${id}/`)
-      .pipe(capturarErrorMonitoreo());
+    return this.http.get<Camara>(`${this.api}/camaras/${id}/`).pipe(capturarErrorMonitoreo());
   }
 
   editarCamara(id: string, datos: Partial<CamaraEscritura>): Observable<Camara> {
-    return this.http.patch<Camara>(`${this.api}/camaras/${id}/`, datos)
+    return this.http
+      .patch<Camara>(`${this.api}/camaras/${id}/`, datos)
       .pipe(capturarErrorMonitoreo());
   }
 
   eliminarCamara(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.api}/camaras/${id}/`)
-      .pipe(capturarErrorMonitoreo());
+    return this.http.delete<void>(`${this.api}/camaras/${id}/`).pipe(capturarErrorMonitoreo());
   }
 
   grabacion(id: string, fecha: string, hora: string): Observable<GrabacionCamara> {
-    return this.http.get<GrabacionCamara>(
-      `${this.api}/camaras/${id}/grabacion/`, { params: { fecha, hora } })
+    return this.http
+      .get<GrabacionCamara>(`${this.api}/camaras/${id}/grabacion/`, { params: { fecha, hora } })
       .pipe(capturarErrorMonitoreo());
   }
 
-  grabacionesCamera(id: string, opts?: { fecha?: string; pagina?: number }): Observable<ResultadoGrabaciones> {
+  grabacionesCamera(
+    id: string,
+    opts?: { fecha?: string; pagina?: number },
+  ): Observable<ResultadoGrabaciones> {
     const params: Record<string, string> = {};
     if (opts?.fecha) params['fecha'] = opts.fecha;
     if (opts?.pagina) params['pagina'] = String(opts.pagina);
-    return this.http.get<ResultadoGrabaciones>(
-      `${this.api}/camaras/${id}/grabaciones/`, { params })
+    return this.http
+      .get<ResultadoGrabaciones>(`${this.api}/camaras/${id}/grabaciones/`, { params })
       .pipe(capturarErrorMonitoreo());
   }
 
   notificaciones(incluirResueltas = false): Observable<ResultadoListaMonitoreo<Notificacion>> {
-    return this.http.get<ResultadoListaMonitoreo<Notificacion>>(
-      `${this.api}/notificaciones/`,
-      { params: incluirResueltas ? { incluir_resueltas: '1' } : {} })
+    return this.http
+      .get<ResultadoListaMonitoreo<Notificacion>>(`${this.api}/notificaciones/`, {
+        params: incluirResueltas ? { incluir_resueltas: '1' } : {},
+      })
       .pipe(capturarErrorMonitoreo());
   }
 
   marcarNotificacion(id: string, estado: 'revisada' | 'resuelta'): Observable<Notificacion> {
-    return this.http.patch<Notificacion>(
-      `${this.api}/notificaciones/${id}/`, { estado })
+    return this.http
+      .patch<Notificacion>(`${this.api}/notificaciones/${id}/`, { estado })
       .pipe(capturarErrorMonitoreo());
   }
 }
 
 /** Convierte la respuesta de error de Django en un mensaje legible. */
-const capturarErrorMonitoreo = <T,>() =>
+const capturarErrorMonitoreo = <T>() =>
   capturarErrorDjango<T>({
     mensajesPorStatus: { 403: 'Solo el administrador puede ver esta informacion.' },
   });

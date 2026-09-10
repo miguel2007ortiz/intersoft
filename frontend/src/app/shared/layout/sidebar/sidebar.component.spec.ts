@@ -4,7 +4,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { SidebarComponent } from './sidebar.component';
 
 function crearMql(esEscritorio: boolean) {
-  const evento = (matches: boolean) => ({ matches, media: '(min-width: 1024px)' }) as MediaQueryListEvent;
+  const evento = (matches: boolean) =>
+    ({ matches, media: '(min-width: 1024px)' }) as MediaQueryListEvent;
   const listeners = new Set<(e: MediaQueryListEvent) => void>();
   const mql = {
     matches: esEscritorio,
@@ -24,13 +25,23 @@ describe('SidebarComponent', () => {
   const mql = crearMql(true);
 
   beforeEach(() => {
-    vi.stubGlobal('matchMedia', vi.fn(() => mql));
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => mql),
+    );
     localStorage.clear();
     TestBed.configureTestingModule({
       imports: [SidebarComponent],
       providers: [
         provideRouter([]),
-        { provide: AuthService, useValue: { usuario: () => null, esAdministrador: () => false, tienePermiso: () => false } },
+        {
+          provide: AuthService,
+          useValue: {
+            usuario: () => null,
+            esAdministrador: () => false,
+            tienePermiso: () => false,
+          },
+        },
       ],
     });
   });

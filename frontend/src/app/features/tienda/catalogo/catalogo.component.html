@@ -1,4 +1,10 @@
-﻿<div class="catalogo">
+﻿<!--
+  Marketplace (pantalla publica). De arriba abajo: buscador con sugerencias,
+  carrusel de destacados, filtros, rejilla de tarjetas y detalle del producto
+  con comentarios. El corazon guarda favoritos; sin sesion abre el dialogo
+  propio invitando a iniciar sesion.
+-->
+<div class="catalogo">
   <header class="barra aparecer">
     <div class="contenedor barra-int">
       <a routerLink="/" class="logo"
@@ -589,7 +595,11 @@
   </section>
 
   @if (exito()) {
-    <div class="exito-toast">{{ exito() }}</div>
+    <div class="exito-toast" role="status" aria-live="polite">{{ exito() }}</div>
+  }
+
+  @if (avisoError()) {
+    <div class="exito-toast toast-error" role="alert" aria-live="assertive">{{ avisoError() }}</div>
   }
 
   @if (productoDetalle(); as p) {

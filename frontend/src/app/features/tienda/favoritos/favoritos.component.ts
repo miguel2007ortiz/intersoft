@@ -1,3 +1,19 @@
+﻿/**
+ * Mis favoritos — productos guardados por el usuario
+ *
+ * Que hace: lista los favoritos, permite quitarlos con el corazon y anadirlos
+ * al carrito directamente.
+ * Ruta: /favoritos (authGuard).
+ * Por que asi:
+ *   - La API devuelve el favorito con el producto completo dentro
+ *     (`producto_obj`), asi que la pantalla hace una sola peticion en vez de
+ *     pedir despues cada producto por separado.
+ *   - La animacion de entrada de las tarjetas la aporta la clase global
+ *     `.aparecer`. Este componente NO declara su propia `animation` sobre la
+ *     tarjeta: al hacerlo pisaba a la global y, al terminar, la tarjeta volvia
+ *     al `opacity: 0` de base y los favoritos desaparecian a los 0,5 s.
+ */
+
 import { DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';

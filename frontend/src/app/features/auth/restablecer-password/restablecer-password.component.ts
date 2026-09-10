@@ -1,3 +1,13 @@
+/**
+ * Restablecer contrasena — paso 2 de 2
+ *
+ * Que hace: toma el token del enlace del correo, valida la contrasena nueva
+ * con las mismas reglas del backend y la guarda.
+ * Ruta: /restablecer?token=... (publica).
+ * Por que asi: los requisitos que faltan se muestran mientras se escribe
+ * (validadores de core/validators), no al pulsar el boton.
+ */
+
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';

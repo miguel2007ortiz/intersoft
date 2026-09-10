@@ -1,3 +1,20 @@
+/**
+ * app.routes.ts — mapa de pantallas y quien puede entrar a cada una
+ *
+ * Que hace: define cada URL, su titulo de pestana, los guards que la protegen
+ * y el componente que carga.
+ * Donde se usa: lo lee `app.config.ts` al arrancar.
+ * Por que asi: todas las pantallas usan `loadComponent` (carga diferida), asi
+ * el navegador solo descarga el codigo de la pantalla que se visita.
+ * Los tres flujos se leen aqui de un vistazo:
+ *   Flujo 1 (sesion): rutas con `authGuard` — dashboard, configuracion, carrito...
+ *   Flujo 2 (operacion): `personalGuard` o `permisoGuard('empleado.leer')` —
+ *     clientes, productos, empleados, POS, ventas, inventario.
+ *   Flujo 3 (administracion): `adminGuard` — admin/usuarios y admin/roles.
+ * Rutas publicas (sin guard): '', catalogo, login, registro, recuperar.
+ * Al final, `{ path: '**' }` manda cualquier URL desconocida al marketplace.
+ */
+
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
@@ -169,6 +186,16 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/tienda/checkout/checkout.component').then((m) => m.CheckoutComponent),
+  },
+  {
+    // Adonde devuelve la pasarela al comprador tras pagar (WOMPI_REDIRECT_URL).
+    path: 'pago/retorno',
+    title: 'Resultado del pago — InterSoft',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/tienda/pago-retorno/pago-retorno.component').then(
+        (m) => m.PagoRetornoComponent,
+      ),
   },
   {
     path: 'pedidos',

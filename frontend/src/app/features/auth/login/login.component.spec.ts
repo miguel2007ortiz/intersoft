@@ -31,8 +31,9 @@ describe('LoginComponent (redireccion segura)', () => {
 
   const destinoActual = (): string => {
     const fixture = TestBed.createComponent(LoginComponent);
-    const destino = (fixture.componentInstance as unknown as { destinoDespuesDeLogin(): string })
-      .destinoDespuesDeLogin();
+    const destino = (
+      fixture.componentInstance as unknown as { destinoDespuesDeLogin(): string }
+    ).destinoDespuesDeLogin();
     fixture.destroy();
     return destino;
   };

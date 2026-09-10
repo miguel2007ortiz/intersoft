@@ -1,3 +1,13 @@
+/**
+ * inclinar3d — inclina ligeramente una tarjeta al pasar el cursor
+ *
+ * Que hace: calcula la posicion del raton dentro del elemento y aplica un
+ * `transform` con perspectiva; al salir vuelve a su sitio.
+ * Donde se usa: tarjetas de producto.
+ * Por que asi: solo toca `transform`, que el navegador anima en la GPU sin
+ * recalcular la posicion del resto de la pagina.
+ */
+
 import { Directive, ElementRef, HostListener, Renderer2, inject } from '@angular/core';
 
 /** Inclina la tarjeta en 3D siguiendo el cursor (efecto "tilt"). */

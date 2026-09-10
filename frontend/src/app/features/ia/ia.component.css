@@ -18,8 +18,7 @@
   gap: var(--e4);
   background:
     radial-gradient(circle at 15% 10%, var(--brillo-suave), transparent 45%),
-    radial-gradient(circle at 90% 85%, var(--brillo-suave), transparent 40%),
-    var(--papel);
+    radial-gradient(circle at 90% 85%, var(--brillo-suave), transparent 40%), var(--papel);
 }
 
 .vacio {
@@ -32,14 +31,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 76px; height: 76px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
   background: var(--primario-suave);
   color: var(--primario);
   margin-bottom: var(--e4);
 }
-.vacio__titulo { margin: 0 0 var(--e2); font-size: 20px; font-weight: 700; }
-.vacio__texto { margin: 0; color: var(--gris); }
+.vacio__titulo {
+  margin: 0 0 var(--e2);
+  font-size: 20px;
+  font-weight: 700;
+}
+.vacio__texto {
+  margin: 0;
+  color: var(--gris);
+}
 
 .burbuja {
   max-width: 78%;
@@ -49,7 +56,7 @@
   background: var(--blanco);
   align-self: flex-start;
   box-shadow: var(--sombra);
-  animation: aparecer-arriba .25s ease both;
+  animation: aparecer-arriba 0.25s ease both;
 }
 .burbuja--usuario {
   align-self: flex-end;
@@ -65,12 +72,20 @@
   display: block;
   font-size: 12px;
   font-weight: 700;
-  opacity: .75;
+  opacity: 0.75;
   margin-bottom: var(--e1);
-  letter-spacing: .02em;
+  letter-spacing: 0.02em;
 }
-.burbuja__texto { margin: 0; white-space: pre-wrap; word-break: break-word; }
-.burbuja__err { margin: var(--e2) 0 0; font-size: 13px; color: var(--error); }
+.burbuja__texto {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.burbuja__err {
+  margin: var(--e2) 0 0;
+  font-size: 13px;
+  color: var(--error);
+}
 
 .chat__error {
   display: flex;
@@ -81,8 +96,14 @@
   border-left: none;
   border-right: none;
 }
-.btn-chico { padding: var(--e2) var(--e4); font-size: 13px; }
-.chat__error .btn { margin-left: auto; white-space: nowrap; }
+.btn-chico {
+  padding: var(--e2) var(--e4);
+  font-size: 13px;
+}
+.chat__error .btn {
+  margin-left: auto;
+  white-space: nowrap;
+}
 
 .chat__entrada {
   display: flex;

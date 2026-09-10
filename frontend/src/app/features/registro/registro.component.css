@@ -1,20 +1,37 @@
-.caja-auth { width: min(520px, 100%); }
-.caja-auth h1 { margin: 0 0 var(--e1); font-size: 26px; }
-.subtitulo { margin: 0 0 var(--e5); color: var(--gris); font-size: 15px; }
+.caja-auth {
+  width: min(520px, 100%);
+}
+.caja-auth h1 {
+  margin: 0 0 var(--e1);
+  font-size: 26px;
+}
+.subtitulo {
+  margin: 0 0 var(--e5);
+  color: var(--gris);
+  font-size: 15px;
+}
 
-fieldset { border: 0; padding: 0; margin: 0 0 var(--e5); }
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--e5);
+}
 legend {
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--primario-osc);
   margin-bottom: var(--e3);
   padding: 0;
 }
 
-.campo-password { position: relative; }
-.campo-password input { padding-right: 78px; }
+.campo-password {
+  position: relative;
+}
+.campo-password input {
+  padding-right: 78px;
+}
 .ver {
   position: absolute;
   right: var(--e2);
@@ -30,7 +47,9 @@ legend {
   padding: var(--e1) var(--e2);
 }
 
-.ayuda.ok { color: var(--ok); }
+.ayuda.ok {
+  color: var(--ok);
+}
 
 .enlaces {
   margin-top: var(--e5);
@@ -39,4 +58,7 @@ legend {
   font-size: 14.5px;
   text-align: center;
 }
-.enlaces a { color: var(--primario-osc); font-weight: 600; }
+.enlaces a {
+  color: var(--primario-osc);
+  font-weight: 600;
+}

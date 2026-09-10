@@ -1,3 +1,15 @@
+/**
+ * POS — punto de venta en mostrador (Flujo 2)
+ *
+ * Que hace: arma una venta buscando productos, controla stock, aplica el
+ * cliente (o el generico de mostrador) y registra la venta.
+ * Ruta: /pos (authGuard + personalGuard).
+ * Por que asi: el total se calcula en el frontend solo para mostrarlo; el que
+ * vale es el que devuelve el backend al crear la venta. Si el stock cambio
+ * mientras se armaba el carrito, el backend responde con el detalle de que
+ * falta y la pantalla lo muestra producto por producto.
+ */
+
 import { DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';

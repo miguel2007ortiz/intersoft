@@ -1,3 +1,14 @@
+/**
+ * Reportes — analitica con filtros y exportacion
+ *
+ * Que hace: elige el rango de fechas y la agrupacion, muestra las tablas y
+ * graficas y permite exportar.
+ * Ruta: /reportes (authGuard + adminGuard).
+ * Por que asi: al cambiar el rango se vuelve a preguntar al backend en vez de
+ * filtrar en memoria, para que el resultado sea el mismo que el que vera
+ * cualquier otro usuario de la empresa.
+ */
+
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
@@ -5,14 +16,20 @@ import { AnalyticsService } from '../../core/services/analytics.service';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { ErrorCatalogo } from '../../core/models/catalogo.model';
 import {
-  CategoriaFiltro, DatosReporte, FiltrosAnalitica, TipoReporte,
+  CategoriaFiltro,
+  DatosReporte,
+  FiltrosAnalitica,
+  TipoReporte,
 } from '../../core/models/analytics.model';
 
 /** Fase 7: generacion y exportacion de reportes (solo ADMINISTRADOR).
  * Las exportaciones se hacen sin librerias: Excel = CSV con BOM, PDF = HTML
  * de impresion que el navegador guarda como PDF. */
 
-interface ColumnaCol { clave: string; nombre: string; }
+interface ColumnaCol {
+  clave: string;
+  nombre: string;
+}
 
 @Component({
   selector: 'app-reportes',
@@ -103,8 +120,12 @@ export class ReportesComponent {
     if (typeof valor === 'number') {
       // Las columnas de dinero e ingresos resaltan el valor con moneda.
       const claveBaja = clave.toLowerCase();
-      if (claveBaja.includes('ingreso') || claveBaja.includes('total')
-        || claveBaja.includes('valor') || claveBaja.includes('comprado')) {
+      if (
+        claveBaja.includes('ingreso') ||
+        claveBaja.includes('total') ||
+        claveBaja.includes('valor') ||
+        claveBaja.includes('comprado')
+      ) {
         return this.dinero(valor);
       }
       return this.numero(valor);
@@ -114,7 +135,12 @@ export class ReportesComponent {
 
   esMoneda(clave: string): boolean {
     const c = clave.toLowerCase();
-    return c.includes('ingreso') || c.includes('total')
-      || c.includes('valor') || c.includes('comprado') || c.includes('rotacion');
+    return (
+      c.includes('ingreso') ||
+      c.includes('total') ||
+      c.includes('valor') ||
+      c.includes('comprado') ||
+      c.includes('rotacion')
+    );
   }
 }

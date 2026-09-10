@@ -1,3 +1,13 @@
+/**
+ * PanelShell — marco de todas las pantallas del panel interno
+ *
+ * Que hace: coloca la sidebar, la topbar y el area de contenido donde entra
+ * cada pantalla via <ng-content>.
+ * Donde se usa: envuelve las pantallas de los Flujos 2 y 3.
+ * Por que asi: el menu y la cabecera se escriben una sola vez. Cada pantalla se
+ * ocupa solo de su contenido, y un cambio de navegacion se hace en un archivo.
+ */
+
 import { Component, HostListener, signal } from '@angular/core';
 import { BrilloCursorDirective } from '../../directives/brillo-cursor.directive';
 import { SiteFooterComponent } from '../site-footer/site-footer.component';

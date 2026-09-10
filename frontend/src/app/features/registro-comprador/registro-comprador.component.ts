@@ -1,3 +1,13 @@
+/**
+ * Registro de comprador — cuenta de cliente del marketplace
+ *
+ * Que hace: crea una cuenta con rol CLIENTE, incluidos los datos de envio
+ * (documento, direccion y ciudad) que el checkout va a exigir despues.
+ * Ruta: /registro-comprador (publica).
+ * Por que asi: se piden la direccion y la ciudad aqui, una sola vez, para que
+ * al comprar no haya que interrumpir el pago pidiendo datos.
+ */
+
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -36,8 +46,12 @@ export class RegistroCompradorComponent {
       password: ['', [Validators.required, fuerzaPassword]],
       password2: ['', [Validators.required]],
       tipo_documento: ['CC', [Validators.required]],
-      numero_documento: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(20)]],
+      numero_documento: [
+        '',
+        [Validators.required, Validators.minLength(3), Validators.maxLength(20)],
+      ],
       telefono: ['', []],
+      direccion: ['', [Validators.required, Validators.maxLength(200)]],
       departamento: ['', []],
       ciudad: ['', []],
     },
@@ -79,6 +93,7 @@ export class RegistroCompradorComponent {
         tipo_documento: v.tipo_documento,
         numero_documento: v.numero_documento,
         telefono: v.telefono ?? '',
+        direccion: v.direccion,
         ciudad: v.ciudad ?? '',
       })
       .subscribe({

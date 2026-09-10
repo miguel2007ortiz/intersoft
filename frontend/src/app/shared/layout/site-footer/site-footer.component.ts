@@ -1,3 +1,12 @@
+/**
+ * SiteFooter — pie de las pantallas publicas
+ *
+ * Que hace: enlaces legales, contacto y aviso de derechos.
+ * Donde se usa: marketplace y pantallas publicas.
+ * Por que asi: separado del pie del panel interno, que no lleva contenido
+ * comercial.
+ */
+
 import { Component } from '@angular/core';
 
 /** Pie minimo y compartido por toda la app: nombre, tagline y copyright.

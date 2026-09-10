@@ -1,3 +1,13 @@
+/**
+ * Topbar — barra superior del panel
+ *
+ * Que hace: titulo de la pantalla, interruptor de modo noche, campana de
+ * notificaciones y menu del usuario con cerrar sesion.
+ * Donde se usa: dentro de PanelShell.
+ * Por que asi: lee el usuario del AuthService por signal, asi que el nombre y
+ * el rol se actualizan solos sin que nadie tenga que refrescar la barra.
+ */
+
 import { Component, inject, input, output } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';

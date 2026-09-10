@@ -1,10 +1,25 @@
+/**
+ * SeguridadService — API de administracion de usuarios, roles y permisos
+ *
+ * Que hace: alta y edicion de usuarios, catalogo de permisos, creacion de
+ * roles y asignacion de permisos a cada rol.
+ * Donde se usa: pantallas del Flujo 3 (/admin/usuarios y /admin/roles).
+ * Por que asi: el catalogo de permisos se pide al backend en vez de estar
+ * escrito aqui, para que el frontend no se quede desactualizado cuando el
+ * backend anada permisos nuevos.
+ */
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { capturarErrorDjango } from '../utils/django-error.util';
 import {
-  DatosRol, DatosUsuario, PermisoCatalogo, RolAdmin, UsuarioAdmin,
+  DatosRol,
+  DatosUsuario,
+  PermisoCatalogo,
+  RolAdmin,
+  UsuarioAdmin,
 } from '../models/seguridad.model';
 
 @Injectable({ providedIn: 'root' })
@@ -14,67 +29,77 @@ export class SeguridadService {
 
   // ---- Usuarios ----
   listarUsuarios(): Observable<Lista<UsuarioAdmin>> {
-    return this.http.get<Lista<UsuarioAdmin>>(`${this.api}/usuarios/`)
+    return this.http
+      .get<Lista<UsuarioAdmin>>(`${this.api}/usuarios/`)
       .pipe(capturarError<Lista<UsuarioAdmin>>());
   }
 
   crearUsuario(datos: DatosUsuario): Observable<UsuarioAdmin> {
-    return this.http.post<UsuarioAdmin>(`${this.api}/usuarios/`, datos)
+    return this.http
+      .post<UsuarioAdmin>(`${this.api}/usuarios/`, datos)
       .pipe(capturarError<UsuarioAdmin>());
   }
 
   editarUsuario(id: string, datos: DatosUsuario): Observable<UsuarioAdmin> {
-    return this.http.put<UsuarioAdmin>(`${this.api}/usuarios/${id}/`, datos)
+    return this.http
+      .put<UsuarioAdmin>(`${this.api}/usuarios/${id}/`, datos)
       .pipe(capturarError<UsuarioAdmin>());
   }
 
   desactivarUsuario(id: string): Observable<UsuarioAdmin> {
-    return this.http.post<UsuarioAdmin>(`${this.api}/usuarios/${id}/desactivar/`, {})
+    return this.http
+      .post<UsuarioAdmin>(`${this.api}/usuarios/${id}/desactivar/`, {})
       .pipe(capturarError<UsuarioAdmin>());
   }
 
   reactivarUsuario(id: string): Observable<UsuarioAdmin> {
-    return this.http.post<UsuarioAdmin>(`${this.api}/usuarios/${id}/reactivar/`, {})
+    return this.http
+      .post<UsuarioAdmin>(`${this.api}/usuarios/${id}/reactivar/`, {})
       .pipe(capturarError<UsuarioAdmin>());
   }
 
   // ---- Roles ----
   listarRoles(): Observable<Lista<RolAdmin>> {
-    return this.http.get<Lista<RolAdmin>>(`${this.api}/roles/`)
+    return this.http
+      .get<Lista<RolAdmin>>(`${this.api}/roles/`)
       .pipe(capturarError<Lista<RolAdmin>>());
   }
 
   listarPermisos(): Observable<Lista<PermisoCatalogo>> {
-    return this.http.get<Lista<PermisoCatalogo>>(`${this.api}/permisos/`)
+    return this.http
+      .get<Lista<PermisoCatalogo>>(`${this.api}/permisos/`)
       .pipe(capturarError<Lista<PermisoCatalogo>>());
   }
 
   crearRol(datos: DatosRol): Observable<RolAdmin> {
-    return this.http.post<RolAdmin>(`${this.api}/roles/`, datos)
-      .pipe(capturarError<RolAdmin>());
+    return this.http.post<RolAdmin>(`${this.api}/roles/`, datos).pipe(capturarError<RolAdmin>());
   }
 
   editarRol(id: string, datos: Partial<DatosRol>): Observable<RolAdmin> {
-    return this.http.patch<RolAdmin>(`${this.api}/roles/${id}/`, datos)
+    return this.http
+      .patch<RolAdmin>(`${this.api}/roles/${id}/`, datos)
       .pipe(capturarError<RolAdmin>());
   }
 
   eliminarRol(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.api}/roles/${id}/`)
-      .pipe(capturarError<void>());
+    return this.http.delete<void>(`${this.api}/roles/${id}/`).pipe(capturarError<void>());
   }
 
   clonarRol(id: string): Observable<RolAdmin> {
-    return this.http.post<RolAdmin>(`${this.api}/roles/${id}/clonar/`, {})
+    return this.http
+      .post<RolAdmin>(`${this.api}/roles/${id}/clonar/`, {})
       .pipe(capturarError<RolAdmin>());
   }
 }
 
 /** Respuesta paginada simple del backend */
-interface Lista<T> { resultados: T[]; total: number; }
+interface Lista<T> {
+  resultados: T[];
+  total: number;
+}
 
 /** Convierte la respuesta de error de Django en un mensaje legible. */
-const capturarError = <T,>() =>
+const capturarError = <T>() =>
   capturarErrorDjango<T>({
     mensajesPorStatus: { 403: 'Solo el ADMINISTRADOR puede hacer esto.' },
   });

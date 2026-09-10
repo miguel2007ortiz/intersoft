@@ -1,3 +1,14 @@
+/**
+ * Inventario — movimientos de stock (Flujo 2)
+ *
+ * Que hace: muestra entradas, salidas y ajustes con su motivo, usuario y
+ * fecha, y permite registrar un movimiento manual.
+ * Ruta: /inventario (authGuard + personalGuard).
+ * Por que asi: el inventario es un libro de movimientos, no un numero que se
+ * edita. Cada cambio queda con autor y motivo, y el stock del producto es la
+ * consecuencia de esos movimientos.
+ */
+
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';

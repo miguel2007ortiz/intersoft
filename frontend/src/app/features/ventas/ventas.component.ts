@@ -1,5 +1,16 @@
+/**
+ * Ventas — historial y anulacion (Flujo 2)
+ *
+ * Que hace: lista las ventas con filtros por fecha y estado, abre el detalle
+ * y permite anular una venta.
+ * Ruta: /ventas (authGuard + personalGuard).
+ * Por que asi: anular pide confirmacion explicita porque devuelve stock y
+ * afecta la contabilidad; el backend es quien repone el inventario, aqui solo
+ * se refresca la lista al terminar.
+ */
+
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
@@ -74,6 +85,12 @@ export class VentasComponent implements OnInit {
 
   cancelarAnulacion(): void {
     this.ventaAnulando.set(null);
+  }
+
+  /** Escape cierra el modal de anulacion, como cualquier otro dialogo. */
+  @HostListener('document:keydown.escape')
+  cerrarConEscape(): void {
+    if (this.ventaAnulando()) this.cancelarAnulacion();
   }
 
   confirmarAnulacion(): void {

@@ -1,3 +1,14 @@
+/**
+ * Alertas de stock — avisos de productos por debajo del minimo
+ *
+ * Que hace: lista las alertas que genera el backend cuando un producto baja
+ * de su stock minimo y permite marcarlas como revisadas.
+ * Ruta: /alertas (authGuard + personalGuard).
+ * Por que asi: las alertas las crea el backend con una senal al guardar cada
+ * venta o movimiento; el frontend solo las consulta. Asi tambien se generan
+ * cuando la venta entra por el marketplace y no por esta pantalla.
+ */
+
 import { DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CatalogoService } from '../../core/services/catalogo.service';
