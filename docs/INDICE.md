@@ -29,6 +29,7 @@ trabajo y decisiones informales viven en `vault/`.
 - [vault/README.md](../vault/README.md) — qué es el vault y cómo se usa.
 - [vault/decisiones.md](../vault/decisiones.md) — registro informal de decisiones.
 - [vault/plantillas/decision-nueva.md](../vault/plantillas/decision-nueva.md) — plantilla de nueva decisión.
+- [vault/auditoria-bugs-opencode.md](../vault/auditoria-bugs-opencode.md) — auditoría de bugs reales + plan de prompts de 4 fases para OpenCode.
 
 ## Flujo habitual
 1. Requisitos y arquitectura → `docs/ROADMAP.md` + `docs/RIESGOS.md`.

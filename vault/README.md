@@ -12,6 +12,7 @@ complemento, **no** una fuente de verdad: el contrato sigue siendo
 | `README.md` | Este índice. |
 | `decisiones.md` | Registro cronológico de decisiones tomadas (informal, sin fricción). |
 | `plantillas/decision-nueva.md` | Plantilla para documentar una decisión nueva. |
+| `auditoria-bugs-opencode.md` | Hallazgos reales de bugs (backend) + plan de prompts de 4 fases para corregirlos con OpenCode. |
 
 ## Cómo se usa
 
