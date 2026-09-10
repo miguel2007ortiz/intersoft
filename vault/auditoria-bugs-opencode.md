@@ -1,9 +1,25 @@
 ---
 titulo: "Auditoría de bugs backend + plan de prompts para OpenCode"
 fecha: 2026-09-10
-estado: pendiente de ejecutar con OpenCode
+estado: hallazgos 1-6 corregidos directamente por Claude (sin pasar por OpenCode);
+  7-13 siguen pendientes
 relacionado: [docs/RIESGOS.md, AGENTS.md]
 ---
+
+**Nota (2026-09-10):** el plan de prompts de más abajo se escribió para
+ejecutarse con OpenCode, pero el usuario pidió arreglar los bugs
+directamente en esta sesión. Los hallazgos #1, #2, #3, #4, #5 y #6 ya están
+corregidos, con test de regresión y commit atómico en `intersoft_miguel`:
+
+- #1 (XSS `exportar_html`) + #11 (CSV injection): `commit 75dbc90` (sesión previa).
+- #2 (DIAN dentro de lock) + #3 (`IntegrityError` nota crédito): `commit 17c1d0a` (sesión previa).
+- #4 (RBAC hardcodeado): `commit f03b3b5`.
+- #5 (pasarela cobra antes de reservar stock) + #6 (carrera en `_carrito_de`): `commit fcc873f`.
+
+Quedan pendientes: #7, #8, #9, #10, #12, #13 (ver plan de Fase 2 de más abajo
+para #9/#10 vía "2E"; #7, #8, #12, #13 no tienen bloque de prompt propio
+todavía). El plan de Fase 1/3/4 de OpenCode de más abajo queda como
+referencia histórica, no se ejecutó.
 
 # Auditoría de bugs — InterSoft (backend)
 
@@ -211,11 +227,15 @@ para revisión.
 
 ## Seguimiento
 
-- [ ] Fase 1 corrida y validada
-- [ ] 2A xss-reporte-html
-- [ ] 2B nota-credito-integrityerror
-- [ ] 2C dian-fuera-de-transaccion
-- [ ] 2D rbac-permisos-finos
-- [ ] 2E contrato-error-500
-- [ ] Fase 3 (241 backend + 20 frontend verdes)
+- [ ] Fase 1 corrida y validada (no se ejecuto: se corrigio directo, ver nota arriba)
+- [x] 2A xss-reporte-html — commit 75dbc90
+- [x] 2B nota-credito-integrityerror — commit 17c1d0a
+- [x] 2C dian-fuera-de-transaccion — commit 17c1d0a
+- [x] 2D rbac-permisos-finos — commit f03b3b5
+- [ ] 2E contrato-error-500 — pendiente
+- [x] (fuera del plan original) checkout cobra tras reservar stock + carrera
+      en _carrito_de — commit fcc873f
+- [ ] Fase 3 (gates completos AGENTS.md §4) — corridos parcialmente:
+      ruff + `python manage.py test core cuentas` (529/529 OK) en cada
+      commit; falta bandit, coverage --fail-under=70 y gates de frontend
 - [ ] Fase 4 (docs/CAMBIOS-*.md + PR body)
