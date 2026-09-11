@@ -4,39 +4,44 @@ Bitácora de estado al corte para retomar sesión. **Supervisor (Claude) y
 ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 `vault/INDICE.md` (regla 1.1 de `AGENTS.md`).
 
-Última actualización: 2026-09-10 (PR #2 mergeado a `main`; además, revisión
-de UX/lógica de negocio desde la experiencia del admin: 2 hallazgos nuevos
-sin fix aún, #16 y #17).
+Última actualización: 2026-09-11 (#16 y #17 mergeados a `main` vía PR #3 y
+PR #4, con CI real en verde y aprobación explícita del usuario).
 
-> **Actualización de ejecución (OpenCode)**: #16 y #17 implementados y con
-> gates verdes en dos ramas `fix/` desde `origin/main` (pendientes de revisar
-> por el supervisor y mergear):
-> - `fix/confirmacion-desactivar-usuario` (commit `78a0fd3`): desactivar en
->   `/admin/usuarios` pide confirmación (ConfirmacionService, destructivo);
->   reactivar directo. Gates frontend verdes, 99 tests (+3 spec nuevo).
-> - `fix/validacion-rango-fechas` (commits `ec3dd1d`, `0d8e035`): backend
->   `FiltrosDashboard` rechaza `fecha_inicio > fecha_fin` con 400
->   `FILTROS_INVALIDOS` (cubre dashboard, reportes JSON y export Excel/PDF);
->   frontend deshabilita Aplicar/Generar/Excel/PDF y avisa. Bonus: se alineó
->   ese path al contrato `{codigo, detalle, errores}` (clave aditiva) y se
->   corrigió el test preexistente de reporte que usaba tipo `ventas` inválido.
->   Gates verdes: backend 627 tests, cobertura 92% core, ruff/bandit/
->   makemigrations; frontend 100 tests.
-> - Follow-up abierto para el supervisor: `/api/ventas/` (listado) tiene
->   validación de fechas aparte (solo formato, sin rango) — fuera del alcance
->   de #17; decidir si entra en otra tarea.
+> **#16 y #17: implementados por OpenCode, revisados por Claude, mergeados.**
+> - `fix/confirmacion-desactivar-usuario` (commit `78a0fd3`) → **PR #3**
+>   (merge commit `5a1df36`): desactivar en `/admin/usuarios` pide
+>   confirmación (`ConfirmacionService.pedir`, destructivo), igual que
+>   `empleados.component.ts`; reactivar sigue directo. CI real: 3/3 jobs
+>   verdes (run `34552871214`).
+> - `fix/validacion-rango-fechas` (commits `ec3dd1d`, `0d8e035`) → **PR #4**
+>   (merge commit `3cc5879`): backend `FiltrosDashboard` rechaza
+>   `fecha_inicio > fecha_fin` con 400 `FILTROS_INVALIDOS` (cubre dashboard,
+>   reportes JSON y export Excel/PDF); frontend deshabilita
+>   Aplicar/Generar/Excel/PDF y avisa. Bonus: se alineó ese path al contrato
+>   `{codigo, detalle, errores}` (clave aditiva) y se corrigió el test
+>   preexistente de reporte que usaba tipo `ventas` inválido. CI real: 3/3
+>   jobs verdes (run `34552890748`).
+> - Ambas ramas se habían creado solo en local (no en `origin`); se
+>   pushearon antes de abrir los PR. `origin/main` pasó de `6fe8aca` a
+>   `3cc5879`. Ramas `fix/*` intactas, sin borrar.
+> - Follow-up abierto (no bloqueante): `/api/ventas/` (listado) tiene su
+>   propia validación de fechas, solo de formato, sin chequeo de rango —
+>   fuera del alcance de #17; decidir si entra en otra tarea.
 
 ---
 
 ## Rama y repositorio
 
-- **`main` actualizado**: PR #2 (`intersoft_miguel` → `main`) mergeado
-  (merge commit `6fe8aca`, aprobado explícitamente por el usuario tras el
-  dictamen del supervisor). `origin/main` pasó de `1c2f2f4` a `6fe8aca`.
-- Rama de trabajo `intersoft_miguel` (HEAD `71c1079`) queda intacta, sin
-  eliminar, ya integrada en `main`.
-- PR: https://github.com/miguel2007ortiz/intersoft/pull/2 — cuerpo en
-  `docs/PR-BODY-12.md`. Estado: **MERGED**.
+- **`main` actualizado**: `origin/main` en `3cc5879` (`1c2f2f4` → `6fe8aca`
+  vía PR #2 → `3cc5879` vía PR #3 + PR #4, los tres aprobados explícitamente
+  por el usuario tras dictamen del supervisor).
+- Ramas de trabajo `intersoft_miguel`, `fix/confirmacion-desactivar-usuario`,
+  `fix/validacion-rango-fechas` quedan intactas, sin eliminar, ya integradas
+  en `main`.
+- PRs: #2 (`docs/PR-BODY-12.md`), #3
+  (https://github.com/miguel2007ortiz/intersoft/pull/3, #16), #4
+  (https://github.com/miguel2007ortiz/intersoft/pull/4, #17). Los tres:
+  **MERGED**.
 
 ## Gates al corte (verificados hoy)
 
@@ -97,69 +102,56 @@ Claude retomó y **terminó el #13** (commits `197ba99` + `3c0ae5f`, en
 **No queda ningún pendiente de la auditoría.** Cobertura de cobertura
 post-fix pendiente de confirmar con gates frontend (build/test:ci).
 
-## PENDIENTE 3 — nuevo: 2 hallazgos de UX/lógica real, sin fix (leídos en código)
+## PENDIENTE 3 — RESUELTO: #16 y #17 (UX/lógica real del admin), implementados y mergeados
 
 Revisión distinta a la auditoría de código de `vault/auditoria-bugs-opencode.md`
-(#1-#15, ya cerrada): esta busca fallos que un admin real pisaría por lógica
-de negocio o inconsistencia de UX, no vulnerabilidades. Los dos siguientes
-están confirmados leyendo código (frontend + backend), **sin corregir aún**.
+(#1-#15, ya cerrada): esta buscó fallos que un admin real pisaría por lógica
+de negocio o inconsistencia de UX, no vulnerabilidades. Encontrados por
+Claude leyendo código, implementados por OpenCode, revisados y mergeados por
+Claude con aprobación explícita del usuario.
 
-**#16 — Desactivar cuenta en `/admin/usuarios` no pide confirmación (sí en
-`/empleados` para la misma acción):**
-- `frontend/src/app/features/administracion/usuarios/usuarios.component.ts:134-149`
-  (`alternarActivo`) llama a `desactivarUsuario`/`reactivarUsuario` directo al
-  click del botón (`usuarios.component.html:131-140`), sin `ConfirmacionService`.
-- Contraste directo: `features/empleados/empleados.component.ts:218` (mismo
-  verbo, "desactivar") sí pide confirmación con `ConfirmacionService` (su
-  propio comentario lo dice: "Al desactivar se pide confirmacion"), igual que
-  `roles.component.ts` y `clientes.component.ts`.
-- Por qué importa para el admin: `/admin/usuarios` es la pantalla que puede
-  desactivar **cualquier cuenta de la empresa, incluida otro ADMINISTRADOR**
-  (la única excepción es la propia, oculta por `u.email !== auth.usuario()?.email`)
-  — es la superficie más sensible de las cuatro y es la única sin el segundo
-  clic de seguridad. Un click accidental en la fila equivocada bloquea el
-  login de un compañero sin aviso ni deshacer visible.
-- Fix sugerido (no aplicado): envolver `alternarActivo` con
-  `this.confirmacion.confirmar({...})` cuando `usuario.activo` (igual patrón
-  que `empleados.component.ts`); reactivar puede quedar sin confirmar.
+**#16 — Desactivar cuenta en `/admin/usuarios` no pedía confirmación (sí en
+`/empleados` para la misma acción) — corregido:**
+- Hallazgo: `usuarios.component.ts::alternarActivo` llamaba a
+  `desactivarUsuario`/`reactivarUsuario` directo al click, sin
+  `ConfirmacionService`, a diferencia de `empleados.component.ts`,
+  `roles.component.ts` y `clientes.component.ts`. Relevante porque
+  `/admin/usuarios` puede desactivar cualquier cuenta de la empresa,
+  incluida otro ADMINISTRADOR.
+- Fix: `commit 78a0fd3` — `alternarActivo` ahora pide confirmación
+  (`ConfirmacionService.pedir`) solo al desactivar; reactivar sigue directo.
+  `+1` spec de regresión (confirmar/cancelar).
+- Merge: **PR #3**, merge commit `5a1df36`, CI real 3/3 jobs verdes
+  (run `34552871214`).
 
-**#17 — Filtros de fecha de Dashboard/Reportes no validan el rango
-(`fecha_inicio` > `fecha_fin` o fechas futuras) ni frontend ni backend:**
-- Frontend: `features/dashboard/dashboard.component.html:38-49` y
-  `features/reportes/reportes.component.ts` (`filtros()`) mandan
-  `fecha_inicio`/`fecha_fin` de un `<input type="date">` sin `min`/`max` ni
-  chequeo de que inicio ≤ fin antes de pedir "Aplicar" o exportar.
-- Backend: `backend/core/analytics.py` `FiltrosDashboard._fecha_valida`
-  (línea ~48) solo valida el formato `YYYY-MM-DD`; nunca compara
-  `fecha_inicio` contra `fecha_fin`. El `WHERE fecha BETWEEN inicio AND fin`
-  con inicio > fin no da error, da **0 filas**.
-- Por qué importa para el admin: si invierte las fechas sin querer (fácil en
-  un `<input type="date">` con teclado), el dashboard y los reportes
-  exportados (Excel/PDF vía `reportes.component.ts::exportar`) quedan vacíos
-  sin ningún mensaje que diga "el rango es inválido" — parece que no hay
-  ventas en el período en vez de avisar del error de captura. Mismo problema
-  para fechas futuras (reporte "vacío" que en realidad es "todavía no pasó").
-- Fix sugerido (no aplicado): en frontend, deshabilitar "Aplicar"/"Exportar"
-  y mostrar mensaje si `fechaInicio() > fechaFin()`; en backend, que
-  `FiltrosDashboard` levante el mismo `ValueError` que ya usa para
-  `categoria` inválida cuando `fecha_inicio > fecha_fin` (un solo lugar,
-  cubre dashboard, reportes y export a la vez).
+**#17 — Filtros de fecha de Dashboard/Reportes no validaban el rango — corregido:**
+- Hallazgo: ni frontend ni backend comprobaban `fecha_inicio ≤ fecha_fin`;
+  un rango invertido daba 0 filas sin ningún aviso, incluidos los reportes
+  exportados a Excel/PDF.
+- Fix: `commits ec3dd1d` + `0d8e035` — backend `FiltrosDashboard` levanta
+  `ValueError` → 400 `FILTROS_INVALIDOS` con `errores: None` (contrato
+  completo); frontend deshabilita Aplicar/Generar/Excel/PDF y avisa en
+  pantalla. De paso corrigió un test preexistente con `tipo=ventas`
+  inválido (`tests_fase5.py`).
+- Merge: **PR #4**, merge commit `3cc5879`, CI real 3/3 jobs verdes
+  (run `34552890748`).
+- Follow-up no bloqueante: `/api/ventas/` (listado) valida formato de fecha
+  pero no rango — fuera de alcance de #17, pendiente decidir si entra en
+  otra tarea.
 
-Ninguno de los dos toca módulos cerrados de la auditoría original ni
-invariantes de `AGENTS.md` §3; son candidatos a rama `fix/` propia si se
-decide corregirlos.
+Ninguno de los dos tocó módulos cerrados de la auditoría original ni
+invariantes de `AGENTS.md` §3.
 
 ## Pendientes de riesgo menores (no bloqueantes)
 
 - `docs/RIESGOS.md` §pendientes: cámaras (video en vivo/transcodificación),
   volumen de datos (materializar/archivar), media a S3 (requiere
   `django-storages`, gate de supervisor).
-- Auditoría cerrada: #1–#6, #8–#12 fixeados; #7 y #8 revisados/cerrados;
-  #13 = este pendiente.
+- Auditoría cerrada: #1–#17 fixeados o revisados (#7 revisado sin bug activo).
 
 ## Flujo acordado
 
 1. Leer `AGENTS.md` §1.1 + `docs/INDICE.md` + `vault/INDICE.md` + este archivo.
-2. `intersoft_miguel` ya está mergeada a `main` (PR #2, `6fe8aca`). Próximo
-   trabajo debería partir de `main` actualizado.
+2. `main` está al día (`3cc5879`, PR #2 + #3 + #4). Próximo trabajo debería
+   partir de `main` actualizado.
 3. No push a `main` sin revisión de Claude. Commits Conventional Commits.
