@@ -63,6 +63,12 @@ export class DashboardComponent {
   /** Solo los ADMINISTRADOR ven el dashboard de analitica. */
   readonly esAdmin = computed(() => this.auth.esAdministrador());
 
+  /** true si "Desde" es posterior a "Hasta": rango sin datos, se bloquea
+   * "Aplicar" y se avisa antes de preguntarle al backend. */
+  readonly rangoInvalido = computed(
+    () => !!this.fechaInicio() && !!this.fechaFin() && this.fechaInicio() > this.fechaFin(),
+  );
+
   constructor() {
     this.cargarTodo();
   }

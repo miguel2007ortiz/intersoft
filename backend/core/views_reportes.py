@@ -28,7 +28,8 @@ def _filtros_dashboard(request):
     except ValueError as exc:
         return None, Response(
             {"codigo": "FILTROS_INVALIDOS",
-             "detalle": str(exc)},
+             "detalle": str(exc),
+             "errores": None},
             status=status.HTTP_400_BAD_REQUEST)
     return filtros, None
 

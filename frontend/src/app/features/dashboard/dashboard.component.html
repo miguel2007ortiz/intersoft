@@ -56,11 +56,24 @@
           }
         </select>
       </div>
-      <button type="button" class="btn btn-primario" (click)="cargarTodo()" [disabled]="cargando()">
+      <button
+        type="button"
+        class="btn btn-primario"
+        (click)="cargarTodo()"
+        [disabled]="cargando() || rangoInvalido()"
+      >
         {{ cargando() ? 'Cargando...' : 'Aplicar' }}
       </button>
     </div>
   </section>
+
+  @if (rangoInvalido()) {
+    <section class="contenedor bloque">
+      <div class="aviso aviso-error" role="alert">
+        El rango de fechas es invalido: la fecha inicial no puede ser posterior a la final.
+      </div>
+    </section>
+  }
 
   @if (error(); as mensaje) {
     <section class="contenedor bloque">

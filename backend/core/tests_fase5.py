@@ -198,6 +198,24 @@ class FiltrosDashboardTest(BaseFase5Test):
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "FILTROS_INVALIDOS")
 
+    def test_dashboard_rango_invertido_devuelve_400(self):
+        api = self.api_como(self.admin)
+        respuesta = api.get("/api/dashboard/resumen/",
+                            {"fecha_inicio": "2026-10-01",
+                             "fecha_fin": "2026-09-01"})
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.data["codigo"], "FILTROS_INVALIDOS")
+        self.assertIn("errores", respuesta.data)
+
+    def test_reporte_rango_invertido_devuelve_400(self):
+        api = self.api_como(self.admin)
+        respuesta = api.get("/api/reportes/vista/",
+                            {"tipo": "ventas_diarias", "fecha_inicio": "2026-10-01",
+                             "fecha_fin": "2026-09-01"})
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.data["codigo"], "FILTROS_INVALIDOS")
+        self.assertIn("errores", respuesta.data)
+
     def test_dashboard_categoria_invalida_devuelve_400(self):
         api = self.api_como(self.admin)
         respuesta = api.get("/api/dashboard/ventas/", {"categoria": "x"})
@@ -206,8 +224,9 @@ class FiltrosDashboardTest(BaseFase5Test):
     def test_reporte_fecha_invalida_devuelve_400(self):
         api = self.api_como(self.admin)
         respuesta = api.get("/api/reportes/vista/",
-                            {"tipo": "ventas", "fecha_inicio": "bad"})
+                            {"tipo": "ventas_diarias", "fecha_inicio": "bad"})
         self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.data["codigo"], "FILTROS_INVALIDOS")
 
 
 # -------------------- Validacion url_stream camaras -----------------------

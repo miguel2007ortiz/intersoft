@@ -34,6 +34,10 @@ class FiltrosDashboard:
             request.query_params.get('fecha_inicio'))
         self.fecha_fin = self._fecha_valida(
             request.query_params.get('fecha_fin'))
+        if self.fecha_inicio and self.fecha_fin and self.fecha_inicio > self.fecha_fin:
+            raise ValueError(
+                "El rango de fechas es invalido: fecha_inicio no puede ser "
+                "posterior a fecha_fin.")
         self.categoria_id = None
         categoria = request.query_params.get('categoria')
         if categoria:
