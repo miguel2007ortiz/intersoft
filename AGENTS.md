@@ -118,6 +118,17 @@ npm run test:ci
 Si cualquiera falla, la tarea no está lista — OpenCode corrige antes de
 reportar a Claude, no reporta "terminado con fallas conocidas".
 
+**Auto-revisión obligatoria antes de reportar "listo"**: además de los gates,
+OpenCode corre contra su propio diff el checklist de anti-patrones de
+`vault/plantillas/antipatrones-opencode.md` (10 patrones extraídos de los 15
+hallazgos de `vault/auditoria-bugs-opencode.md`: interpolación sin escapar,
+I/O externa dentro de locks, `IntegrityError` sin capturar, RBAC por string,
+orden dinero/stock, doble fuente de verdad, agregados sin filtro de estado,
+contrato de error, CI sin espejar `settings.py`, fixtures con supuestos
+desactualizados). Si el fix toca alguno, agrega el test de regresión
+específico en el mismo commit. El supervisor corre su contraparte
+(`vault/plantillas/revision-antipatrones-claude.md`) antes de aprobar merge.
+
 ---
 
 ## 5. Estrategia de actualización automatizada (mejorar sin romper)

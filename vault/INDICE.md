@@ -9,7 +9,7 @@ antes de iniciar una tarea** (ver la sección de consulta en `AGENTS.md`).
 - [README.md](README.md) — qué es el vault y cómo se usa.
 - [decisiones.md](decisiones.md) — registro informal de decisiones y su contexto.
 - [auditoria-bugs-opencode.md](auditoria-bugs-opencode.md) — auditoría de bugs
-  reales de OpenCode, hallazgos #1–#13 y su estado (fix/cerrado/pendiente).
+  reales de OpenCode, hallazgos #1–#15 y su estado (fix/cerrado/pendiente).
 
 ## Plantillas
 - [plantillas/decision-nueva.md](plantillas/decision-nueva.md) — plantilla para
