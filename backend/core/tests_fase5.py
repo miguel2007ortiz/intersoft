@@ -205,6 +205,7 @@ class FiltrosDashboardTest(BaseFase5Test):
                              "fecha_fin": "2026-09-01"})
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "FILTROS_INVALIDOS")
+        self.assertIn("errores", respuesta.data)
 
     def test_reporte_rango_invertido_devuelve_400(self):
         api = self.api_como(self.admin)
@@ -213,6 +214,7 @@ class FiltrosDashboardTest(BaseFase5Test):
                              "fecha_fin": "2026-09-01"})
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.data["codigo"], "FILTROS_INVALIDOS")
+        self.assertIn("errores", respuesta.data)
 
     def test_dashboard_categoria_invalida_devuelve_400(self):
         api = self.api_como(self.admin)
