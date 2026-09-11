@@ -4,8 +4,9 @@ Bitácora de estado al corte para retomar sesión. **Supervisor (Claude) y
 ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 `vault/INDICE.md` (regla 1.1 de `AGENTS.md`).
 
-Última actualización: 2026-09-10 (PR #2 mergeado a `main` con aprobación
-explícita del usuario).
+Última actualización: 2026-09-10 (PR #2 mergeado a `main`; además, revisión
+de UX/lógica de negocio desde la experiencia del admin: 2 hallazgos nuevos
+sin fix aún, #16 y #17).
 
 ---
 
@@ -77,6 +78,58 @@ Claude retomó y **terminó el #13** (commits `197ba99` + `3c0ae5f`, en
 
 **No queda ningún pendiente de la auditoría.** Cobertura de cobertura
 post-fix pendiente de confirmar con gates frontend (build/test:ci).
+
+## PENDIENTE 3 — nuevo: 2 hallazgos de UX/lógica real, sin fix (leídos en código)
+
+Revisión distinta a la auditoría de código de `vault/auditoria-bugs-opencode.md`
+(#1-#15, ya cerrada): esta busca fallos que un admin real pisaría por lógica
+de negocio o inconsistencia de UX, no vulnerabilidades. Los dos siguientes
+están confirmados leyendo código (frontend + backend), **sin corregir aún**.
+
+**#16 — Desactivar cuenta en `/admin/usuarios` no pide confirmación (sí en
+`/empleados` para la misma acción):**
+- `frontend/src/app/features/administracion/usuarios/usuarios.component.ts:134-149`
+  (`alternarActivo`) llama a `desactivarUsuario`/`reactivarUsuario` directo al
+  click del botón (`usuarios.component.html:131-140`), sin `ConfirmacionService`.
+- Contraste directo: `features/empleados/empleados.component.ts:218` (mismo
+  verbo, "desactivar") sí pide confirmación con `ConfirmacionService` (su
+  propio comentario lo dice: "Al desactivar se pide confirmacion"), igual que
+  `roles.component.ts` y `clientes.component.ts`.
+- Por qué importa para el admin: `/admin/usuarios` es la pantalla que puede
+  desactivar **cualquier cuenta de la empresa, incluida otro ADMINISTRADOR**
+  (la única excepción es la propia, oculta por `u.email !== auth.usuario()?.email`)
+  — es la superficie más sensible de las cuatro y es la única sin el segundo
+  clic de seguridad. Un click accidental en la fila equivocada bloquea el
+  login de un compañero sin aviso ni deshacer visible.
+- Fix sugerido (no aplicado): envolver `alternarActivo` con
+  `this.confirmacion.confirmar({...})` cuando `usuario.activo` (igual patrón
+  que `empleados.component.ts`); reactivar puede quedar sin confirmar.
+
+**#17 — Filtros de fecha de Dashboard/Reportes no validan el rango
+(`fecha_inicio` > `fecha_fin` o fechas futuras) ni frontend ni backend:**
+- Frontend: `features/dashboard/dashboard.component.html:38-49` y
+  `features/reportes/reportes.component.ts` (`filtros()`) mandan
+  `fecha_inicio`/`fecha_fin` de un `<input type="date">` sin `min`/`max` ni
+  chequeo de que inicio ≤ fin antes de pedir "Aplicar" o exportar.
+- Backend: `backend/core/analytics.py` `FiltrosDashboard._fecha_valida`
+  (línea ~48) solo valida el formato `YYYY-MM-DD`; nunca compara
+  `fecha_inicio` contra `fecha_fin`. El `WHERE fecha BETWEEN inicio AND fin`
+  con inicio > fin no da error, da **0 filas**.
+- Por qué importa para el admin: si invierte las fechas sin querer (fácil en
+  un `<input type="date">` con teclado), el dashboard y los reportes
+  exportados (Excel/PDF vía `reportes.component.ts::exportar`) quedan vacíos
+  sin ningún mensaje que diga "el rango es inválido" — parece que no hay
+  ventas en el período en vez de avisar del error de captura. Mismo problema
+  para fechas futuras (reporte "vacío" que en realidad es "todavía no pasó").
+- Fix sugerido (no aplicado): en frontend, deshabilitar "Aplicar"/"Exportar"
+  y mostrar mensaje si `fechaInicio() > fechaFin()`; en backend, que
+  `FiltrosDashboard` levante el mismo `ValueError` que ya usa para
+  `categoria` inválida cuando `fecha_inicio > fecha_fin` (un solo lugar,
+  cubre dashboard, reportes y export a la vez).
+
+Ninguno de los dos toca módulos cerrados de la auditoría original ni
+invariantes de `AGENTS.md` §3; son candidatos a rama `fix/` propia si se
+decide corregirlos.
 
 ## Pendientes de riesgo menores (no bloqueantes)
 
