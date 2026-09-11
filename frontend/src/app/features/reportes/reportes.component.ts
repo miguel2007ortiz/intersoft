@@ -60,6 +60,12 @@ export class ReportesComponent {
 
   readonly esAdmin = computed(() => this.auth.esAdministrador());
 
+  /** true si "Desde" es posterior a "Hasta": bloquea Generar/exportar y avisa
+   * en pantalla en vez de exportar un reporte que sale vacio. */
+  readonly rangoInvalido = computed(
+    () => !!this.fechaInicio() && !!this.fechaFin() && this.fechaInicio() > this.fechaFin(),
+  );
+
   constructor() {
     this.analytics.tiposReporte().subscribe({
       next: (r) => {

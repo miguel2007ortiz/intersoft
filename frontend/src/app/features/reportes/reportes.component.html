@@ -14,7 +14,7 @@
           type="button"
           class="btn btn-secundario"
           (click)="exportar('excel')"
-          [disabled]="!tipoSel() || cargando()"
+          [disabled]="!tipoSel() || cargando() || rangoInvalido()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -37,7 +37,7 @@
           type="button"
           class="btn btn-primario"
           (click)="exportar('pdf')"
-          [disabled]="!tipoSel() || cargando()"
+          [disabled]="!tipoSel() || cargando() || rangoInvalido()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -96,12 +96,20 @@
         type="button"
         class="btn btn-primario"
         (click)="verReporte()"
-        [disabled]="!tipoSel() || cargando()"
+        [disabled]="!tipoSel() || cargando() || rangoInvalido()"
       >
         {{ cargando() ? 'Generando...' : 'Generar' }}
       </button>
     </div>
   </section>
+
+  @if (rangoInvalido()) {
+    <section class="contenedor bloque">
+      <div class="aviso aviso-error" role="alert">
+        El rango de fechas es invalido: la fecha inicial no puede ser posterior a la final.
+      </div>
+    </section>
+  }
 
   @if (error(); as mensaje) {
     <section class="contenedor bloque">
