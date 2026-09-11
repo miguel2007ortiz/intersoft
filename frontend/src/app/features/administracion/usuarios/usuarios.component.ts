@@ -15,6 +15,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { SeguridadService } from '../../../core/services/seguridad.service';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { programarAviso } from '../../../core/utils/temporizador.util';
 import { DatosUsuario, ErrorSeguridad, UsuarioAdmin } from '../../../core/models/seguridad.model';
 
@@ -29,6 +30,7 @@ const CERRAR_AVISO_MS = 4000;
 export class UsuariosComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly seguridad = inject(SeguridadService);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly destroyRef = inject(DestroyRef);
   readonly auth = inject(AuthService);
 
@@ -131,7 +133,19 @@ export class UsuariosComponent implements OnInit {
     });
   }
 
-  alternarActivo(usuario: UsuarioAdmin): void {
+  async alternarActivo(usuario: UsuarioAdmin): Promise<void> {
+    if (usuario.activo) {
+      const acepto = await this.confirmacion.pedir({
+        titulo: 'Desactivar cuenta',
+        mensaje:
+          `La cuenta de ${usuario.nombre || usuario.email} dejara de poder ` +
+          'entrar al sistema. Podras reactivarla despues.',
+        confirmar: 'Desactivar',
+        destructivo: true,
+      });
+      if (!acepto) return;
+    }
+
     const peticion = usuario.activo
       ? this.seguridad.desactivarUsuario(usuario.id)
       : this.seguridad.reactivarUsuario(usuario.id);
