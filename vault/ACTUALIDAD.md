@@ -8,6 +8,24 @@ ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 de UX/lógica de negocio desde la experiencia del admin: 2 hallazgos nuevos
 sin fix aún, #16 y #17).
 
+> **Actualización de ejecución (OpenCode)**: #16 y #17 implementados y con
+> gates verdes en dos ramas `fix/` desde `origin/main` (pendientes de revisar
+> por el supervisor y mergear):
+> - `fix/confirmacion-desactivar-usuario` (commit `78a0fd3`): desactivar en
+>   `/admin/usuarios` pide confirmación (ConfirmacionService, destructivo);
+>   reactivar directo. Gates frontend verdes, 99 tests (+3 spec nuevo).
+> - `fix/validacion-rango-fechas` (commits `ec3dd1d`, `0d8e035`): backend
+>   `FiltrosDashboard` rechaza `fecha_inicio > fecha_fin` con 400
+>   `FILTROS_INVALIDOS` (cubre dashboard, reportes JSON y export Excel/PDF);
+>   frontend deshabilita Aplicar/Generar/Excel/PDF y avisa. Bonus: se alineó
+>   ese path al contrato `{codigo, detalle, errores}` (clave aditiva) y se
+>   corrigió el test preexistente de reporte que usaba tipo `ventas` inválido.
+>   Gates verdes: backend 627 tests, cobertura 92% core, ruff/bandit/
+>   makemigrations; frontend 100 tests.
+> - Follow-up abierto para el supervisor: `/api/ventas/` (listado) tiene
+>   validación de fechas aparte (solo formato, sin rango) — fuera del alcance
+>   de #17; decidir si entra en otra tarea.
+
 ---
 
 ## Rama y repositorio
