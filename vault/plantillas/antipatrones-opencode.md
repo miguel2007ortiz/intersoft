@@ -2,7 +2,7 @@
 
 > Extraído de `vault/auditoria-bugs-opencode.md` (15 hallazgos reales, #1-#15).
 > Pegar como checklist ANTES de reportar "listo" en cualquier fix nuevo — son
-> los mismos 8 patrones que causaron los 15 bugs encontrados hasta ahora.
+> los mismos 10 patrones que causaron los 15 bugs encontrados hasta ahora.
 
 ---
 
