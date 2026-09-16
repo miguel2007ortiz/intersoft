@@ -71,6 +71,5 @@ export type CodigoErrorAuth =
 export interface ErrorAuth {
   codigo: CodigoErrorAuth;
   mensaje: string;
-  intentosRestantes?: number;
   desbloqueoEn?: string;
 }

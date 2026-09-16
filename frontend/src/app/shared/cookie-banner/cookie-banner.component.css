@@ -1,3 +1,10 @@
+/* BUG-16 QA: el contenedor del banner no debe cubrir la pagina ni
+   interceptar los clics del formulario de acceso. La capa exterior (el host
+   del componente) no recibe eventos: solo la tarjeta del aviso es clicable. */
+:host {
+  pointer-events: none;
+}
+
 .aviso-cookies {
   position: fixed;
   left: 50%;
@@ -14,6 +21,7 @@
   border-radius: var(--radio);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
   animation: subir-aviso 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: auto;
 }
 
 .aviso-cookies p {

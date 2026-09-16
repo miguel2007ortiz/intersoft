@@ -18,7 +18,9 @@
         </div>
         <div class="fila">
           <dt>Empresa</dt>
-          <dd>{{ auth.usuario()?.empresa }}</dd>
+          <dd>
+            {{ auth.usuario()?.empresa_nombre || '—' }}
+          </dd>
         </div>
       </dl>
 

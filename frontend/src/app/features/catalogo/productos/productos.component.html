@@ -201,7 +201,12 @@
               <tr>
                 <td class="celda-producto">
                   @if (p.imagen) {
-                    <img class="miniatura" [src]="p.imagen" [alt]="p.nombre" />
+                    <img
+                      class="miniatura"
+                      [src]="p.imagen"
+                      [alt]="p.nombre"
+                      (error)="$any($event.target).src = 'assets/sin-imagen.png'"
+                    />
                   }
                   <div>
                     <strong>{{ p.nombre }}</strong>
@@ -226,16 +231,49 @@
                   <button type="button" class="enlace" (click)="alternarActivo(p)">
                     {{ p.activo ? 'Desactivar' : 'Reactivar' }}
                   </button>
-                  @if (!p.tiene_ventas) {
-                    <button type="button" class="enlace peligro" (click)="eliminar(p)">
-                      Eliminar
-                    </button>
-                  }
+                  <button
+                    type="button"
+                    class="enlace peligro"
+                    [disabled]="p.tiene_ventas"
+                    [title]="
+                      p.tiene_ventas
+                        ? 'No se puede eliminar: tiene ventas asociadas.'
+                        : 'Eliminar del catalogo'
+                    "
+                    [attr.aria-disabled]="p.tiene_ventas"
+                    (click)="!p.tiene_ventas && eliminar(p)"
+                  >
+                    Eliminar
+                  </button>
                 </td>
               </tr>
             }
           </tbody>
         </table>
+        @if (totalPaginas() > 1) {
+          <nav class="paginacion" aria-label="Paginacion de productos">
+            <button
+              type="button"
+              class="btn btn-secundario btn-sm"
+              [disabled]="pagina() <= 1"
+              (click)="irAPagina(pagina() - 1)"
+            >
+              &lsaquo; Anterior
+            </button>
+            <span class="texto-paginacion">
+              Pagina {{ pagina() }} de {{ totalPaginas() }}
+              <span class="gris">({{ totalProductos() }} productos)</span>
+            </span>
+            <button
+              type="button"
+              class="btn btn-secundario btn-sm"
+              [disabled]="pagina() >= totalPaginas()"
+              (click)="irAPagina(pagina() + 1)"
+            >
+              Siguiente &rsaquo;
+            </button>
+          </nav>
+        }
       }
     </div>
   </section>

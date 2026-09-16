@@ -98,7 +98,12 @@ describe('ProductosComponent', () => {
     boton?.click();
     fixture.detectChanges();
     html = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(catalogo.listarProductos).toHaveBeenLastCalledWith({ busqueda: '', activo: undefined });
+    expect(catalogo.listarProductos).toHaveBeenLastCalledWith({
+      busqueda: '',
+      activo: undefined,
+      pagina: 1,
+      limite: 25,
+    });
     expect(html).toContain('Aun no hay productos');
   });
 });

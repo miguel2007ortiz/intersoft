@@ -51,6 +51,11 @@ export class ProductosComponent implements OnInit {
   readonly busqueda = signal('');
   /** filtro del catalogo: todos | activos | inactivos */
   readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  /** Paginacion */
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
+  readonly totalProductos = signal(0);
+  readonly POR_PAGINA = 25;
   /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
   private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
@@ -73,16 +78,25 @@ export class ProductosComponent implements OnInit {
     this.cargando.set(true);
     this.errorCarga.set(null);
     const activo = this.filtroEstado() === 'todos' ? undefined : this.filtroEstado() === 'activos';
-    this.catalogo.listarProductos({ busqueda: this.busqueda(), activo }).subscribe({
-      next: ({ resultados }) => {
-        this.productos.set(resultados);
-        this.cargando.set(false);
-      },
-      error: (e) => {
-        this.errorCarga.set(e.detalle ?? 'No se pudo cargar la lista.');
-        this.cargando.set(false);
-      },
-    });
+    this.catalogo
+      .listarProductos({
+        busqueda: this.busqueda(),
+        activo,
+        pagina: this.pagina(),
+        limite: this.POR_PAGINA,
+      })
+      .subscribe({
+        next: ({ resultados, total, total_paginas }) => {
+          this.productos.set(resultados);
+          this.totalProductos.set(total ?? 0);
+          this.totalPaginas.set(total_paginas ?? 1);
+          this.cargando.set(false);
+        },
+        error: (e) => {
+          this.errorCarga.set(e.detalle ?? 'No se pudo cargar la lista.');
+          this.cargando.set(false);
+        },
+      });
   }
 
   cargarCategorias(): void {
@@ -91,17 +105,26 @@ export class ProductosComponent implements OnInit {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
+    this.pagina.set(1);
     this.buscarDebounced();
   }
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {
     this.filtroEstado.set(estado);
+    this.pagina.set(1);
     this.cargar();
   }
 
   limpiarFiltros(): void {
     this.busqueda.set('');
     this.filtroEstado.set('todos');
+    this.pagina.set(1);
+    this.cargar();
+  }
+
+  irAPagina(p: number): void {
+    if (p < 1 || p > this.totalPaginas()) return;
+    this.pagina.set(p);
     this.cargar();
   }
 

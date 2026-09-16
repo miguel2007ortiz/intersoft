@@ -83,14 +83,14 @@
           aria-label="Buscar producto"
           placeholder="Buscar producto..."
           [(ngModel)]="busquedaProducto"
-          (input)="buscarProductosDebounced()"
+          (input)="buscarProductos()"
           class="input"
         />
         <label class="filtro-stock">
           <input
             type="checkbox"
             [(ngModel)]="filtroStockBajo"
-            (ngModelChange)="cargarProductos()"
+            (ngModelChange)="buscarProductos()"
           />
           Solo stock bajo
         </label>
@@ -127,7 +127,7 @@
                   <td>{{ p.nombre }}</td>
                   <td class="sku">{{ p.sku }}</td>
                   <td>{{ p.categoria || '—' }}</td>
-                  <td>{{ p.precio | number }}</td>
+                  <td>{{ p.precio | moneda }}</td>
                   <td class="stock">{{ p.stock }}</td>
                   <td>{{ p.stock_minimo }}</td>
                   <td>
@@ -141,6 +141,30 @@
               }
             </tbody>
           </table>
+          @if (totalPaginas() > 1) {
+            <nav class="paginacion" aria-label="Paginacion de inventario">
+              <button
+                type="button"
+                class="btn btn-secundario btn-sm"
+                [disabled]="pagina() <= 1"
+                (click)="irAPagina(pagina() - 1)"
+              >
+                &lsaquo; Anterior
+              </button>
+              <span class="texto-paginacion">
+                Pagina {{ pagina() }} de {{ totalPaginas() }}
+                <span class="gris">({{ totalProductos() }} productos)</span>
+              </span>
+              <button
+                type="button"
+                class="btn btn-secundario btn-sm"
+                [disabled]="pagina() >= totalPaginas()"
+                (click)="irAPagina(pagina() + 1)"
+              >
+                Siguiente &rsaquo;
+              </button>
+            </nav>
+          }
         </div>
       }
 

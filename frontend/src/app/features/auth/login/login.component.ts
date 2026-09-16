@@ -44,9 +44,12 @@ export class LoginComponent implements OnDestroy {
   readonly recienRegistrado = this.ruta.snapshot.queryParamMap.get('registrado') === '1';
   readonly sesionExpirada = this.ruta.snapshot.queryParamMap.get('expirada') === '1';
 
-  /** Reloj de 1s: alimenta la cuenta regresiva del bloqueo. */
+  /** Reloj de 1s solo mientras hay un bloqueo activo (BUG-26 QA): no se
+   * desperdicia un setInterval permanente si el login va bien. Arranca al
+   * recibir CUENTA_BLOQUEADA y se detiene cuando termina la cuenta regresiva
+   * o se destruye el componente. */
   private readonly ahora = signal(Date.now());
-  private readonly reloj = setInterval(() => this.ahora.set(Date.now()), 1000);
+  private reloj: ReturnType<typeof setInterval> | null = null;
 
   readonly segundosBloqueo = computed(() => {
     const desbloqueo = this.error()?.desbloqueoEn;
@@ -70,6 +73,22 @@ export class LoginComponent implements OnDestroy {
     return this.formulario.controls.password;
   }
 
+  private arrancarReloj(): void {
+    if (this.reloj) return;
+    this.ahora.set(Date.now());
+    this.reloj = setInterval(() => {
+      this.ahora.set(Date.now());
+      if (this.segundosBloqueo() <= 0) this.detenerReloj();
+    }, 1000);
+  }
+
+  private detenerReloj(): void {
+    if (this.reloj) {
+      clearInterval(this.reloj);
+      this.reloj = null;
+    }
+  }
+
   enviar(): void {
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
@@ -80,6 +99,7 @@ export class LoginComponent implements OnDestroy {
     this.auth.login(this.formulario.getRawValue()).subscribe({
       next: () => {
         this.cargando.set(false);
+        this.detenerReloj();
         const nombre = this.auth.usuario()?.nombre;
         if (nombre) this.welcome.mostrar(nombre);
         const destino = this.destinoDespuesDeLogin();
@@ -88,13 +108,14 @@ export class LoginComponent implements OnDestroy {
       error: (e: ErrorAuth) => {
         this.cargando.set(false);
         this.error.set(e);
+        if (e.codigo === 'CUENTA_BLOQUEADA') this.arrancarReloj();
         this.password.reset();
       },
     });
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.reloj);
+    this.detenerReloj();
   }
 
   /** Valida la redireccion post-login: solo rutas internas del SPA

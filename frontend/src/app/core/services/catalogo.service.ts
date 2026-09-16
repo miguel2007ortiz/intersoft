@@ -88,11 +88,13 @@ export class CatalogoService {
 
   // ---- Productos ----
   listarProductos(
-    opciones: { busqueda?: string; activo?: boolean } = {},
+    opciones: { busqueda?: string; activo?: boolean; pagina?: number; limite?: number } = {},
   ): Observable<Lista<Producto>> {
     const params: Record<string, string> = {};
     if (opciones.busqueda) params['busqueda'] = opciones.busqueda;
     if (opciones.activo !== undefined) params['activo'] = String(opciones.activo);
+    if (opciones.pagina) params['pagina'] = String(opciones.pagina);
+    if (opciones.limite) params['limite'] = String(opciones.limite);
     return this.http
       .get<Lista<Producto>>(`${this.api}/productos/`, { params })
       .pipe(capturarError<Lista<Producto>>());
@@ -174,11 +176,13 @@ export class CatalogoService {
 
   // ---- Inventario ----
   listarInventario(
-    filtros: { busqueda?: string; stock_bajo?: boolean } = {},
+    filtros: { busqueda?: string; stock_bajo?: boolean; pagina?: number; limite?: number } = {},
   ): Observable<Lista<InventarioProducto>> {
     const params: Record<string, string> = {};
     if (filtros.busqueda) params['busqueda'] = filtros.busqueda;
     if (filtros.stock_bajo !== undefined) params['stock_bajo'] = String(filtros.stock_bajo);
+    if (filtros.pagina) params['pagina'] = String(filtros.pagina);
+    if (filtros.limite) params['limite'] = String(filtros.limite);
     return this.http
       .get<Lista<InventarioProducto>>(`${this.api}/inventario/productos/`, { params })
       .pipe(capturarError<Lista<InventarioProducto>>());

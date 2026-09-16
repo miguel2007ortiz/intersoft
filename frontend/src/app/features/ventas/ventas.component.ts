@@ -9,7 +9,7 @@
  * se refresca la lista al terminar.
  */
 
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -17,13 +17,14 @@ import { CatalogoService } from '../../core/services/catalogo.service';
 import { Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
 import { EstadoVacioComponent } from '../../shared/estado-vacio/estado-vacio.component';
+import { MonedaPipe } from '../../core/pipes/moneda.pipe';
 import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-ventas',
   imports: [
     DatePipe,
-    DecimalPipe,
+    MonedaPipe,
     FormsModule,
     RouterLink,
     PanelShellComponent,

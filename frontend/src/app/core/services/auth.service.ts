@@ -199,7 +199,6 @@ export class AuthService {
       return {
         codigo: 'CREDENCIALES_INVALIDAS',
         mensaje: 'Correo o contraseña incorrectos.',
-        intentosRestantes: cuerpo.intentos_restantes,
       };
     if (e.status === 403 && cuerpo.codigo === 'EMPRESA_INACTIVA')
       return {

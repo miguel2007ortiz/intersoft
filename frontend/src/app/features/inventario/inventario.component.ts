@@ -9,17 +9,18 @@
  * consecuencia de esos movimientos.
  */
 
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { InventarioProducto, MovimientoInventario } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { MonedaPipe } from '../../core/pipes/moneda.pipe';
 import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-inventario',
-  imports: [DatePipe, DecimalPipe, FormsModule, PanelShellComponent],
+  imports: [DatePipe, MonedaPipe, FormsModule, PanelShellComponent],
   templateUrl: './inventario.component.html',
   styleUrls: ['./inventario.component.css'],
 })
@@ -34,6 +35,11 @@ export class InventarioComponent implements OnInit {
   readonly errorMovimientos = signal<string | null>(null);
   busquedaProducto = '';
   filtroStockBajo = false;
+  /** Paginacion del listado (mismo patron que el catalogo de productos). */
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
+  readonly totalProductos = signal(0);
+  readonly POR_PAGINA = 25;
   /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
   readonly buscarProductosDebounced = debounce(this.destroyRef, () => this.cargarProductos(), 300);
   readonly mostrarAjuste = signal(false);
@@ -57,10 +63,14 @@ export class InventarioComponent implements OnInit {
       .listarInventario({
         busqueda: this.busquedaProducto || undefined,
         stock_bajo: this.filtroStockBajo || undefined,
+        pagina: this.pagina(),
+        limite: this.POR_PAGINA,
       })
       .subscribe({
-        next: (r) => {
-          this.productos.set(r.resultados);
+        next: ({ resultados, total, total_paginas }) => {
+          this.productos.set(resultados);
+          this.totalProductos.set(total ?? 0);
+          this.totalPaginas.set(total_paginas ?? 1);
           this.error.set(null);
           this.cargando.set(false);
         },
@@ -69,6 +79,17 @@ export class InventarioComponent implements OnInit {
           this.cargando.set(false);
         },
       });
+  }
+
+  buscarProductos(): void {
+    this.pagina.set(1);
+    this.buscarProductosDebounced();
+  }
+
+  irAPagina(p: number): void {
+    if (p < 1 || p > this.totalPaginas()) return;
+    this.pagina.set(p);
+    this.cargarProductos();
   }
 
   cargarMovimientos(): void {

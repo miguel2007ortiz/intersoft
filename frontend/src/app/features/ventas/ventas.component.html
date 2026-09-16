@@ -34,7 +34,7 @@
         </div>
         <div class="stat">
           <span class="stat-label">Monto total</span>
-          <span class="stat-valor">{{ estadisticas()!.total_ventas | number }}</span>
+          <span class="stat-valor">{{ estadisticas()!.total_ventas | moneda }}</span>
         </div>
       </section>
     }
@@ -85,7 +85,7 @@
                 <td>{{ v.fecha | date: 'dd/MM/yy HH:mm' }}</td>
                 <td>{{ v.cliente_nombre }}</td>
                 <td>{{ v.total_items }}</td>
-                <td class="total">{{ v.total | number }}</td>
+                <td class="total">{{ v.total | moneda }}</td>
                 <td>
                   <span class="badge" [class]="v.estado">{{ v.estado }}</span>
                 </td>
@@ -117,7 +117,7 @@
           </p>
           <p>
             Cliente: {{ ventaAnulando()!.cliente_nombre }} — Total:
-            {{ ventaAnulando()!.total | number }}
+            {{ ventaAnulando()!.total | moneda }}
           </p>
           <label>
             Motivo de anulacion

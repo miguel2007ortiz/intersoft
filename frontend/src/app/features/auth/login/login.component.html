@@ -25,9 +25,6 @@
         @switch (e.codigo) {
           @case ('CREDENCIALES_INVALIDAS') {
             <strong>Correo o contraseña incorrectos.</strong>
-            @if (e.intentosRestantes !== null && e.intentosRestantes !== undefined) {
-              <span> Te quedan {{ e.intentosRestantes }} intento(s) antes del bloqueo.</span>
-            }
           }
           @case ('CUENTA_BLOQUEADA') {
             <strong>Cuenta bloqueada temporalmente.</strong>
