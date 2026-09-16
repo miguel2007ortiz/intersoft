@@ -53,6 +53,49 @@ describe('AuthService', () => {
     expect(servicio.tienePermiso('empleado.leer')).toBe(true);
   });
 
+  it('expone el id de auth_user y el del perfil por separado', () => {
+    const servicio = TestBed.inject(AuthService);
+    servicio.login({ email: USUARIO.email, password: 'demo12345' }).subscribe();
+
+    http
+      .expectOne(`${api}/auth/login/`)
+      .flush({ access: 'tok-a', refresh: 'tok-r', usuario: USUARIO });
+    http.expectOne(`${api}/auth/me/`).flush({
+      ...USUARIO,
+      permisos: [],
+      debe_cambiar_password: false,
+    });
+
+    // `id` es el de auth_user (sujeto del token); el del Perfil va aparte.
+    expect(servicio.usuario()?.id).toBe('1');
+    expect(servicio.usuario()?.perfil_id).toBe('p1');
+  });
+
+  it('cargarMe refresca el usuario guardado, no solo los permisos', () => {
+    const servicio = TestBed.inject(AuthService);
+    servicio.login({ email: USUARIO.email, password: 'demo12345' }).subscribe();
+
+    http
+      .expectOne(`${api}/auth/login/`)
+      .flush({ access: 'tok-a', refresh: 'tok-r', usuario: USUARIO });
+
+    // Un administrador cambio el rol y la empresa despues del login: /auth/me/
+    // es la fuente de verdad y tiene que pisar lo que guardo el login.
+    http.expectOne(`${api}/auth/me/`).flush({
+      ...USUARIO,
+      rol: 'EMPLEADO',
+      empresa_nombre: 'Otra Tienda',
+      permisos: ['ventas.gestionar'],
+      debe_cambiar_password: false,
+    });
+
+    expect(servicio.usuario()?.rol).toBe('EMPLEADO');
+    expect(servicio.esAdministrador()).toBe(false);
+    const guardado = JSON.parse(localStorage.getItem('intersoft.usuario') ?? '{}');
+    expect(guardado.rol).toBe('EMPLEADO');
+    expect(guardado.empresa_nombre).toBe('Otra Tienda');
+  });
+
   it('devuelve false y no llama al servidor si no hay refresh token', async () => {
     localStorage.clear();
     const servicio = TestBed.inject(AuthService);

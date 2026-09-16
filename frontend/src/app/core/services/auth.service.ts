@@ -74,9 +74,15 @@ export class AuthService {
     );
   }
 
-  /** Fuente unica de permisos (fase Empleados): la llama el login y, al
+  /** Fuente unica de la sesion (fase Empleados): la llama el login y, al
    * refrescar la pagina, quien arranque la app (ver app.config.ts). Si
-   * falla (token vencido, etc.) no rompe nada: simplemente no hay permisos. */
+   * falla (token vencido, etc.) no rompe nada: simplemente no hay permisos.
+   *
+   * Refresca tambien el usuario, no solo los permisos: `intersoft.usuario` se
+   * escribia una vez en el login y se quedaba ahi, asi que si un
+   * administrador cambiaba tu rol o tu empresa seguias viendo el menu y los
+   * guards del rol viejo hasta volver a iniciar sesion. /auth/me/ devuelve
+   * los mismos campos que el login, asi que es la version de mas confianza. */
   cargarMe(): Observable<MeResponse | null> {
     if (!this._token()) return of(null);
     return this.http.get<MeResponse>(`${this.api}/auth/me/`).pipe(
@@ -84,6 +90,7 @@ export class AuthService {
         this._permisos.set(me.permisos);
         this._debeCambiarPassword.set(me.debe_cambiar_password);
         localStorage.setItem(CLAVE_PERMISOS, JSON.stringify(me.permisos));
+        this.guardarUsuario(me);
       }),
       catchError(() => of(null)),
     );
@@ -166,11 +173,26 @@ export class AuthService {
   private guardarSesion(r: LoginResponse): void {
     localStorage.setItem(CLAVE_TOKEN, r.access);
     localStorage.setItem(CLAVE_REFRESH, r.refresh);
-    localStorage.setItem(CLAVE_USUARIO, JSON.stringify(r.usuario));
     this._token.set(r.access);
     this._refresco.set(r.refresh);
-    this._usuario.set(r.usuario);
+    this.guardarUsuario(r.usuario);
     this._debeCambiarPassword.set(r.usuario.debe_cambiar_password);
+  }
+
+  /** Unico punto que escribe `intersoft.usuario`, para que el signal y el
+   * localStorage no puedan quedar describiendo usuarios distintos. */
+  private guardarUsuario(u: Usuario): void {
+    const usuario: Usuario = {
+      id: u.id,
+      perfil_id: u.perfil_id,
+      email: u.email,
+      nombre: u.nombre,
+      rol: u.rol,
+      empresa: u.empresa,
+      empresa_nombre: u.empresa_nombre,
+    };
+    localStorage.setItem(CLAVE_USUARIO, JSON.stringify(usuario));
+    this._usuario.set(usuario);
   }
 
   private leerUsuarioGuardado(): Usuario | null {

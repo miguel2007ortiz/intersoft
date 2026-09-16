@@ -16,6 +16,7 @@ trabajo y decisiones informales viven en `vault/`.
 - [docs/RIESGOS.md](RIESGOS.md) — riesgos resueltos/pendientes y cómo se cerraron.
 - [docs/ROADMAP.md](ROADMAP.md) — mejoras priorizadas (fases A-G) y decisiones registradas.
 - [docs/DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) — tokens y componentes del frontend (vivo).
+- [docs/contratos/auth.md](contratos/auth.md) — contrato de /api/auth/: ids, codigos de error y reglas anti-enumeracion.
 - [docs/CHECKLIST-SEGURIDAD.md](CHECKLIST-SEGURIDAD.md) — checklist pre-despliegue y operativo.
 - [docs/DESPLIEGUE.md](DESPLIEGUE.md) — despliegue reproducible (gunicorn + nginx + MySQL 8).
 - [backend/README.md](../backend/README.md) — backend: setup, comandos operativos (backup_db, monitor, seed).
