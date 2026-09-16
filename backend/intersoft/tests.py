@@ -130,12 +130,15 @@ class ConfiguracionSeguridadProduccionTest(SimpleTestCase):
 
     # --------------------- BUG-18: nada interno con DEBUG=False -------------
 
-    def test_produccion_rechaza_la_clave_de_env_example(self):
-        """`.env.example` esta versionado: su SECRET_KEY es publica y no puede
-        valer para produccion aunque no lleve el prefijo django-insecure-."""
-        with self.assertRaisesRegex(ImproperlyConfigured, 'insegura para produccion'):
-            _cargar_con_env({'DEBUG': 'False',
-                             'SECRET_KEY': 'cambia-esta-clave-en-produccion-intersoft-2026'})
+    def test_produccion_rechaza_las_claves_publicas_del_repo(self):
+        """Los valores que el repo trae versionados son publicos y no pueden
+        valer para produccion aunque no lleven el prefijo django-insecure-:
+        el de `.env.example` y el del `docker-compose.yml`."""
+        for clave in ('cambia-esta-clave-en-produccion-intersoft-2026',
+                      'docker-local-secret-cambiar-en-produccion-2026'):
+            with self.assertRaisesRegex(ImproperlyConfigured,
+                                        'insegura para produccion'):
+                _cargar_con_env({'DEBUG': 'False', 'SECRET_KEY': clave})
         self._recargar_para_revertir()
 
     def test_produccion_solo_renderiza_json(self):

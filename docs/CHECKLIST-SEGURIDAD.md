@@ -29,6 +29,45 @@ publicar. Refleja exactamente lo que el proyecto ya implementa (verificado en
 - [ ] Credenciales SMTP/WhatsApp/IA reales **no** versionadas; solo en el
       entorno (`EMAIL_HOST_PASSWORD`, `WA_TOKEN`, `IA_API_KEY`).
 
+## 1.b Rotación de `SECRET_KEY`
+
+`SIMPLE_JWT` no define `SIGNING_KEY`, así que hereda `SECRET_KEY`: los access y
+refresh se firman con ella. **Rotarla invalida todos los tokens emitidos y
+cierra la sesión de todo el mundo** (también las de sesión de Django y los
+enlaces de recuperación de contraseña firmados). No es una operación silenciosa:
+prográmala.
+
+Cuándo rotar:
+
+- La clave se expuso (commit, captura, log, canal de chat, portapapeles
+  compartido).
+- Se desplegó alguna vez con una clave pública. Las conocidas son
+  `django-insecure-cambia-esta-clave-en-produccion-intersoft-2026` (el valor
+  por omisión de `settings.py`), la que traía `backend/.env.example` y
+  `docker-local-secret-cambiar-en-produccion-2026` (el del
+  `docker-compose.yml`). El arranque con `DEBUG=False` rechaza las tres, pero
+  cualquier despliegue anterior a esa comprobación pudo usarlas.
+- Rotación periódica, si la política lo pide.
+
+Cómo:
+
+1. Generar una clave nueva:
+   ```bash
+   python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+   ```
+2. Guardarla **solo** en el entorno/secrets del servidor, nunca en git.
+3. Reiniciar los workers (gunicorn). El arranque falla en el sitio si la clave
+   es una de las públicas o falta, así que un error aquí es la comprobación
+   funcionando.
+4. Avisar: todo el mundo tendrá que volver a iniciar sesión, y los enlaces de
+   recuperación enviados antes de la rotación dejan de valer.
+5. Comprobar: `python manage.py check --deploy` sin advertencias, y un login
+   completo contra la API.
+
+Si en algún momento hace falta rotar **sin** cerrar sesiones, la vía es definir
+`SIMPLE_JWT['SIGNING_KEY']` como una clave propia e independiente de
+`SECRET_KEY`, y rotar cada una por separado. Hoy no está así.
+
 ## 2. Backend (Django)
 
 - [ ] `python manage.py check` → "System check identified no issues".

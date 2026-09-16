@@ -31,12 +31,15 @@ if not DEBUG:
             "segura con: python -c \"from django.core.management.utils import "
             "get_random_secret_key; print(get_random_secret_key())\""
         )
-    # `cambia-esta-clave` cubre tambien el valor que trae `.env.example`: es
-    # publico (esta versionado), asi que copiar la plantilla y poner
-    # DEBUG=False no puede dejar la app firmando tokens con una clave conocida.
+    # Ademas del placeholder, se rechaza cualquier clave que lleve un marcador
+    # de "todavia sin cambiar". Cubre los dos valores publicos que el repo trae
+    # versionados -- el de `.env.example` y el del `docker-compose.yml` -- para
+    # que copiar una plantilla y poner DEBUG=False no deje la app firmando
+    # tokens con una clave que cualquiera puede leer en git.
+    _MARCADORES_INSEGUROS = ('cambia-esta-clave', 'cambiar-en-produccion')
     if (_SECRET_KEY == _DEV_SECRET_PLACEHOLDER
             or _SECRET_KEY.startswith('django-insecure-')
-            or 'cambia-esta-clave' in _SECRET_KEY):
+            or any(m in _SECRET_KEY for m in _MARCADORES_INSEGUROS)):
         raise ImproperlyConfigured(
             'SECRET_KEY insegura para produccion: no uses el valor de '
             'desarrollo (django-insecure-*) ni placeholders. Define una clave '
