@@ -145,10 +145,18 @@ class LoginTest(BaseCuentasTest):
         self.assertEqual(respuesta.status_code, 401)
         self.assertEqual(respuesta.json()["codigo"], "CREDENCIALES_INVALIDAS")
 
-    def test_correo_inexistente_no_revela_intentos(self):
-        respuesta = self.login("fantasma@test.co", "loquesea123")
-        self.assertEqual(respuesta.status_code, 401)
-        self.assertIsNone(respuesta.json()["intentos_restantes"])
+    def test_correo_inexistente_responde_identico_a_contrasena_invalida(self):
+        """BUG-19 QA: la respuesta 401 no debe permitir enumerar cuentas.
+        Antes el correo inexistente respondia con intentos_restantes: null y
+        el existente con un numero; ahora la respuesta es identica y sin
+        contador (no es un oraculo de existencia de la cuenta)."""
+        inexistente = self.login("fantasma@test.co", "loquesea123")
+        existente = self.login("maria@test.co", "incorrecta")
+        self.assertEqual(inexistente.status_code, 401)
+        self.assertEqual(existente.status_code, 401)
+        self.assertEqual(inexistente.json(), existente.json())
+        self.assertEqual(inexistente.json()["codigo"], "CREDENCIALES_INVALIDAS")
+        self.assertNotIn("intentos_restantes", inexistente.json())
 
     def test_usuario_inactivo_devuelve_403(self):
         _, _ = self.crear_cuenta(email="inactivo@test.co", activo=False)
@@ -168,9 +176,12 @@ class BloqueoPorIntentosTest(BaseCuentasTest):
         for intento in range(1, 6):
             respuesta = self.login("luis@test.co", f"mala-{intento}")
             if intento < 5:
+                # BUG-19 QA: la respuesta 401 no revela el contador (no es un
+                # oraculo de existencia de la cuenta), pero la cuenta sigue
+                # registrando los intentos y bloqueando al quinto.
                 self.assertEqual(respuesta.status_code, 401)
-                esperado = 5 - intento
-                self.assertEqual(respuesta.json()["intentos_restantes"], esperado)
+                self.assertEqual(respuesta.json()["codigo"], "CREDENCIALES_INVALIDAS")
+                self.assertNotIn("intentos_restantes", respuesta.json())
             else:
                 self.assertEqual(respuesta.status_code, 423)
                 self.assertEqual(respuesta.json()["codigo"], "CUENTA_BLOQUEADA")
@@ -575,6 +586,35 @@ class AislamientoRolesTenantTest(TestCase):
             "nombre": "Nuevo B", "email": "nuevob@test.co",
             "password": "Clave12345", "rol": "SECRETARIA"}, format="json")
         self.assertEqual(respuesta.status_code, 400)
+
+    def test_conteo_usuarios_por_rol_filtrado_por_empresa(self):
+        """BUG-13 QA: el conteo de usuarios por rol en RolesSeguridadView
+        debe filtrar por la empresa del usuario conectado. Sin este filtro,
+        el ADMINISTRADOR (globl) mostraria usuarios de todas las empresas."""
+        # Empresa A: ya tiene admin_a (ADMINISTRADOR)
+        # Empresa B: ya tiene admin_b (ADMINISTRADOR)
+        # Agregamos un EMPLEADO a cada empresa
+        rol_empleado_a = Rol.objects.get(nombre="EMPLEADO")
+        user_a = User.objects.create_user(username="emp_a@test.co",
+                                          email="emp_a@test.co",
+                                          password="Clave12345", first_name="Emp A")
+        Perfil.objects.create(usuario=user_a, empresa=self.empresa_a, rol=rol_empleado_a)
+
+        rol_empleado_b = Rol.objects.get(nombre="EMPLEADO")
+        user_b = User.objects.create_user(username="emp_b@test.co",
+                                          email="emp_b@test.co",
+                                          password="Clave12345", first_name="Emp B")
+        Perfil.objects.create(usuario=user_b, empresa=self.empresa_b, rol=rol_empleado_b)
+
+        # La empresa A ve 1 EMPLEADO (solo los suyos), no 2
+        roles_a = self.api_a.get("/api/seguridad/roles/").json()["resultados"]
+        empleado_a = next(r for r in roles_a if r["nombre"] == "EMPLEADO")
+        self.assertEqual(empleado_a["total_usuarios_activos"], 1)
+
+        # La empresa B ve 1 EMPLEADO (solo los suyos), no 2
+        roles_b = self.api_b.get("/api/seguridad/roles/").json()["resultados"]
+        empleado_b = next(r for r in roles_b if r["nombre"] == "EMPLEADO")
+        self.assertEqual(empleado_b["total_usuarios_activos"], 1)
 
 class RendimientoQueriesRolesTest(BaseSeguridadTest):
     def test_listado_roles_cabe_en_pocas_consultas(self):

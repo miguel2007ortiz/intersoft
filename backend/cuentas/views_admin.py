@@ -195,11 +195,17 @@ class RolesSeguridadView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        roles = (roles_visibles(request.user.perfil.empresa)
+        # BUG-13 QA: el conteo de usuarios por rol debe ir filtrado por la
+        # empresa del usuario conectado. Los roles del sistema son globales
+        # (empresa=None), de modo que sin este filtro el Count() agruparia
+        # perfiles de TODOS los tenants y filtraria usuarios ajenos.
+        empresa = request.user.perfil.empresa
+        roles = (roles_visibles(empresa)
                  .annotate(total_usuarios_activos=Count(
                      "perfiles",
                      filter=Q(perfiles__deleted_at__isnull=True,
-                              perfiles__usuario__is_active=True)))
+                              perfiles__usuario__is_active=True,
+                              perfiles__empresa=empresa)))
                  .prefetch_related("rol_permisos__permiso").order_by("nombre"))
         datos = RolLecturaSerializer(roles, many=True).data
         return Response({"resultados": datos, "total": len(datos)})

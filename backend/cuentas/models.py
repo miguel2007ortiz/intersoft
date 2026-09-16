@@ -146,10 +146,6 @@ class Perfil(models.Model):
             self.bloquear_cuenta()
         self.save(update_fields=["intentos_fallidos", "fecha_desbloqueo"])
 
-    def intentos_restantes(self) -> int:
-        maximo = getattr(settings, "MAX_INTENTOS_LOGIN", 5)
-        return max(0, maximo - self.intentos_fallidos)
-
     def reiniciar_intentos(self) -> None:
         if self.intentos_fallidos or self.fecha_desbloqueo:
             self.intentos_fallidos = 0
@@ -173,6 +169,12 @@ class ActividadUsuario(models.Model):
         db_table = "actividad_usuario"
         ordering = ["-fecha"]
         verbose_name_plural = "Actividades de usuarios"
+        indexes = [
+            # BUG-05 QA: con la tabla creciendo, la escritura del login y el
+            # listado de auditoria por usuario escalan mal. Indice compuesto
+            # para el patron real de consulta (filtrar por usuario + ordenar).
+            models.Index(fields=["usuario", "-fecha"], name="act_usuario_fecha_idx"),
+        ]
 
     def __str__(self):
         actor = self.usuario.email if self.usuario else "anonimo"

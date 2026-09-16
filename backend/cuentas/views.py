@@ -37,40 +37,59 @@ class LoginView(APIView):
         email = entrada.validated_data["email"]
         password = entrada.validated_data["password"]
 
-        perfil = (Perfil.objects.filter(usuario__email__iexact=email)
-                  .select_related("usuario", "rol", "empresa").first())
+        # Identidad UNICA: el perfil de la respuesta sale SIEMPRE del usuario
+        # autenticado (usuario.perfil), no de la busqueda preliminar por email.
+        # La busqueda previa solo sirve para los controles anteriores al
+        # authenticate (bloqueo / cuenta inactiva); nunca para construir la
+        # respuesta, porque dos cuentas distintas podrian compartir email y
+        # el perfil de la respuesta debe ser el de quien realmente entro.
+        perfil_pre = (Perfil.objects.filter(usuario__email__iexact=email)
+                      .select_related("usuario", "rol", "empresa")
+                      .order_by("usuario__id").first())
 
-        if perfil and perfil.esta_bloqueado():
-            ActividadUsuario.registrar(perfil.usuario, "LOGIN_BLOQUEADO",
+        if perfil_pre and perfil_pre.esta_bloqueado():
+            ActividadUsuario.registrar(perfil_pre.usuario, "LOGIN_BLOQUEADO",
                                        f"Cuenta bloqueada: {email}")
-            return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil.fecha_desbloqueo},
+            return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil_pre.fecha_desbloqueo},
                             status=status.HTTP_423_LOCKED)
 
         # La cuenta desactivada o borrada no debe consumir intentos ni
         # recibir un mensaje de credenciales invalidas.
-        if perfil and (not perfil.usuario.is_active or perfil.deleted_at):
+        if perfil_pre and (not perfil_pre.usuario.is_active or perfil_pre.deleted_at):
             return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
 
         usuario = authenticate(request, username=email, password=password)
 
         if usuario is None:
-            restantes = None
-            if perfil:
-                perfil.registrar_intento_fallido()
-                restantes = perfil.intentos_restantes()
-                ActividadUsuario.registrar(perfil.usuario, "LOGIN_FALLIDO",
+            if perfil_pre:
+                perfil_pre.registrar_intento_fallido()
+                ActividadUsuario.registrar(perfil_pre.usuario, "LOGIN_FALLIDO",
                                            f"Contrasena invalida para {email}")
-                if perfil.esta_bloqueado():
-                    ActividadUsuario.registrar(perfil.usuario, "CUENTA_BLOQUEADA",
+                if perfil_pre.esta_bloqueado():
+                    ActividadUsuario.registrar(perfil_pre.usuario, "CUENTA_BLOQUEADA",
                                                f"Se superaron los intentos: {email}")
-                    return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil.fecha_desbloqueo},
+                    return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil_pre.fecha_desbloqueo},
                                     status=status.HTTP_423_LOCKED)
             else:
                 ActividadUsuario.registrar(None, "LOGIN_FALLIDO", f"Correo inexistente: {email}")
-            return Response({"codigo": "CREDENCIALES_INVALIDAS", "intentos_restantes": restantes},
+            # Respuesta identica exista o no el correo: no se revela cuantos
+            # intentos quedan (oraculo de enumeracion de cuentas, BUG-19 QA).
+            return Response({"codigo": "CREDENCIALES_INVALIDAS"},
                             status=status.HTTP_401_UNAUTHORIZED)
 
-        if not usuario.is_active or perfil is None or perfil.deleted_at:
+        if not usuario.is_active:
+            return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Identidad real: el perfil del usuario que se acaba de autenticar.
+        # Si el prelookup por email ya corresponde al mismo usuario, se
+        # reutiliza (ya viene con select_related); en el raro caso de correos
+        # repetidos se consulta por usuario, que es la fuente unica y real.
+        if perfil_pre and perfil_pre.usuario_id == usuario.id:
+            perfil = perfil_pre
+        else:
+            perfil = (Perfil.objects.select_related("empresa", "rol")
+                      .filter(usuario=usuario, deleted_at__isnull=True).first())
+        if perfil is None:
             return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
 
         if perfil.empresa_id and not perfil.empresa.activa:
