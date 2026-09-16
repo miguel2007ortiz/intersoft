@@ -10,8 +10,9 @@ from .serializers import validar_fuerza_password
 
 Usuario = get_user_model()
 
-# Roles base de la plataforma: no se renombran ni se eliminan
-ROLES_DEL_SISTEMA = {"ADMINISTRADOR", "EMPLEADO", "CLIENTE"}
+# Roles base de la plataforma: no se renombran ni se eliminan. Una sola fuente
+# de verdad, en el modelo (`Rol.de_nombre` valida contra la misma lista).
+ROLES_DEL_SISTEMA = set(Rol.NOMBRES_GLOBALES)
 
 
 class UsuarioLecturaSerializer(serializers.Serializer):

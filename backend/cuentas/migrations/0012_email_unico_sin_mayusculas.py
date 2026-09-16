@@ -20,6 +20,11 @@ usar un indice funcional cuando la expresion de la consulta coincide con la
 del indice. `username` lleva el suyo porque es la columna contra la que
 autentica `ModelBackend` (USERNAME_FIELD), asi que necesita la misma garantia.
 
+Requisito de motor: MySQL >= 8.0.13, la version que introdujo los indices
+funcionales. MariaDB no los soporta en ninguna version. `aplicar()` comprueba
+las dos cosas y aborta con un mensaje que dice exactamente que falta, en vez de
+dejar salir un error de sintaxis de SQL.
+
 Limitacion heredada de 0005 que NO cambia aqui: como `email` no admite NULL,
 dos cuentas con `email=''` (p. ej. dos `createsuperuser` sin correo) siguen
 chocando contra el indice unico. Es el comportamiento que ya habia; corregirlo
@@ -45,7 +50,40 @@ def _existe(cursor, nombre: str) -> bool:
     return cursor.fetchone()[0] > 0
 
 
+def _exigir_motor_compatible(connection):
+    """Los indices funcionales necesitan MySQL 8.0.13 o superior.
+
+    MariaDB no los implementa en ninguna version (usa columnas generadas
+    indexadas), asi que ahi esta migracion no puede aplicarse tal cual.
+    Sin esta comprobacion el fallo llegaba como un error de sintaxis de SQL
+    junto a la sentencia entera, sin decir que el problema es la version.
+    """
+    if connection.vendor != "mysql":
+        raise RuntimeError(
+            "Esta migracion crea indices UNIQUE funcionales con sintaxis de "
+            f"MySQL y el motor configurado es '{connection.vendor}'. "
+            "InterSoft corre sobre MySQL 8 (ver docs/QA-correcciones.md)."
+        )
+    if getattr(connection, "mysql_is_mariadb", False):
+        raise RuntimeError(
+            "MariaDB no soporta indices UNIQUE funcionales "
+            "(`ADD UNIQUE KEY ((LOWER(col)))`) en ninguna version. InterSoft "
+            "requiere MySQL >= 8.0.13. En MariaDB habria que sustituirlos por "
+            "una columna generada (`email_lower`) con un UNIQUE normal encima."
+        )
+    version = connection.mysql_version  # tupla, p. ej. (8, 0, 30)
+    if version < (8, 0, 13):
+        legible = ".".join(str(n) for n in version)
+        raise RuntimeError(
+            f"MySQL {legible} no soporta indices funcionales: se anadieron en "
+            "8.0.13. Esta migracion los necesita para que la unicidad de "
+            "correo y usuario ignore mayusculas sin depender de la collation "
+            "(ver BUG-09). Actualiza MySQL a 8.0.13 o superior."
+        )
+
+
 def aplicar(apps, schema_editor):
+    _exigir_motor_compatible(schema_editor.connection)
     with schema_editor.connection.cursor() as cursor:
         hallazgos = buscar(cursor)
         if hallazgos:

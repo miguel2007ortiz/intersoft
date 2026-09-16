@@ -18,6 +18,10 @@ class Rol(models.Model):
     propia `empresa`, aislados del resto de tenants.
     """
 
+    # Unicos roles que pueden ser GLOBALES (empresa=None). Fuente de verdad de
+    # `ROLES_DEL_SISTEMA` en serializers_admin.
+    NOMBRES_GLOBALES = ("ADMINISTRADOR", "EMPLEADO", "CLIENTE")
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     nombre = models.CharField(max_length=30)
     descripcion = models.CharField(max_length=200, blank=True)
@@ -42,8 +46,19 @@ class Rol(models.Model):
     def de_nombre(cls, nombre: str) -> "Rol":
         """Obtiene o crea un rol GLOBAL por nombre (empresa=None).
 
-        Los roles base no pertenecen a ninguna empresa; evita fallos si el
-        seed no corrio."""
+        Solo acepta los tres roles base. Antes creaba un rol global con
+        cualquier nombre que se le pasara, asi que un descuido -- p. ej.
+        `Rol.de_nombre("AUXILIAR_VENTAS")` para lo que se pretendia un rol de
+        una empresa -- metia en la tabla un rol compartido por TODOS los
+        tenants sin que nada avisara. Los roles de una empresa se crean con
+        `Rol.objects.create(nombre=..., empresa=...)`.
+        """
+        if nombre not in cls.NOMBRES_GLOBALES:
+            raise ValueError(
+                f"'{nombre}' no es un rol base: solo pueden ser globales "
+                f"{', '.join(cls.NOMBRES_GLOBALES)}. Para un rol propio de una "
+                "empresa usa Rol.objects.create(nombre=..., empresa=empresa)."
+            )
         rol, _ = cls.objects.get_or_create(nombre=nombre, empresa=None)
         return rol
 

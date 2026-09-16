@@ -47,6 +47,7 @@ def _cargar_con_env(nuevo_env):
         'WA_API_URL', 'WA_TOKEN', 'WA_NUMERO', 'FRONTEND_URL',
         'SECURE_SSL_REDIRECT', 'SESSION_COOKIE_SECURE', 'CSRF_COOKIE_SECURE',
         'SECURE_HSTS_SECONDS', 'SESSION_COOKIE_SAMESITE', 'CSRF_COOKIE_SAMESITE',
+        'CACHE_BACKEND', 'CACHE_LOCATION', 'NUM_PROXIES',
     }
     for k in claves:
         os.environ.pop(k, None)
@@ -62,8 +63,10 @@ class ConfiguracionSeguridadProduccionTest(SimpleTestCase):
     def tearDownClass(cls):
         # Restaura el entorno del proceso padre (lo que tuviera antes).
         for k in list(os.environ):
-            if k.startswith(('DB_', 'EMAIL_HOST', 'IA_', 'WA_', 'SECURE_', 'SESSION_', 'CSRF_')):
+            if k.startswith(('DB_', 'EMAIL_HOST', 'IA_', 'WA_', 'SECURE_',
+                             'SESSION_', 'CSRF_', 'CACHE_')):
                 os.environ.pop(k, None)
+        os.environ.pop('NUM_PROXIES', None)
         os.environ.pop('DEBUG', None)
         os.environ.pop('SECRET_KEY', None)
         os.environ.pop('ALLOWED_HOSTS', None)
@@ -75,7 +78,9 @@ class ConfiguracionSeguridadProduccionTest(SimpleTestCase):
         # Vuelve a recargar settings con el .env de desarrollo/CI real para no
         # dejar el settings del proceso (de tests) en modo produccion.
         for k in list(os.environ):
-            if k.startswith(('DB_', 'EMAIL_HOST', 'IA_', 'WA_', 'SECURE_', 'SESSION_', 'CSRF_', 'DEBUG', 'SECRET_KEY', 'ALLOWED_HOSTS', 'CORS_', 'CSRF_')):
+            if k.startswith(('DB_', 'EMAIL_HOST', 'IA_', 'WA_', 'SECURE_',
+                             'SESSION_', 'CSRF_', 'DEBUG', 'SECRET_KEY',
+                             'ALLOWED_HOSTS', 'CORS_', 'CACHE_', 'NUM_PROXIES')):
                 os.environ.pop(k, None)
         importlib.reload(importlib.import_module(MODULE))
 
@@ -177,6 +182,84 @@ class ConfiguracionSeguridadProduccionTest(SimpleTestCase):
         with mock.patch.object(_Config, 'get', sin_debug):
             with self.assertRaisesRegex(ImproperlyConfigured, 'SECRET_KEY'):
                 _cargar_con_env({'SECRET_KEY': ''})
+        self._recargar_para_revertir()
+
+
+    # ----------------- Fase 2.2 p2: cache segun entorno --------------------
+
+    def test_produccion_usa_cache_compartido_por_omision(self):
+        """Del cache cuelgan los contadores del throttling y del bloqueo de
+        login: con DEBUG=False tiene que ser compartido entre procesos."""
+        mod = _cargar_con_env({
+            'DEBUG': 'False',
+            'SECRET_KEY': REAL_SECRET,
+            'ALLOWED_HOSTS': 'api.intersoft.co',
+        })
+        # Bajo el runner de tests `CACHES` se fuerza a LocMem al final del
+        # settings para aislar las corridas, asi que lo que describe la
+        # decision del entorno es `CACHE_BACKEND`.
+        self.assertEqual(mod.CACHE_BACKEND,
+                         'django.core.cache.backends.db.DatabaseCache')
+        self._recargar_para_revertir()
+
+    def test_el_backend_por_omision_depende_de_debug(self):
+        """Sin CACHE_BACKEND en el entorno, el valor por omision lo decide
+        DEBUG. Se parchea `Config.get` porque el `.env` de desarrollo define la
+        variable y `_cargar_con_env` solo limpia os.environ, no el fichero."""
+        from decouple import Config as _Config
+
+        real = _Config.get
+
+        def sin_cache_backend(self, option, *args, **kwargs):
+            if option == 'CACHE_BACKEND':
+                return args[0] if args else kwargs.get('default')
+            return real(self, option, *args, **kwargs)
+
+        with mock.patch.object(_Config, 'get', sin_cache_backend):
+            local = _cargar_con_env({'DEBUG': 'True'})
+            self.assertEqual(local.CACHE_BACKEND,
+                             'django.core.cache.backends.locmem.LocMemCache')
+
+            produccion = _cargar_con_env({
+                'DEBUG': 'False',
+                'SECRET_KEY': REAL_SECRET,
+                'ALLOWED_HOSTS': 'api.intersoft.co',
+            })
+            self.assertEqual(produccion.CACHE_BACKEND,
+                             'django.core.cache.backends.db.DatabaseCache')
+        self._recargar_para_revertir()
+
+    def test_produccion_con_locmem_no_arranca(self):
+        """LocMemCache es por proceso: con varios workers cada uno llevaria su
+        propio contador y el limite por IP se multiplicaria en silencio."""
+        with self.assertRaisesRegex(ImproperlyConfigured, 'LocMemCache no sirve'):
+            _cargar_con_env({
+                'DEBUG': 'False',
+                'SECRET_KEY': REAL_SECRET,
+                'ALLOWED_HOSTS': 'api.intersoft.co',
+                'CACHE_BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            })
+        self._recargar_para_revertir()
+
+    def test_produccion_acepta_redis(self):
+        mod = _cargar_con_env({
+            'DEBUG': 'False',
+            'SECRET_KEY': REAL_SECRET,
+            'ALLOWED_HOSTS': 'api.intersoft.co',
+            'CACHE_BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'CACHE_LOCATION': 'redis://127.0.0.1:6379/1',
+        })
+        self.assertEqual(mod.CACHE_BACKEND,
+                         'django.core.cache.backends.redis.RedisCache')
+        self._recargar_para_revertir()
+
+    def test_num_proxies_se_lee_del_entorno_y_por_omision_es_cero(self):
+        por_omision = _cargar_con_env({'DEBUG': 'True'})
+        self.assertEqual(por_omision.REST_FRAMEWORK['NUM_PROXIES'], 0)
+        self._recargar_para_revertir()
+
+        detras_de_nginx = _cargar_con_env({'DEBUG': 'True', 'NUM_PROXIES': '1'})
+        self.assertEqual(detras_de_nginx.REST_FRAMEWORK['NUM_PROXIES'], 1)
         self._recargar_para_revertir()
 
     def test_produccion_allowed_hosts_vacio_o_comodin_falla(self):

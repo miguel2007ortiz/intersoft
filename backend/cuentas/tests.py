@@ -1454,3 +1454,99 @@ class UltimoAccesoTest(BaseCuentasTest):
         fila = next(u for u in cliente.get("/api/seguridad/usuarios/")
                     .json()["resultados"] if u["email"] == "acceso@test.co")
         self.assertIsNotNone(fila["ultimo_login"])
+
+
+# ===== Fase 2.2 p1: el throttle identifica al cliente segun NUM_PROXIES =====
+
+def _rest_con(num_proxies, tasa_login="3/minute"):
+    return {**settings.REST_FRAMEWORK,
+            "NUM_PROXIES": num_proxies,
+            "DEFAULT_THROTTLE_RATES": {
+                **settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+                "auth_login": tasa_login}}
+
+
+class ThrottleDetrasDeProxyTest(BaseCuentasTest):
+    """`IPScopedRateThrottle` sobrescribia `get_ident` para leer siempre el
+    ultimo elemento de X-Forwarded-For. Eso equivalia a NUM_PROXIES=1 fijo y,
+    sin proxy delante, dejaba el limite evadible con una cabecera inventada.
+    Ahora la identificacion la resuelve DRF a partir de NUM_PROXIES."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.crear_cuenta(email="proxy@test.co")
+
+    def setUp(self):
+        cache.clear()
+
+    def intento(self, xff=None, remote="10.0.0.1"):
+        extra = {"REMOTE_ADDR": remote}
+        if xff is not None:
+            extra["HTTP_X_FORWARDED_FOR"] = xff
+        return self.client.post(reverse("auth-login"),
+                                {"email": "proxy@test.co", "password": "mala"},
+                                content_type="application/json", **extra)
+
+    @override_settings(REST_FRAMEWORK=_rest_con(1))
+    def test_con_un_proxy_dos_clientes_no_comparten_el_limite(self):
+        # Mismo proxy (mismo REMOTE_ADDR), dos clientes distintos detras.
+        for _ in range(3):
+            self.assertEqual(self.intento(xff="203.0.113.10").status_code, 401)
+        self.assertEqual(self.intento(xff="203.0.113.10").status_code, 429)
+
+        # El segundo cliente arranca con su contador limpio.
+        self.assertEqual(self.intento(xff="203.0.113.99").status_code, 401)
+
+    @override_settings(REST_FRAMEWORK=_rest_con(1))
+    def test_con_un_proxy_el_mismo_cliente_si_comparte_el_limite(self):
+        for _ in range(3):
+            self.assertEqual(self.intento(xff="203.0.113.10").status_code, 401)
+        # Otro REMOTE_ADDR (otro nodo del balanceador) no lo libera: lo que
+        # identifica al cliente es la IP que anadio el proxy.
+        self.assertEqual(self.intento(xff="203.0.113.10",
+                                      remote="10.0.0.2").status_code, 429)
+
+    @override_settings(REST_FRAMEWORK=_rest_con(0))
+    def test_sin_proxy_la_cabecera_se_ignora(self):
+        for n in range(3):
+            # Cada intento finge venir de una IP distinta: con NUM_PROXIES=0 la
+            # cabecera no se mira, asi que no reinicia nada.
+            self.assertEqual(self.intento(xff="203.0.113.%d" % n).status_code, 401)
+        self.assertEqual(self.intento(xff="203.0.113.250").status_code, 429)
+
+    @override_settings(REST_FRAMEWORK=_rest_con(0))
+    def test_sin_proxy_cuenta_por_remote_addr(self):
+        for _ in range(3):
+            self.assertEqual(self.intento(remote="10.0.0.1").status_code, 401)
+        self.assertEqual(self.intento(remote="10.0.0.1").status_code, 429)
+        # Otra IP real arranca limpia.
+        self.assertEqual(self.intento(remote="10.0.0.2").status_code, 401)
+
+
+# ===== Fase 2.2 p4: Rol.de_nombre solo crea los roles base ==================
+
+class RolDeNombreTest(TestCase):
+    def test_acepta_los_tres_roles_base(self):
+        for nombre in ("ADMINISTRADOR", "EMPLEADO", "CLIENTE"):
+            rol = Rol.de_nombre(nombre)
+            self.assertIsNone(rol.empresa_id)
+            self.assertEqual(rol.nombre, nombre)
+
+    def test_es_idempotente(self):
+        self.assertEqual(Rol.de_nombre("EMPLEADO").pk,
+                         Rol.de_nombre("EMPLEADO").pk)
+
+    def test_rechaza_cualquier_otro_nombre(self):
+        """Creaba un rol GLOBAL con el nombre que le dieran, asi que un
+        descuido metia un rol compartido por todos los tenants."""
+        with self.assertRaises(ValueError) as caso:
+            Rol.de_nombre("AUXILIAR_VENTAS")
+        self.assertIn("no es un rol base", str(caso.exception))
+        self.assertIn("Rol.objects.create", str(caso.exception))
+        self.assertFalse(Rol.objects.filter(nombre="AUXILIAR_VENTAS").exists())
+
+    def test_la_lista_es_la_misma_que_usa_la_api(self):
+        from .serializers_admin import ROLES_DEL_SISTEMA
+        self.assertEqual(ROLES_DEL_SISTEMA, set(Rol.NOMBRES_GLOBALES))

@@ -1,11 +1,25 @@
 """Throttling por IP para endpoints sensibles (RIESGOS.md, pendiente 1).
 
-Complementa el bloqueo por cuenta del login: limita por IP peticiones de
-refresh, recuperacion de contrasena y creacion de cuentas, que no tienen
-identidad de usuario previa. Detras de nginx la IP confiable es la ultima de
-la cadena X-Forwarded-For (el proxy anade la IP real del cliente al final),
-por eso se lee ese elemento: un atacante no puede reiniciar su contador
-falseando la cabecera.
+Complementa el bloqueo por cuenta del login: limita por IP el propio login,
+el refresh, la recuperacion de contrasena y la creacion de cuentas, que no
+tienen identidad de usuario previa (o que no deben depender de ella).
+
+Como se identifica al cliente
+-----------------------------
+La identificacion la resuelve `BaseThrottle.get_ident` de DRF a partir de
+`NUM_PROXIES`, que se configura por entorno (ver `.env.example`):
+
+  - `NUM_PROXIES=0` (local, valor por omision): se usa `REMOTE_ADDR` y se
+    IGNORA `X-Forwarded-For`. Sin proxy delante, esa cabecera la pone el
+    cliente, asi que confiar en ella deja reiniciar el contador a voluntad.
+  - `NUM_PROXIES=n` (despliegue detras de n proxies): se toma el elemento
+    `-n` de `X-Forwarded-For`, es decir la IP que anadio el proxy en el que
+    si se confia. Un atacante puede prefijar valores falsos, pero no puede
+    alterar los ultimos n, que son los que escriben los proxies propios.
+
+Esta clase ya NO sobrescribe `get_ident`: lo hacia leyendo siempre el ultimo
+elemento de `X-Forwarded-For`, lo que equivalia a `NUM_PROXIES=1` fijo y, sin
+proxy delante, hacia el limite evadible con una cabecera inventada.
 
 Sin `throttle_scope` en la vista no limita (mismo comportamiento que el
 `ScopedRateThrottle` de DRF).
@@ -15,21 +29,12 @@ from rest_framework.throttling import ScopedRateThrottle
 
 
 class IPScopedRateThrottle(ScopedRateThrottle):
-    """Igual que el throttle por scope de DRF, pero identifica por IP real del
-    cliente en lugar de sesion/cookie (relevante en endpoints AllowAny).
+    """`ScopedRateThrottle` de DRF con las tasas leidas en cada peticion.
 
-    Sobrescribe `get_rate` para leer `DEFAULT_THROTTLE_RATES` en el momento
-    de la peticion: DRF captura ese dict como atributo de clase al importar,
-    lo que harta inutil `override_settings(REST_FRAMEWORK=...)` en los tests.
+    DRF captura `DEFAULT_THROTTLE_RATES` como atributo de clase al importar,
+    lo que hace inutil `override_settings(REST_FRAMEWORK=...)` en los tests.
+    Leerlas aqui mantiene las pruebas de limites honestas.
     """
-
-    def get_ident(self, request):
-        xff = request.META.get('HTTP_X_FORWARDED_FOR')
-        if xff:
-            partes = [p.strip() for p in xff.split(',') if p.strip()]
-            if partes:
-                return partes[-1]
-        return request.META.get('REMOTE_ADDR', '')
 
     def get_rate(self):
         try:

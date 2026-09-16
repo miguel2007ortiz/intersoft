@@ -125,17 +125,37 @@ DATABASES = {
     }
 }
 
-# -- Cache de respuesta (por defecto en la misma BD MySQL; en produccion se
-# puede apuntar a Redis con CACHE_BACKEND=redis cos config(..., cast=...)).
+# -- Cache ---------------------------------------------------------
+# El cache no es solo de respuestas: de el cuelgan los contadores del
+# throttling por IP y el conteo de intentos de login de correos inexistentes.
+# Por eso en cualquier entorno compartido tiene que ser un cache COMPARTIDO
+# entre procesos:
+#   - DEBUG=True  -> LocMemCache. Es por proceso, pero `runserver` es uno solo
+#     y asi el desarrollo no depende de haber corrido `crear_cache`.
+#   - DEBUG=False -> DatabaseCache sobre la tabla `intersoft_cache` (se crea
+#     con `python manage.py crear_cache`). En produccion se puede apuntar a
+#     Redis con CACHE_BACKEND.
+_CACHE_LOCAL = 'django.core.cache.backends.locmem.LocMemCache'
+_CACHE_COMPARTIDO = 'django.core.cache.backends.db.DatabaseCache'
+CACHE_BACKEND = config('CACHE_BACKEND',
+                       default=_CACHE_LOCAL if DEBUG else _CACHE_COMPARTIDO)
 CACHES = {
     'default': {
-        'BACKEND': config(
-            'CACHE_BACKEND',
-            default='django.core.cache.backends.db.DatabaseCache'),
+        'BACKEND': CACHE_BACKEND,
         # Para cache de DB hace falta 'LOCATION' (nombre de la tabla).
         'LOCATION': config('CACHE_LOCATION', default='intersoft_cache'),
     }
 }
+# Con varios workers de gunicorn un LocMemCache da a cada proceso su propio
+# contador: el limite por IP y el bloqueo por intentos se multiplican por el
+# numero de workers sin que nada avise. Fallamos al arrancar.
+if not DEBUG and CACHE_BACKEND == _CACHE_LOCAL:
+    raise ImproperlyConfigured(
+        'LocMemCache no sirve con DEBUG=False: es por proceso, asi que el '
+        'throttling por IP y el bloqueo por intentos de login dejarian de ser '
+        'consistentes entre los workers. Usa DatabaseCache (ejecuta '
+        '`python manage.py crear_cache`) o Redis via CACHE_BACKEND.'
+    )
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -213,6 +233,13 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_CLASSES': (
         'core.throttling.IPScopedRateThrottle',
     ),
+    # Cuantos proxies propios hay delante de Django. Decide de donde sale la IP
+    # con la que el throttling identifica al cliente (ver core/throttling.py):
+    #   0 (local, sin proxy) -> REMOTE_ADDR, y se IGNORA X-Forwarded-For, que
+    #     ahi la pone el cliente y permitiria reiniciar el contador a voluntad.
+    #   n (detras de n proxies) -> el elemento -n de X-Forwarded-For, el que
+    #     escribio el proxy en el que si se confia.
+    'NUM_PROXIES': config('NUM_PROXIES', default=0, cast=int),
     'DEFAULT_THROTTLE_RATES': {
         # El login limita por IP porque cada intento cuesta un hash PBKDF2
         # (~650 ms): sin tope, un cliente satura los workers. Esto NO sustituye
