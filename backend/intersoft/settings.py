@@ -185,6 +185,16 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    # BUG-18 QA: fuera de desarrollo la API solo habla JSON. Con DEBUG=True
+    # (desarrollo local) se conserva el navegador HTML de DRF; en produccion
+    # el BrowsableAPIRenderer desaparece y cualquier peticion a una ruta
+    # inexistente cae en la pagina 404 estandar sin mapa de rutas.
+    'DEFAULT_RENDERER_CLASSES': (
+        ('rest_framework.renderers.JSONRenderer',) if not DEBUG else (
+            'rest_framework.renderers.JSONRenderer',
+            'rest_framework.renderers.BrowsableAPIRenderer',
+        )
+    ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'EXCEPTION_HANDLER': 'core.exceptions.manejador_excepciones',
