@@ -80,7 +80,18 @@
           </thead>
           <tbody>
             @for (v of ventas(); track v.id) {
-              <tr>
+              <!-- La fila entera abre el detalle. `tabindex` y el manejador de
+                   Enter la hacen alcanzable con teclado: sin eso la unica via
+                   seria el raton. `role="link"` anuncia a que lleva. -->
+              <tr
+                class="fila-navegable"
+                role="link"
+                tabindex="0"
+                [attr.aria-label]="'Ver detalle de la factura ' + v.numero_factura"
+                (click)="abrirDetalle(v)"
+                (keydown.enter)="abrirDetalle(v)"
+                (keydown.space)="abrirDetalle(v); $event.preventDefault()"
+              >
                 <td class="factura">{{ v.numero_factura }}</td>
                 <td>{{ v.fecha | date: 'dd/MM/yy HH:mm' }}</td>
                 <td>{{ v.cliente_nombre }}</td>
@@ -91,7 +102,11 @@
                 </td>
                 <td>
                   @if (v.estado === 'completada') {
-                    <button type="button" class="btn-anular" (click)="iniciarAnulacion(v)">
+                    <button
+                      type="button"
+                      class="btn-anular"
+                      (click)="iniciarAnulacion(v); $event.stopPropagation()"
+                    >
                       Anular
                     </button>
                   }

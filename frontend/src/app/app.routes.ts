@@ -147,6 +147,17 @@ export const routes: Routes = [
       import('./features/ventas/ventas.component').then((m) => m.VentasComponent),
   },
   {
+    // Va despues de 'ventas' y con el mismo guard: el backend devuelve 404 si
+    // la venta es de otra empresa, asi que el aislamiento no depende de aqui.
+    path: 'ventas/:id',
+    title: 'Detalle de venta — InterSoft',
+    canActivate: [authGuard, personalGuard],
+    loadComponent: () =>
+      import('./features/ventas/venta-detalle/venta-detalle.component').then(
+        (m) => m.VentaDetalleComponent,
+      ),
+  },
+  {
     path: 'envios',
     title: 'Envios — InterSoft',
     canActivate: [authGuard, personalGuard],

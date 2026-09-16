@@ -3118,3 +3118,77 @@ class EmpleadoEdicionSerializerTest(BaseCatalogoTest):
             {"tipo_documento": "CC", "numero_documento": "88889999"}, format="json")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("88889999", str(resp.data["errores"]["numero_documento"]))
+
+
+# ============ BUG-20: detalle de venta aislado por empresa =================
+
+class DetalleVentaApiTest(BaseCatalogoTest):
+    """GET /api/ventas/<uuid>/ tiene que responder 404 para una venta de otra
+    empresa (no 403 ni 200: el id de otro tenant no debe ni confirmarse) y
+    traer las lineas con producto, cantidad, precio y subtotal."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.venta = Venta.objects.create(
+            empresa=cls.empresa, cliente=cls.cliente, vendedor=cls.admin,
+            numero_factura="FAC-0001", subtotal=150000, descuento=0,
+            total=150000, estado="completada", metodo_pago="efectivo")
+        DetalleVenta.objects.create(venta=cls.venta, producto=cls.producto,
+                                    cantidad=2, precio_unitario=75000)
+
+        cls.otra = Empresa.objects.create(nombre="Otra SAS", nit="900777888")
+        cls.cliente_otra = Cliente.objects.create(
+            empresa=cls.otra, nombre="Ajeno", tipo_documento="CC",
+            numero_documento="9999999")
+        cls.venta_ajena = Venta.objects.create(
+            empresa=cls.otra, cliente=cls.cliente_otra, numero_factura="FAC-X",
+            subtotal=1000, descuento=0, total=1000, estado="completada",
+            metodo_pago="efectivo")
+
+    def test_devuelve_el_detalle_de_una_venta_propia(self):
+        cuerpo = self.api_como(self.admin).get(
+            f"/api/ventas/{self.venta.id}/").json()
+        self.assertEqual(cuerpo["numero_factura"], "FAC-0001")
+        self.assertEqual(cuerpo["cliente_nombre"], "Carlos Ramirez")
+        self.assertEqual(cuerpo["metodo_pago"], "efectivo")
+        self.assertEqual(cuerpo["estado"], "completada")
+        self.assertIsNotNone(cuerpo["vendedor_nombre"])
+
+    def test_las_lineas_traen_producto_cantidad_precio_y_subtotal(self):
+        cuerpo = self.api_como(self.admin).get(
+            f"/api/ventas/{self.venta.id}/").json()
+        self.assertEqual(len(cuerpo["detalles"]), 1)
+        linea = cuerpo["detalles"][0]
+        self.assertEqual(linea["producto_nombre"], "Zapatos")
+        self.assertEqual(linea["producto_sku"], "SKU-T01")
+        self.assertEqual(linea["cantidad"], 2)
+        self.assertEqual(str(linea["precio_unitario"]), "75000.00")
+        self.assertEqual(linea["subtotal_linea"], "150000.00")
+
+    def test_los_totales_vienen_del_api(self):
+        cuerpo = self.api_como(self.admin).get(
+            f"/api/ventas/{self.venta.id}/").json()
+        for clave in ("subtotal", "descuento", "total", "total_items"):
+            self.assertIn(clave, cuerpo)
+        self.assertEqual(cuerpo["total_items"], 2)
+
+    def test_una_venta_de_otra_empresa_responde_404(self):
+        respuesta = self.api_como(self.admin).get(
+            f"/api/ventas/{self.venta_ajena.id}/")
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_la_otra_empresa_no_alcanza_la_venta_propia(self):
+        ajeno = User.objects.create_user(username="jefe-ajeno@test.co",
+                                         email="jefe-ajeno@test.co",
+                                         password="Clave12345")
+        Perfil.objects.create(usuario=ajeno, empresa=self.otra,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+        api = self.api_como(ajeno)
+        self.assertEqual(api.get(f"/api/ventas/{self.venta.id}/").status_code, 404)
+        # Y la suya si la ve: el 404 es por empresa, no por permisos.
+        self.assertEqual(api.get(f"/api/ventas/{self.venta_ajena.id}/").status_code, 200)
+
+    def test_anonimo_no_entra(self):
+        self.assertEqual(
+            APIClient().get(f"/api/ventas/{self.venta.id}/").status_code, 401)
