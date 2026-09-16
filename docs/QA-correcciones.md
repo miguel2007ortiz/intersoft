@@ -1,4 +1,4 @@
-# QA — correcciones de la Fase 2 y 2.1
+# QA — correcciones de las Fases 2, 2.1 y 2.2
 
 Registro de lo que se midió, lo que se corrigió y lo que quedó descartado, para
 no volver a investigar lo mismo. Rama: `fix/qa-fase-2-seguridad`.
@@ -45,22 +45,65 @@ oráculo de tiempo del BUG-19. Quien medía «99 ms» estaba midiendo un rechazo
 que nunca llegó a hashear, y de paso comprobando que el servidor filtraba por
 tiempo si el correo existía. Ya está cerrado: los dos caminos hashean.
 
-### Hipótesis para los 8–29 s
+### Medición contra la base de desarrollo real (evidencia)
 
-No están en el código. Lo que se observó en este entorno y encaja:
+La medición anterior usa la base de pruebas, que el runner crea limpia. Esta se
+hizo contra `intersoft1_db`, la base de desarrollo desfasada, con `runserver` y
+`curl` — es decir, el mismo camino que recorre el navegador.
 
-1. **La base de datos de desarrollo está desfasada** (ver más abajo). Con el
-   esquema incompleto, `actividad_usuario` no existe: el `INSERT` de auditoría
-   falla, el middleware lo captura y lo registra, y cada login paga el coste de
-   una excepción con traceback completo escrito a disco.
-2. **La tabla de caché tampoco existe**. Antes de esta rama un fallo de caché
-   en el conteo de intentos propagaba la excepción; ahora degrada.
-3. **Primer login tras cambiar el hasher** (ver más abajo): un hash extra más
-   un `UPDATE`, una sola vez por cuenta.
+Respaldo previo con `mysqldump --single-transaction` guardado en
+`backend/backups/` (directorio ignorado por git). No se ejecutó `seed_demo`.
 
-Si vuelve a ocurrir, lo primero es descartar (1) y (2) poniendo la base al día,
-y medir con `DEBUG=False` (con `DEBUG=True` Django acumula todas las consultas
-en memoria).
+**Antes de migrar** (`cuentas` en `0001_initial`, sin `intersoft_cache`):
+
+| Intento | HTTP | Tiempo |
+|---|---|---|
+| 1 | 500 | 35 ms |
+| 2 | 500 | 33 ms |
+| 3 | 500 | 47 ms |
+
+Causa, literal del log del servidor:
+
+```
+ProgrammingError: (1146, "Table 'intersoft1_db.intersoft_cache' doesn't exist")
+```
+
+El fallo ocurre **antes de entrar a la vista**: el throttle por IP consulta el
+caché, el caché está configurado como `DatabaseCache` en `backend/.env` y la
+tabla no existe. Ni siquiera se llega a verificar la contraseña.
+
+**Después de `migrate` + `crear_cache` + `seed_roles`**:
+
+| Intento | HTTP | Tiempo |
+|---|---|---|
+| 1 | 200 | 567 ms |
+| 2 | 200 | 493 ms |
+| 3 | 200 | 506 ms |
+
+### Corrección: la base desfasada NO explica los 8–29 s
+
+La hipótesis que estaba escrita aquí era que el esquema incompleto encarecía
+cada login por el coste de una excepción con traceback. **La medición la
+refuta**: la base desfasada produce un **500 en 35 ms**, no un 200 lento. Falla
+rápido y falla del todo.
+
+Sigue siendo un problema real —con la base así el login no funciona en
+absoluto— pero es un problema distinto del del ticket, y lo corrige el mismo
+`migrate` + `crear_cache`.
+
+**Los 8–29 s siguen sin reproducirse.** Con la base al día el login exitoso
+tarda ~500 ms extremo a extremo por HTTP. Lo que queda por descartar está
+fuera del backend, y para investigarlo hace falta una medición del entorno
+donde se observó:
+
+- La secuencia real del navegador es `POST /login/` **más** `GET /me/`
+  (`AuthService.login` encadena las dos). Un cortafuegos o antivirus que
+  inspeccione la conexión puede añadir segundos a la segunda petición.
+- `runserver` es monohilo por defecto: si otra petición está en curso, la del
+  login espera. No aplica a producción (gunicorn), sí a una demo local.
+- Medir con la pestaña de red del navegador y separar los tiempos de las dos
+  peticiones diría en cuál está el tiempo. Sin ese dato no hay más que buscar
+  en el código.
 
 ### Lo que sí se aplicó
 
@@ -130,10 +173,17 @@ Las pruebas **nunca** tocan `intersoft1_db`: Django crea `test_intersoft1_db`
 aparte. Por eso la base de desarrollo puede estar desfasada sin que la suite se
 queje.
 
-Estado observado de `intersoft1_db`: aplicada solo `cuentas.0001_initial`, con
-11 migraciones de `cuentas` pendientes. Faltan `actividad_usuario`, `rol`,
-`permiso`, `rol_permiso` e `intersoft_cache`, y arrastra una tabla `core_usuario`
-de un modelo que ya no existe.
+Estado observado de `intersoft1_db` antes de esta rama: aplicada solo
+`cuentas.0001_initial`, con 11 migraciones de `cuentas` pendientes. Faltaban
+`actividad_usuario`, `rol`, `permiso`, `rol_permiso` e `intersoft_cache`, y
+arrastra una tabla `core_usuario` de un modelo que ya no existe. **Con ese
+esquema el login devolvía 500**, ver la medición de arriba. Ya está al día.
+
+Nota sobre el caché en local: `backend/.env` fija
+`CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache`, que exige haber
+corrido `crear_cache`. Desde esta rama el valor por omisión con `DEBUG=True` es
+`LocMemCache`, que no necesita tabla; comentar esa línea del `.env` evita
+volver a tropezar con el mismo 500.
 
 Para ponerla al día (con el MySQL de Laragon arriba, desde `backend/` y con el
 entorno virtual activado):
@@ -155,6 +205,13 @@ python manage.py verificar_emails_duplicados
 ```
 
 Deja una sola cuenta por correo (cambia o vacía el de las demás) y repite.
+
+`0012` **exige MySQL 8.0.13 o superior** (la versión que introdujo los índices
+funcionales) y **no puede aplicarse en MariaDB**, que no los soporta en ninguna
+versión. La migración comprueba motor y versión y aborta diciendo qué falta, en
+vez de dejar salir un error de sintaxis de SQL. En MariaDB habría que sustituir
+los índices funcionales por una columna generada `email_lower` con un `UNIQUE`
+normal encima.
 
 ---
 
