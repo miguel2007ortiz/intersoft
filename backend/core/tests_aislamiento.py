@@ -231,8 +231,8 @@ class RolesSistemaSoloLecturaTest(BaseAislamientoTest):
         respuesta = self.api_a().patch(
             f"/api/seguridad/roles/{rol_admin.id}/",
             {"permisos": []}, format="json")
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertEqual(respuesta.json()["codigo"], "ROL_SISTEMA_LECTURA_ONLY")
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
         # Los permisos no cambiaron
         self.assertTrue(rol_admin.perfiles.filter(
             usuario=self.admin_a).exists())
@@ -244,17 +244,16 @@ class RolesSistemaSoloLecturaTest(BaseAislamientoTest):
         respuesta = self.api_a().patch(
             f"/api/seguridad/roles/{rol.id}/",
             {"descripcion": "modificada"}, format="json")
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertEqual(respuesta.json()["codigo"], "ROL_SISTEMA_LECTURA_ONLY")
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
 
     def test_admin_no_puede_eliminar_rol_del_sistema(self):
         for nombre in ("ADMINISTRADOR", "EMPLEADO", "CLIENTE"):
             rol = Rol.objects.get(nombre=nombre)
             respuesta = self.api_a().delete(
                 f"/api/seguridad/roles/{rol.id}/")
-            self.assertEqual(respuesta.status_code, 400)
-            self.assertEqual(respuesta.json()["codigo"],
-                             "ROL_SISTEMA_LECTURA_ONLY")
+            self.assertEqual(respuesta.status_code, 403)
+            self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
             self.assertTrue(Rol.objects.filter(pk=rol.pk).exists())
 
     def test_roles_sistema_siguen_compartidos_y_asignables(self):

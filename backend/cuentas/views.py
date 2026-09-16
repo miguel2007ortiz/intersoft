@@ -2,6 +2,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.models import update_last_login
 from django.core.mail import EmailMultiAlternatives
 from django.db.models.functions import Lower
 from rest_framework import status
@@ -119,6 +120,12 @@ class LoginView(APIView):
             return Response({"codigo": "EMPRESA_INACTIVA"}, status=status.HTTP_403_FORBIDDEN)
 
         contador.reiniciar()
+        # `authenticate()` no toca `last_login`: eso lo hace el receptor de la
+        # senal `user_logged_in`, que solo dispara `django.contrib.auth.login()`
+        # (sesiones), y esta API es por JWT. Sin esta llamada `last_login` se
+        # quedaba en NULL para siempre y la columna "ultimo acceso" de
+        # /admin/usuarios y de Empleados salia vacia en todas las filas.
+        update_last_login(None, usuario)
         refresh = RefreshToken.for_user(usuario)
         nombre = (usuario.get_full_name() or usuario.username).strip()
         ActividadUsuario.registrar(usuario, "LOGIN_EXITOSO", email)

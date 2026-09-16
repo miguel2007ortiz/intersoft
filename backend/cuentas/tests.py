@@ -885,9 +885,10 @@ class CosteLoginTest(BaseCuentasTest):
         cls.user, cls.perfil = cls.crear_cuenta(email="rapido@test.co")
 
     def test_login_exitoso_no_supera_el_techo_de_consultas(self):
-        # 1 resolver usuario+perfil+empresa+rol / 1 authenticate / 1 insert de
-        # auditoria. Sin select_related el contexto costaba 3 consultas extra.
-        with self.assertNumQueries(3):
+        # 1 resolver usuario+perfil+empresa+rol / 1 authenticate / 1 UPDATE de
+        # last_login / 1 insert de auditoria. Sin select_related el contexto
+        # costaba 3 consultas extra.
+        with self.assertNumQueries(4):
             respuesta = self.login("rapido@test.co", "Clave12345")
         self.assertEqual(respuesta.status_code, 200)
 
@@ -1415,3 +1416,41 @@ class RolesGlobalesSoloLecturaTest(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.rol_propio_b.refresh_from_db()
         self.assertEqual(self.rol_propio_b.nombre, "AUDITOR_INTERNO")
+
+
+# ===== BUG-27: "ultimo acceso" salia vacio en todas las filas ===============
+
+class UltimoAccesoTest(BaseCuentasTest):
+    """`authenticate()` no toca `last_login`: eso lo hace el receptor de la
+    senal `user_logged_in`, que solo dispara `django.contrib.auth.login()`, y
+    esta API es por JWT. Sin escribirlo a mano, `last_login` se quedaba en NULL
+    para siempre y las columnas "ultimo acceso" de /admin/usuarios y de
+    Empleados salian vacias."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email="acceso@test.co",
+                                                rol="ADMINISTRADOR")
+
+    def test_el_login_exitoso_registra_el_ultimo_acceso(self):
+        self.assertIsNone(self.user.last_login)
+        antes = timezone.now()
+        self.assertEqual(self.login("acceso@test.co", "Clave12345").status_code, 200)
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.last_login)
+        self.assertGreaterEqual(self.user.last_login, antes)
+
+    def test_el_login_fallido_no_lo_toca(self):
+        self.login("acceso@test.co", "mala")
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.last_login)
+
+    def test_la_api_de_usuarios_lo_expone(self):
+        self.login("acceso@test.co", "Clave12345")
+        cliente = APIClient()
+        cliente.force_authenticate(user=self.user)
+        fila = next(u for u in cliente.get("/api/seguridad/usuarios/")
+                    .json()["resultados"] if u["email"] == "acceso@test.co")
+        self.assertIsNotNone(fila["ultimo_login"])
