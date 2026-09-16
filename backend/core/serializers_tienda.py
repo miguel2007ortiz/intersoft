@@ -7,12 +7,13 @@ from rest_framework import serializers
 
 from .models import (Carrito, CarritoItem, Cliente, ComentarioProducto,
                      Cupon, Envio, Favorito, Producto, Categoria, Venta)
+from .serializers_base import ImagenAbsolutaMixin
 from .serializers_ventas import DetalleVentaLecturaSerializer
 
 
 # ------------------------------ Catálogo ---------------------------------
 
-class ProductoTiendaSerializer(serializers.ModelSerializer):
+class ProductoTiendaSerializer(ImagenAbsolutaMixin, serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     empresa_id = serializers.CharField(source='empresa.id', read_only=True)
     empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)

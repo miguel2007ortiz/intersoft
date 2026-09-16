@@ -201,7 +201,17 @@
               <tr>
                 <td class="celda-producto">
                   @if (p.imagen) {
-                    <img class="miniatura" [src]="p.imagen" [alt]="p.nombre" />
+                    <!-- loading="lazy": la tabla puede traer 200 filas y no
+                         tiene sentido descargar las miniaturas que no se ven.
+                         (error) cae a una imagen de respaldo si el archivo ya
+                         no esta en disco, en vez de dejar el icono de rota. -->
+                    <img
+                      class="miniatura"
+                      [src]="p.imagen"
+                      [alt]="p.nombre"
+                      loading="lazy"
+                      (error)="imagenFallida($event)"
+                    />
                   }
                   <div>
                     <strong>{{ p.nombre }}</strong>

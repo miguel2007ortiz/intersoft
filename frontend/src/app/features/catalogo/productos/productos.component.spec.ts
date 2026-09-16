@@ -101,4 +101,20 @@ describe('ProductosComponent', () => {
     expect(catalogo.listarProductos).toHaveBeenLastCalledWith({ busqueda: '', activo: undefined });
     expect(html).toContain('Aun no hay productos');
   });
+
+  it('la miniatura carga en diferido y cae a la imagen de respaldo si falla', () => {
+    catalogo.listarProductos.mockReturnValue(
+      of({ resultados: [{ ...PRODUCTO, imagen: 'http://api/media/rota.jpg' }], total: 1 }),
+    );
+    const fixture = crear();
+    const img = (fixture.nativeElement as HTMLElement).querySelector<HTMLImageElement>(
+      '.miniatura',
+    );
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('loading')).toBe('lazy');
+
+    img!.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+    expect(img!.src).toContain('data:image/svg+xml');
+  });
 });

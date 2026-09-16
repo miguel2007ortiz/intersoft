@@ -21,6 +21,19 @@ import { ConfirmacionService } from '../../../core/services/confirmacion.service
 
 const CERRAR_AVISO_MS = 4000;
 
+/** Imagen que se pinta cuando la del producto no carga. Es un SVG en linea
+ * (data URI) a proposito: no anade una peticion mas ni un archivo que se
+ * pueda perder al desplegar, que es justo el fallo del que protege. */
+export const IMAGEN_RESPALDO =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">' +
+      '<rect width="48" height="48" rx="6" fill="#e5e7eb"/>' +
+      '<path d="M12 32l7-8 5 6 4-4 8 6z" fill="#9ca3af"/>' +
+      '<circle cx="18" cy="17" r="3" fill="#9ca3af"/>' +
+      '</svg>',
+  );
+
 @Component({
   selector: 'app-productos',
   imports: [CommonModule, ReactiveFormsModule, PanelShellComponent, EstadoVacioComponent],
@@ -103,6 +116,14 @@ export class ProductosComponent implements OnInit {
     this.busqueda.set('');
     this.filtroEstado.set('todos');
     this.cargar();
+  }
+
+  /** Imagen de respaldo si la URL del producto no carga (archivo borrado del
+   * disco, permisos de media, etc.): sin esto queda el icono de rota. */
+  imagenFallida(evento: Event): void {
+    const img = evento.target as HTMLImageElement;
+    if (img.src.endsWith(IMAGEN_RESPALDO)) return;
+    img.src = IMAGEN_RESPALDO;
   }
 
   abrirCreacion(): void {

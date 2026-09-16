@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -3118,3 +3119,54 @@ class EmpleadoEdicionSerializerTest(BaseCatalogoTest):
             {"tipo_documento": "CC", "numero_documento": "88889999"}, format="json")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("88889999", str(resp.data["errores"]["numero_documento"]))
+
+
+# ============ Fase 4: imagenes y paginacion de productos ====================
+
+class ImagenAbsolutaTest(BaseCatalogoTest):
+    """BUG-01: /api/productos/ devolvia "/media/..." relativa y el catalogo
+    publico devolvia la absoluta. En desarrollo el panel se sirve desde otro
+    origen que la API, asi que la ruta relativa apuntaba al servidor de Angular
+    y la imagen salia rota."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.con_imagen = Producto.objects.create(
+            empresa=cls.empresa, nombre="Con imagen", sku="SKU-IMG",
+            precio=1000, stock=5, stock_minimo=1,
+            imagen=SimpleUploadedFile("foto.jpg", b"contenido-falso",
+                                      content_type="image/jpeg"))
+
+    def test_el_panel_devuelve_la_imagen_absoluta(self):
+        respuesta = self.api_como(self.admin).get("/api/productos/")
+        fila = next(p for p in respuesta.json()["resultados"]
+                    if p["sku"] == "SKU-IMG")
+        self.assertTrue(fila["imagen"].startswith("http"),
+                        f"no es absoluta: {fila['imagen']}")
+        self.assertIn("/media/", fila["imagen"])
+
+    def test_el_catalogo_publico_devuelve_la_imagen_absoluta(self):
+        respuesta = self.client.get("/api/tienda/catalogo/")
+        fila = next(p for p in respuesta.json()["resultados"]
+                    if p["sku"] == "SKU-IMG")
+        self.assertTrue(fila["imagen"].startswith("http"),
+                        f"no es absoluta: {fila['imagen']}")
+
+    def test_los_dos_endpoints_dan_la_misma_url(self):
+        panel = self.api_como(self.admin).get("/api/productos/").json()["resultados"]
+        publico = self.client.get("/api/tienda/catalogo/").json()["resultados"]
+        del_panel = next(p for p in panel if p["sku"] == "SKU-IMG")["imagen"]
+        del_publico = next(p for p in publico if p["sku"] == "SKU-IMG")["imagen"]
+        self.assertEqual(del_panel, del_publico)
+
+    def test_el_detalle_y_la_creacion_tambien_son_absolutas(self):
+        api = self.api_como(self.admin)
+        detalle = api.get(f"/api/productos/{self.con_imagen.id}/").json()
+        self.assertTrue(detalle["imagen"].startswith("http"))
+
+    def test_un_producto_sin_imagen_devuelve_null(self):
+        respuesta = self.api_como(self.admin).get("/api/productos/")
+        fila = next(p for p in respuesta.json()["resultados"]
+                    if p["sku"] == "SKU-T01")
+        self.assertIsNone(fila["imagen"])
