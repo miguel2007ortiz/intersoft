@@ -16,7 +16,7 @@ from core.models import Empresa
 from .models import ActividadUsuario, Permiso, Perfil, Rol, RolPermiso
 from .permissions import EsAdministrador
 from .serializers_admin import (
-    ROLES_DEL_SISTEMA, RolEscrituraSerializer, RolLecturaSerializer,
+    RolEscrituraSerializer, RolLecturaSerializer,
     UsuarioCreacionSerializer, UsuarioEdicionSerializer, UsuarioLecturaSerializer,
 )
 
@@ -46,6 +46,24 @@ def roles_visibles(empresa: Empresa):
     """Roles que una empresa puede ver y asignar: los globales del sistema
     (empresa=None) mas sus propios roles personalizados."""
     return Rol.objects.filter(Q(empresa=empresa) | Q(empresa__isnull=True))
+
+
+def respuesta_rol_del_sistema():
+    """403 para cualquier escritura sobre un rol GLOBAL (empresa=None).
+
+    Los roles globales los comparten todos los tenants: si el administrador de
+    una empresa pudiera renombrarlos, cambiar sus RolPermiso o eliminarlos,
+    estaria alterando la autorizacion de TODA la plataforma. Antes la guarda
+    comparaba el nombre contra ROLES_DEL_SISTEMA, asi que un rol global con
+    cualquier otro nombre (creado por un superusuario desde el admin) quedaba
+    editable por cualquier tenant. La condicion correcta es `empresa is None`.
+    """
+    return Response(
+        {"codigo": "ROL_DEL_SISTEMA",
+         "detalle": "Los roles del sistema los comparten todas las empresas: "
+                    "solo se pueden leer y asignar. Si necesitas una variante, "
+                    "clonalo y edita la copia."},
+        status=status.HTTP_403_FORBIDDEN)
 
 
 def filtro_usuarios_activos(empresa: Empresa) -> Q:
@@ -275,15 +293,11 @@ class RolDetalleView(APIView):
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        # Los roles del sistema son globales y compartidos por todos los
-        # tenants: no se pueden editar (ni nombre, ni descripcion, ni
-        # permisos) para impedir que una empresa altere la autorizacion de
-        # las demas (requisito fase 3: aislamiento multiempresa).
-        if rol.nombre in ROLES_DEL_SISTEMA:
-            return Response({"codigo": "ROL_SISTEMA_LECTURA_ONLY",
-                             "detalle": "Los roles base del sistema son de "
-                                        "solo lectura: no se pueden editar."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        # Solo lectura si el rol es global: ni nombre, ni descripcion, ni
+        # permisos. Se mira `empresa_id`, no el nombre (ver
+        # `respuesta_rol_del_sistema`).
+        if rol.empresa_id is None:
+            return respuesta_rol_del_sistema()
 
         entrada = RolEscrituraSerializer(rol, data=request.data, partial=parcial,
                                          context={"empresa": request.user.perfil.empresa})
@@ -312,11 +326,8 @@ class RolDetalleView(APIView):
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        if rol.nombre in ROLES_DEL_SISTEMA:
-            return Response({"codigo": "ROL_SISTEMA_LECTURA_ONLY",
-                             "detalle": "Los roles base del sistema no se "
-                                        "pueden eliminar."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        if rol.empresa_id is None:
+            return respuesta_rol_del_sistema()
 
         # Solo los usuarios de MI empresa: un rol global lo comparten todos
         # los tenants y no debe contarse (ni revelarse) el uso ajeno.

@@ -455,8 +455,8 @@ class CrudRolesTest(BaseSeguridadTest):
         rol = Rol.objects.get(nombre="ADMINISTRADOR")
         respuesta = self.api.patch(f"/api/seguridad/roles/{rol.id}/", {
             "nombre": "JEFE_TOTAL"}, format="json")
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertEqual(respuesta.json()["codigo"], "ROL_SISTEMA_LECTURA_ONLY")
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
 
     def test_eliminar_rol_sin_usuarios(self):
         creado = self.api.post("/api/seguridad/roles/", {
@@ -468,9 +468,10 @@ class CrudRolesTest(BaseSeguridadTest):
     def test_no_eliminar_rol_con_usuarios_activos(self):
         user = User.objects.create_user(username="conrol@test.co", email="conrol@test.co",
                                         password="Clave12345", first_name="Con Rol")
-        Perfil.objects.create(usuario=user, empresa=self.empresa,
-                              rol=Rol.de_nombre("AUXILIAR_VENTAS"))
-        rol = Rol.objects.get(nombre="AUXILIAR_VENTAS")
+        # Rol PROPIO de la empresa: `Rol.de_nombre` crearia uno global y esos
+        # ahora responden 403 antes de mirar si estan en uso.
+        rol = Rol.objects.create(nombre="AUXILIAR_VENTAS", empresa=self.empresa)
+        Perfil.objects.create(usuario=user, empresa=self.empresa, rol=rol)
         respuesta = self.api.delete(f"/api/seguridad/roles/{rol.id}/")
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.json()["codigo"], "ROL_CON_USUARIOS_ACTIVOS")
@@ -480,7 +481,7 @@ class CrudRolesTest(BaseSeguridadTest):
         for nombre in ("ADMINISTRADOR", "EMPLEADO", "CLIENTE"):
             rol = Rol.objects.get(nombre=nombre)
             respuesta = self.api.delete(f"/api/seguridad/roles/{rol.id}/")
-            self.assertEqual(respuesta.json()["codigo"], "ROL_SISTEMA_LECTURA_ONLY")
+            self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
 
     def test_clonar_rol_duplica_permisos_con_nombre_temporal(self):
         origen = Rol.objects.get(nombre="EMPLEADO")
@@ -1288,3 +1289,129 @@ class ThrottlingDeLoginTest(BaseCuentasTest):
         self.assertEqual(respuesta.status_code, 200)
         self.perfil.refresh_from_db()
         self.assertEqual(self.perfil.intentos_fallidos, 0)
+
+
+# ===== BUG-13 (fase 2.1): los roles globales son de solo lectura ============
+
+class RolesGlobalesSoloLecturaTest(TestCase):
+    """Los roles con `empresa=None` los comparten TODOS los tenants: si el
+    administrador de una empresa pudiera tocarlos, estaria cambiando la
+    autorizacion de la plataforma entera.
+
+    La guarda anterior comparaba el nombre contra ROLES_DEL_SISTEMA, asi que
+    un rol global con cualquier otro nombre quedaba editable por cualquier
+    empresa.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("seed_roles")
+        cls.empresa_a = Empresa.objects.create(nombre="Empresa A", nit="900110110")
+        cls.empresa_b = Empresa.objects.create(nombre="Empresa B", nit="900220220")
+        cls.admin_a = cls.crear(cls.empresa_a, "jefe-a@test.co")
+        cls.admin_b = cls.crear(cls.empresa_b, "jefe-b@test.co")
+        # Rol GLOBAL con un nombre que no esta en ROLES_DEL_SISTEMA: es el caso
+        # que se colaba por la guarda vieja.
+        cls.rol_global = Rol.objects.create(nombre="SOPORTE_PLATAFORMA",
+                                            empresa=None)
+        cls.rol_propio_b = Rol.objects.create(nombre="AUDITOR_B",
+                                              empresa=cls.empresa_b)
+
+    @classmethod
+    def crear(cls, empresa, email):
+        usuario = User.objects.create_user(username=email, email=email,
+                                           password="Clave12345", first_name=email)
+        return Perfil.objects.create(usuario=usuario, empresa=empresa,
+                                     rol=Rol.de_nombre("ADMINISTRADOR"))
+
+    def cliente_de(self, perfil):
+        cliente = APIClient()
+        cliente.force_authenticate(user=perfil.usuario)
+        return cliente
+
+    def ruta(self, rol):
+        return "/api/seguridad/roles/%s/" % rol.id
+
+    # ---------------------------- roles globales ----------------------------
+
+    def test_no_puede_renombrar_un_rol_base(self):
+        rol = Rol.de_nombre("EMPLEADO")
+        respuesta = self.cliente_de(self.admin_a).patch(
+            self.ruta(rol), {"nombre": "MIO"}, format="json")
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+        rol.refresh_from_db()
+        self.assertEqual(rol.nombre, "EMPLEADO")
+
+    def test_no_puede_cambiar_los_permisos_de_un_rol_base(self):
+        rol = Rol.de_nombre("EMPLEADO")
+        antes = set(RolPermiso.objects.filter(rol=rol)
+                    .values_list("permiso__codigo", flat=True))
+        respuesta = self.cliente_de(self.admin_a).patch(
+            self.ruta(rol), {"permisos": ["usuarios.gestionar"]}, format="json")
+        self.assertEqual(respuesta.status_code, 403)
+        despues = set(RolPermiso.objects.filter(rol=rol)
+                      .values_list("permiso__codigo", flat=True))
+        self.assertEqual(antes, despues)
+
+    def test_no_puede_eliminar_un_rol_base(self):
+        rol = Rol.de_nombre("CLIENTE")
+        respuesta = self.cliente_de(self.admin_a).delete(self.ruta(rol))
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+        self.assertTrue(Rol.objects.filter(pk=rol.pk).exists())
+
+    def test_un_rol_global_con_otro_nombre_tambien_esta_protegido(self):
+        """El agujero concreto: la guarda vieja solo miraba el nombre."""
+        for peticion in (
+            lambda c: c.patch(self.ruta(self.rol_global),
+                              {"nombre": "SECUESTRADO"}, format="json"),
+            lambda c: c.patch(self.ruta(self.rol_global),
+                              {"permisos": ["usuarios.gestionar"]}, format="json"),
+            lambda c: c.delete(self.ruta(self.rol_global)),
+        ):
+            respuesta = peticion(self.cliente_de(self.admin_a))
+            self.assertEqual(respuesta.status_code, 403)
+            self.assertEqual(respuesta.json()["codigo"], "ROL_DEL_SISTEMA")
+        self.rol_global.refresh_from_db()
+        self.assertEqual(self.rol_global.nombre, "SOPORTE_PLATAFORMA")
+        self.assertEqual(RolPermiso.objects.filter(rol=self.rol_global).count(), 0)
+
+    def test_los_globales_se_marcan_es_sistema_y_se_pueden_leer_y_clonar(self):
+        cliente = self.cliente_de(self.admin_a)
+        listado = cliente.get("/api/seguridad/roles/").json()["resultados"]
+        globales = {r["nombre"] for r in listado if r["es_sistema"]}
+        self.assertEqual(globales, {"ADMINISTRADOR", "EMPLEADO", "CLIENTE",
+                                    "SOPORTE_PLATAFORMA"})
+
+        # La via para personalizar uno es clonarlo: la copia es propia.
+        clon = cliente.post("/api/seguridad/roles/%s/clonar/" % self.rol_global.id)
+        self.assertEqual(clon.status_code, 201)
+        self.assertFalse(clon.json()["es_sistema"])
+        self.assertEqual(Rol.objects.get(pk=clon.json()["id"]).empresa_id,
+                         self.empresa_a.id)
+
+    # ------------------------- aislamiento entre tenants --------------------
+
+    def test_el_admin_de_a_no_ve_los_roles_propios_de_b(self):
+        listado = self.cliente_de(self.admin_a).get(
+            "/api/seguridad/roles/").json()["resultados"]
+        self.assertNotIn("AUDITOR_B", {r["nombre"] for r in listado})
+
+    def test_el_admin_de_a_no_puede_tocar_un_rol_de_b(self):
+        cliente = self.cliente_de(self.admin_a)
+        ruta = self.ruta(self.rol_propio_b)
+        self.assertEqual(cliente.get(ruta).status_code, 404)
+        self.assertEqual(cliente.patch(ruta, {"nombre": "ROBADO"},
+                                       format="json").status_code, 404)
+        self.assertEqual(cliente.delete(ruta).status_code, 404)
+        self.rol_propio_b.refresh_from_db()
+        self.assertEqual(self.rol_propio_b.nombre, "AUDITOR_B")
+
+    def test_cada_empresa_edita_sus_propios_roles(self):
+        respuesta = self.cliente_de(self.admin_b).patch(
+            self.ruta(self.rol_propio_b), {"nombre": "AUDITOR_INTERNO"},
+            format="json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.rol_propio_b.refresh_from_db()
+        self.assertEqual(self.rol_propio_b.nombre, "AUDITOR_INTERNO")

@@ -7,7 +7,8 @@ import { AuthService } from './auth.service';
 
 const api = environment.apiUrl;
 const USUARIO = {
-  id: 'u1',
+  id: '1',
+  perfil_id: 'p1',
   email: 'ana@test.co',
   nombre: 'Ana',
   rol: 'ADMINISTRADOR',

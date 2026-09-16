@@ -106,7 +106,10 @@ class RolLecturaSerializer(serializers.Serializer):
                                      usuario__is_active=True).count()
 
     def get_es_sistema(self, rol) -> bool:
-        return rol.nombre in ROLES_DEL_SISTEMA
+        """Un rol es del sistema si es GLOBAL (`empresa=None`), no por como se
+        llame: un rol global con otro nombre tambien lo comparten todos los
+        tenants y tampoco puede editarlo el administrador de una empresa."""
+        return rol.empresa_id is None
 
 
 class RolEscrituraSerializer(serializers.Serializer):

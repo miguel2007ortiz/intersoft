@@ -11,7 +11,10 @@
 export type RolUsuario = 'ADMINISTRADOR' | 'EMPLEADO' | 'CLIENTE';
 
 export interface Usuario {
+  /** id de `auth_user` (el sujeto del token JWT). */
   id: string;
+  /** id del `Perfil` (OneToOne con el usuario), por si una pantalla lo necesita. */
+  perfil_id: string;
   email: string;
   nombre: string;
   rol: RolUsuario;
@@ -71,6 +74,9 @@ export type CodigoErrorAuth =
 export interface ErrorAuth {
   codigo: CodigoErrorAuth;
   mensaje: string;
-  intentosRestantes?: number;
+  /** Aviso generico que el backend solo manda en el ultimo intento antes del
+   * bloqueo. Nunca trae el numero de intentos restantes: eso permitia
+   * distinguir un correo registrado de uno inexistente. */
+  aviso?: string;
   desbloqueoEn?: string;
 }

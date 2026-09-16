@@ -113,7 +113,7 @@
               <span class="titulo">
                 {{ rol.nombre }}
                 @if (rol.es_sistema) {
-                  <span class="insignia">Sistema</span>
+                  <span class="insignia">Rol del sistema</span>
                 }
               </span>
               <span class="resumen">
@@ -153,9 +153,18 @@
                     >{{ rol.total_usuarios_activos }} usuario(s) activo(s) con este rol</small
                   >
                   <div class="botones">
-                    <button type="button" class="enlace" (click)="abrirEdicion(rol)">Editar</button>
-                    <button type="button" class="enlace" (click)="clonar(rol)">Clonar</button>
-                    @if (!rol.es_sistema) {
+                    <!-- Los roles del sistema (empresa=None) los comparten todas
+                         las empresas: el backend responde 403 ROL_DEL_SISTEMA a
+                         cualquier escritura, asi que aqui no se ofrecen Editar ni
+                         Eliminar. La via para personalizarlos es Clonar. -->
+                    @if (rol.es_sistema) {
+                      <small class="gris">Solo lectura: clonalo para personalizarlo.</small>
+                      <button type="button" class="enlace" (click)="clonar(rol)">Clonar</button>
+                    } @else {
+                      <button type="button" class="enlace" (click)="abrirEdicion(rol)">
+                        Editar
+                      </button>
+                      <button type="button" class="enlace" (click)="clonar(rol)">Clonar</button>
                       <button type="button" class="enlace peligro" (click)="eliminar(rol)">
                         Eliminar
                       </button>
