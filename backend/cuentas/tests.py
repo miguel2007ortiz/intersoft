@@ -3,6 +3,7 @@ import time
 from datetime import timedelta
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.cache import cache
@@ -1180,3 +1181,110 @@ class VerificacionIdentidadesDuplicadasTest(TransactionTestCase):
         self.assertIn("email", texto)
         self.assertIn("dup@test.co", texto)
         self.assertIn("7,9", texto)
+
+
+# ===== BUG-19 (fase 2.1): el bloqueo no depende de la IP del atacante ======
+
+class BloqueoIndependienteDeIPTest(BaseCuentasTest):
+    """Con la IP en la clave del contador anonimo quedaba un oraculo: el
+    bloqueo de una cuenta real es global, asi que cinco intentos repartidos
+    entre cinco IPs devolvian 423 para un correo registrado y seguian
+    devolviendo 401 para uno inexistente."""
+
+    REGISTRADO = "existe@test.co"
+    INEXISTENTE = "no-existe@test.co"
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email=cls.REGISTRADO)
+
+    def setUp(self):
+        cache.clear()
+        Perfil.objects.filter(pk=self.perfil.pk).update(intentos_fallidos=0,
+                                                        fecha_desbloqueo=None)
+
+    def secuencia_desde_ips_distintas(self, email):
+        """Un intento por IP, tantas IPs como el maximo de intentos."""
+        codigos = []
+        for n in range(1, 6):
+            respuesta = self.client.post(
+                reverse("auth-login"),
+                {"email": email, "password": "mala"},
+                content_type="application/json",
+                REMOTE_ADDR=f"203.0.113.{n}")
+            codigos.append(respuesta.status_code)
+        return codigos
+
+    def test_misma_secuencia_para_correo_real_e_inexistente(self):
+        real = self.secuencia_desde_ips_distintas(self.REGISTRADO)
+        cache.clear()
+        falso = self.secuencia_desde_ips_distintas(self.INEXISTENTE)
+        self.assertEqual(real, [401, 401, 401, 401, 423])
+        self.assertEqual(real, falso)
+
+    def test_el_correo_inexistente_tambien_se_bloquea_cambiando_de_ip(self):
+        self.secuencia_desde_ips_distintas(self.INEXISTENTE)
+        # Una IP nueva no reinicia el contador: el bloqueo va por identidad.
+        respuesta = self.client.post(
+            reverse("auth-login"),
+            {"email": self.INEXISTENTE, "password": "mala"},
+            content_type="application/json", REMOTE_ADDR="198.51.100.77")
+        self.assertEqual(respuesta.status_code, 423)
+
+    def test_el_login_sigue_en_pie_si_el_cache_falla(self):
+        """La tabla de DatabaseCache puede no existir todavia: un fallo de
+        cache no puede convertir el login en un 500."""
+        from unittest import mock
+
+        with mock.patch("cuentas.intentos.cache") as cache_roto:
+            cache_roto.get.side_effect = Exception("cache caido")
+            cache_roto.set.side_effect = Exception("cache caido")
+            respuesta = self.login(self.INEXISTENTE, "mala")
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()["codigo"], "CREDENCIALES_INVALIDAS")
+
+
+REST_FRAMEWORK_LOGIN_ESTRECHO = {
+    **settings.REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_RATES": {**settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+                               "auth_login": "3/minute"},
+}
+
+
+@override_settings(REST_FRAMEWORK=REST_FRAMEWORK_LOGIN_ESTRECHO)
+class ThrottlingDeLoginTest(BaseCuentasTest):
+    """Cada intento cuesta un hash PBKDF2 (~650 ms): sin limite por IP el
+    login es un vector de denegacion de servicio. El limite acota el gasto
+    por IP y NO bloquea cuentas."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email="dos@test.co")
+
+    def setUp(self):
+        cache.clear()
+
+    def test_se_corta_por_ip_antes_de_gastar_mas_hashes(self):
+        for _ in range(3):
+            self.assertEqual(self.login("dos@test.co", "mala").status_code, 401)
+        cortado = self.login("dos@test.co", "mala")
+        self.assertEqual(cortado.status_code, 429)
+
+    def test_el_limite_es_por_ip_y_no_bloquea_la_cuenta(self):
+        for _ in range(4):
+            self.client.post(reverse("auth-login"),
+                             {"email": "dos@test.co", "password": "mala"},
+                             content_type="application/json",
+                             REMOTE_ADDR="203.0.113.9")
+        # Otra IP sigue pudiendo entrar: el 429 no toco la cuenta.
+        respuesta = self.client.post(reverse("auth-login"),
+                                     {"email": "dos@test.co", "password": "Clave12345"},
+                                     content_type="application/json",
+                                     REMOTE_ADDR="198.51.100.5")
+        self.assertEqual(respuesta.status_code, 200)
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.intentos_fallidos, 0)

@@ -211,10 +211,15 @@ REST_FRAMEWORK = {
         'core.throttling.IPScopedRateThrottle',
     ),
     'DEFAULT_THROTTLE_RATES': {
+        # El login limita por IP porque cada intento cuesta un hash PBKDF2
+        # (~650 ms): sin tope, un cliente satura los workers. Esto NO sustituye
+        # al bloqueo por cuenta, lo complementa.
+        'auth_login': config('THROTTLE_LOGIN', default='10/minute'),
         'auth_refresh': config('THROTTLE_REFRESH', default='120/hour'),
         'auth_recuperacion': config('THROTTLE_RECUPERACION', default='20/10min'),
         'auth_registro': config('THROTTLE_REGISTRO', default='10/hour'),
     } if 'test' not in sys.argv else {
+        'auth_login': '10000/hour',
         # Bajo el runner de tests las tasas se relajan: LocMemCache persiste
         # entre tests del mismo proceso y suites que llaman mucho a estos
         # endpoints llenarian el bucket de produccion. La verificacion real

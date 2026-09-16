@@ -20,6 +20,9 @@ from .models import Perfil, Rol
 REST_FRAMEWORK_TEST = {
     **settings.REST_FRAMEWORK,
     'DEFAULT_THROTTLE_RATES': {
+        # Holgado: estos tests usan el login solo para obtener tokens, el
+        # limite del login se verifica en cuentas.tests.ThrottlingDeLoginTest.
+        'auth_login': '10000/hour',
         'auth_refresh': '2/minute',
         'auth_recuperacion': '3/minute',
         'auth_registro': '4/minute',

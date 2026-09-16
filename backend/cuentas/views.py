@@ -37,8 +37,14 @@ AVISO_ULTIMO_INTENTO = ("Si el siguiente intento tambien falla, el acceso se "
 
 
 class LoginView(APIView):
+    # Limite por IP (scope `auth_login`). Cada intento cuesta un hash PBKDF2
+    # (~650 ms), asi que sin tope un solo cliente puede saturar los workers:
+    # es un vector de denegacion de servicio, no solo de fuerza bruta. Este
+    # limite acota el gasto por IP y NO bloquea cuentas -- el bloqueo por
+    # cuenta lo sigue llevando el contador de intentos.
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = 'auth_login'
 
     def post(self, request):
         entrada = LoginSerializer(data=request.data)
@@ -68,7 +74,7 @@ class LoginView(APIView):
                      .filter(correo=email)
                      .select_related("perfil__empresa", "perfil__rol")
                      .order_by("pk").first())
-        contador = contador_para(candidato, email, request)
+        contador = contador_para(candidato, email)
 
         # El bloqueo se responde igual haya cuenta o no (el contador anonimo
         # replica la ventana), y sin llegar a verificar la contrasena: no
