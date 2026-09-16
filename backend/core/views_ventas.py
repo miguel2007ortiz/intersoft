@@ -59,18 +59,11 @@ def _limite_paginacion(valor, por_defecto=50, maximo=200):
 
 
 def _registrar_alerta_stock(producto, empresa):
-    """Inserta notificacion si stock <= stock_minimo y el producto esta activo."""
-    if not producto.activo:
-        return
-    if producto.stock > producto.stock_minimo:
-        return
-    from .notificaciones import crear_notificacion
-    crear_notificacion(
-        empresa=empresa,
-        tipo='stock',
-        mensaje=(f"Stock bajo: {producto.nombre} ({producto.sku}) "
-                 f"tiene {producto.stock} unidades (minimo {producto.stock_minimo})."),
-    )
+    """Mantiene la alerta de stock global del producto (una sola por
+    producto, via `sincronizar_alerta_stock`: crea si aplica, repone el
+    mensaje con el stock vigente, cierra si el stock se recupero)."""
+    from .notificaciones import sincronizar_alerta_stock
+    sincronizar_alerta_stock(producto)
 
 
 def _registrar_movimiento(producto, usuario, tipo, cantidad, motivo):
@@ -671,11 +664,17 @@ class InventarioProductosView(APIView):
         if filtro_stock == 'true':
             productos = productos.filter(stock__lte=models.F('stock_minimo'))
 
-        # Lista acotada (nunca ilimitada).
-        limite = _limite_paginacion(
+        # Paginacion real (mismo patron que ProductosView) — nunca ilimitada.
+        total = productos.count()
+        try:
+            pagina = max(int(request.query_params.get('pagina', 1)), 1)
+        except (TypeError, ValueError):
+            pagina = 1
+        por_pagina = _limite_paginacion(
             request.query_params.get('limite', 50))
+        inicio = (pagina - 1) * por_pagina
         datos = []
-        for p in productos[:limite]:
+        for p in productos.order_by('nombre')[inicio:inicio + por_pagina]:
             datos.append({
                 "id": str(p.id),
                 "nombre": p.nombre,
@@ -687,4 +686,10 @@ class InventarioProductosView(APIView):
                 "stock_bajo": p.stock <= p.stock_minimo,
             })
 
-        return Response({"resultados": datos, "total": len(datos)})
+        return Response({
+            "resultados": datos,
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": por_pagina,
+            "total_paginas": max((total + por_pagina - 1) // por_pagina, 1),
+        })

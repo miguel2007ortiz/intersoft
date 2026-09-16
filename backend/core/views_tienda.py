@@ -55,17 +55,8 @@ def _limite_paginacion(valor, por_defecto=50, maximo=200):
 
 
 def _registrar_alerta_stock(producto, empresa):
-    if not producto.activo:
-        return
-    if producto.stock > producto.stock_minimo:
-        return
-    from .notificaciones import crear_notificacion
-    crear_notificacion(
-        empresa=empresa,
-        tipo='stock',
-        mensaje=(f"Stock bajo: {producto.nombre} ({producto.sku}) "
-                 f"tiene {producto.stock} unidades (minimo {producto.stock_minimo})."),
-    )
+    from .notificaciones import sincronizar_alerta_stock
+    sincronizar_alerta_stock(producto)
 
 
 def _registrar_movimiento(producto, usuario, tipo, cantidad, motivo):

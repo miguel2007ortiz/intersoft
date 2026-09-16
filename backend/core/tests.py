@@ -1129,6 +1129,122 @@ class NotificacionesApiTest(BaseCatalogoTest):
             len(mail.outbox), 1,
             "El backend de email de consola debe haber recibido el mensaje")
 
+
+class AlertaStockSignalTest(BaseCatalogoTest):
+    """BUG-03 QA: el signal de Producto debe crear/cerrar la alerta global
+    (antes solo logueaba; el panel de Alertas vivia de notificaciones creadas
+    a mano en funciones de movimiento, y un producto puesto en stock bajo
+    directamente no aparecia nunca)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.base = Producto.objects.create(
+            empresa=cls.empresa, nombre="Base", sku="SKU-BASE",
+            precio=10, stock=40, stock_minimo=5)
+
+    def _crear_producto_bajo(self, sku="SKU-BAJO-1", **kwargs):
+        return Producto.objects.create(
+            empresa=self.empresa, nombre=f"Bajo {sku}", sku=sku,
+            precio=10, stock=2, stock_minimo=5, **kwargs)
+
+    def test_signal_crea_alerta_al_poner_producto_en_stock_bajo(self):
+        self._crear_producto_bajo()
+        alerta = Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False).first()
+        self.assertIsNotNone(alerta, "El save debe crear la notificacion de stock")
+        self.assertIn("SKU-BAJO-1", alerta.mensaje)
+
+    def test_signal_no_crea_alerta_si_stock_normal(self):
+        Producto.objects.create(empresa=self.empresa, nombre="Alto", sku="SKU-ALTO",
+                                precio=10, stock=20, stock_minimo=5)
+        self.assertFalse(Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-ALTO").exists())
+
+    def test_signal_no_duplica_alerta_en_varios_saves(self):
+        producto = self._crear_producto_bajo()
+        for _ in range(3):
+            producto.save()
+        self.assertEqual(
+            Notificacion.objects.filter(
+                empresa=self.empresa, tipo="stock", leida=False,
+                mensaje__contains="SKU-BAJO-1").count(), 1)
+
+    def test_signal_actualiza_mensaje_con_stock_vigente(self):
+        producto = self._crear_producto_bajo()
+        producto.stock = 4
+        producto.save()
+        alerta = Notificacion.objects.get(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-BAJO-1")
+        self.assertIn("tiene 4 unidades", alerta.mensaje)
+
+    def test_signal_cierra_alerta_al_reponer_stock(self):
+        producto = self._crear_producto_bajo()
+        producto.stock = 10
+        producto.save()
+        self.assertFalse(Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-BAJO-1").exists())
+
+    def test_signal_no_alerta_producto_inactivo(self):
+        self._crear_producto_bajo(activo=False)
+        self.assertFalse(Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-BAJO-1").exists())
+
+    def test_alerta_aparece_en_panel_y_se_cierra_con_repuesta(self):
+        producto = self._crear_producto_bajo()
+        api = self.api_como(self.admin)
+        cuerpo = api.get("/api/alertas/").json()
+        mensajes = [n["mensaje"] for n in cuerpo["resultados"]]
+        self.assertTrue(any("SKU-BAJO-1" in m for m in mensajes))
+
+        # Al reponer se retira del panel (queda resuelta, no solo leida).
+        producto.stock = 10
+        producto.save()
+        cuerpo = api.get("/api/alertas/").json()
+        self.assertFalse(any("SKU-BAJO-1" in n["mensaje"] for n in cuerpo["resultados"]))
+
+    def test_command_backfill_crea_alertas_faltantes(self):
+        # Fauna "heredada": productos en stock bajo sin notificacion.
+        self._crear_producto_bajo(sku="SKU-HEREDADO")
+        Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-HEREDADO").delete()
+        self.assertFalse(Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-HEREDADO").exists())
+
+        from django.core.management import call_command
+        call_command("generar_alertas_stock", empresa=str(self.empresa.id))
+        self.assertTrue(Notificacion.objects.filter(
+            empresa=self.empresa, tipo="stock", leida=False,
+            mensaje__contains="SKU-HEREDADO").exists())
+
+    def test_command_backfill_es_idempotente(self):
+        self._crear_producto_bajo(sku="SKU-REP")
+        from django.core.management import call_command
+        for _ in range(2):
+            call_command("generar_alertas_stock", empresa=str(self.empresa.id))
+        self.assertEqual(
+            Notificacion.objects.filter(
+                empresa=self.empresa, tipo="stock", leida=False,
+                mensaje__contains="SKU-REP").count(), 1)
+
+    def test_movimiento_de_venta_reutiliza_la_misma_alerta(self):
+        # El flujo de una venta (stock baja) no debe crear duplicados: el
+        # signal y _registrar_alerta_stock comparten la misma sincronizacion.
+        from .views_ventas import _registrar_alerta_stock
+        producto = self._crear_producto_bajo(sku="SKU-POS")
+        _registrar_alerta_stock(producto, self.empresa)
+        self.assertEqual(
+            Notificacion.objects.filter(
+                empresa=self.empresa, tipo="stock", leida=False,
+                mensaje__contains="SKU-POS").count(), 1)
+
+
 # ===================== FASE 5: Marketplace (tienda multi-vendedor) ==========
 
 class BaseMarketplaceTest(TestCase):

@@ -149,6 +149,7 @@ class ProductoLecturaSerializer(serializers.ModelSerializer):
     categoria_id = serializers.SerializerMethodField()
     categoria_nombre = serializers.CharField(source="categoria.nombre", default=None)
     tiene_ventas = serializers.SerializerMethodField()
+    imagen = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
@@ -164,6 +165,16 @@ class ProductoLecturaSerializer(serializers.ModelSerializer):
         if hasattr(producto, "tiene_ventas_flag"):
             return producto.tiene_ventas_flag
         return producto.detalles_venta.exists()
+
+    def get_imagen(self, producto):
+        """URL absoluta de la imagen (panel interno). Si no hay imagen o no
+        hay request en contexto, devuelve la URL relativa del field."""
+        if not producto.imagen:
+            return None
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(producto.imagen.url)
+        return producto.imagen.url
 
 
 class ProductoEscrituraSerializer(serializers.ModelSerializer):

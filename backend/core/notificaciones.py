@@ -80,3 +80,48 @@ def reintentar_entrega(aviso):
     Notificacion.objects.filter(id=aviso.id).update(
         canal=canal, entrega_pendiente=canal == 'ninguno')
     return aviso
+
+
+def _buscar_alertas_stock(producto):
+    """Alertas de stock abiertas (no leidas) de un producto, si existen."""
+    return Notificacion.objects.filter(
+        empresa_id=producto.empresa_id,
+        tipo='stock',
+        leida=False,
+        mensaje__contains=f'({producto.sku})',
+    ).order_by('-created_at')
+
+
+def _construir_mensaje_stock(producto):
+    # Formato estable (lo parsea AlertaActualizarStockView via el primer
+    # grupo de parentesis: el SKU): "Stock bajo: NOMBRE (SKU) tiene X
+    # unidades (minimo Y)."
+    return (f"Stock bajo: {producto.nombre} ({producto.sku}) "
+            f"tiene {producto.stock} unidades "
+            f"(minimo {producto.stock_minimo}).")
+
+
+def sincronizar_alerta_stock(producto):
+    """Mantiene EXACTAMENTE una alerta de stock abierta por producto.
+
+    Reglas (idempotente, seguro llamarlo en cada save/movimiento):
+    - Stock bajo y activo: crea la alerta si no existe (una sola, no leida)
+      y actualiza su mensaje con el stock vigente.
+    - Stock repuesto o producto inactivo: cierra la alerta abierta si quedaba.
+
+    Devuelve la `Notificacion` creada (o None si no aplicaba)."""
+    if not producto.activo or producto.stock > producto.stock_minimo:
+        # Stock repuesto o producto inactivo: cierra TODAS las abiertas.
+        _buscar_alertas_stock(producto).update(leida=True, estado='resuelta')
+        return None
+
+    alerta = _buscar_alertas_stock(producto).first()
+    if alerta:
+        alerta.mensaje = _construir_mensaje_stock(producto)
+        alerta.save(update_fields=['mensaje'])
+        return alerta
+    return crear_notificacion(
+        empresa=producto.empresa,
+        tipo='stock',
+        mensaje=_construir_mensaje_stock(producto),
+    )

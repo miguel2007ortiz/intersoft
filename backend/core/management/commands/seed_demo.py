@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.storage import default_storage
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -36,6 +37,9 @@ class Command(BaseCommand):
             raise CommandError(
                 'seed_demo solo debe ejecutarse en desarrollo (DEBUG=True). '
                 'Usa --force si entiendes los riesgos.')
+        # Los perfiles exigen un rol valido (Perfil.rol NOT NULL); garantiza
+        # los roles base antes de crear usuarios de demo (idempotente).
+        call_command('seed_roles')
         empresa, _ = Empresa.objects.get_or_create(
             nit='900123456',
             defaults={'nombre': 'Tienda El Progreso', 'email': 'contacto@elprogreso.co',

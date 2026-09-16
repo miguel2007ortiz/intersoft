@@ -16,12 +16,19 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Producto)
 def alertar_stock_bajo(sender, instance, created, **kwargs):
+    """Crea/actualiza la alerta de stock del producto en el panel.
+
+    El stock bajo en si mismo no es un error de servidor: solo loguea y, si
+    corresponde, mantiene la notificacion global de empresa (una sola por
+    producto, via `sincronizar_alerta_stock`)."""
     if instance.stock <= instance.stock_minimo and instance.activo:
-        logger.warning(
+        logger.info(
             "[ALERTA STOCK] '%s' en '%s' tiene %s unidades (minimo: %s).",
             instance.nombre, instance.empresa.nombre,
             instance.stock, instance.stock_minimo,
         )
+    from .notificaciones import sincronizar_alerta_stock
+    sincronizar_alerta_stock(instance)
 
 
 @receiver(post_save, sender=Producto)

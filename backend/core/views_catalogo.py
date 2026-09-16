@@ -236,10 +236,23 @@ class ProductosView(APIView):
         productos = productos.annotate(
             tiene_ventas_flag=Exists(
                 DetalleVenta.objects.filter(producto=OuterRef("pk"))))
-        limite = _limite_paginacion(request.query_params.get("limite", 50))
+        total = productos.count()
+        try:
+            pagina = max(int(request.query_params.get("pagina", 1)), 1)
+        except (TypeError, ValueError):
+            pagina = 1
+        por_pagina = _limite_paginacion(request.query_params.get("limite", 50))
+        inicio = (pagina - 1) * por_pagina
         datos = ProductoLecturaSerializer(
-            productos.order_by("nombre")[:limite], many=True).data
-        return Response({"resultados": datos, "total": len(datos)})
+            productos.order_by("nombre")[inicio:inicio + por_pagina], many=True,
+            context={"request": request}).data
+        return Response({
+            "resultados": datos,
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": por_pagina,
+            "total_paginas": max((total + por_pagina - 1) // por_pagina, 1),
+        })
 
     def post(self, request):
         entrada = ProductoEscrituraSerializer(data=request.data,
@@ -252,7 +265,7 @@ class ProductosView(APIView):
         ActividadUsuario.registrar(request.user, "PRODUCTO_CREADO",
                                    f"{producto.nombre} (${producto.precio}, "
                                    f"stock {producto.stock})")
-        return Response(ProductoLecturaSerializer(producto).data,
+        return Response(ProductoLecturaSerializer(producto, context={"request": request}).data,
                         status=status.HTTP_201_CREATED)
 
 
@@ -274,7 +287,7 @@ class ProductoDetalleView(APIView):
         producto = self.obtener_producto(request, id)
         if producto is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(ProductoLecturaSerializer(producto).data)
+        return Response(ProductoLecturaSerializer(producto, context={"request": request}).data)
 
     def put(self, request, id):
         return self.editar(request, id, parcial=False)
@@ -300,7 +313,7 @@ class ProductoDetalleView(APIView):
         ActividadUsuario.registrar(request.user, "PRODUCTO_EDITADO",
                                    f"{producto.nombre} (${producto.precio}, "
                                    f"stock {producto.stock})")
-        return Response(ProductoLecturaSerializer(producto).data)
+        return Response(ProductoLecturaSerializer(producto, context={"request": request}).data)
 
     def delete(self, request, id):
         producto = self.obtener_producto(request, id)
@@ -346,7 +359,7 @@ class ProductoEstadoView(APIView):
         producto.save(update_fields=["activo"])
         evento = "PRODUCTO_REACTIVADO" if deseado else "PRODUCTO_DESACTIVADO"
         ActividadUsuario.registrar(request.user, evento, producto.nombre)
-        return Response(ProductoLecturaSerializer(producto).data)
+        return Response(ProductoLecturaSerializer(producto, context={"request": request}).data)
 
 
 # ------------------------------ Categorias ---------------------------------
