@@ -181,6 +181,29 @@ Todas son reversibles. Ninguna borra datos.
 5. Verificar: un login completo y `GET /api/ruta-inexistente/` devolviendo 404
    JSON sin `URLconf` en el cuerpo.
 
+## Configuración local
+
+`backend/.env` (no versionado) fija
+`CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache`, y ese valor
+**sobrescribe** el nuevo valor por omisión que introduce esta rama.
+
+Con esa línea activa, el desarrollo local exige haber ejecutado
+`python manage.py crear_cache`; si la tabla `intersoft_cache` no existe, **el
+login devuelve 500** antes de entrar a la vista, porque el límite por IP
+consulta el caché. Es el fallo que quedó medido en
+[`docs/QA-correcciones.md`](docs/QA-correcciones.md).
+
+Para desarrollo, lo más simple es **comentar esa línea** en tu `.env`:
+
+```diff
+-CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache
++#CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache
+```
+
+Así el valor por omisión con `DEBUG=True` es `LocMemCache`, que no necesita
+tabla. En `DEBUG=False` el valor por omisión sigue siendo `DatabaseCache` y
+`crear_cache` continúa siendo obligatorio (ver los pasos de despliegue).
+
 ## Verificación
 
 | | |
