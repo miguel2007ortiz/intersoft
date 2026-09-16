@@ -180,11 +180,13 @@ export class CatalogoService {
 
   // ---- Inventario ----
   listarInventario(
-    filtros: { busqueda?: string; stock_bajo?: boolean } = {},
+    filtros: { busqueda?: string; stock_bajo?: boolean; pagina?: number; limite?: number } = {},
   ): Observable<Lista<InventarioProducto>> {
     const params: Record<string, string> = {};
     if (filtros.busqueda) params['busqueda'] = filtros.busqueda;
     if (filtros.stock_bajo !== undefined) params['stock_bajo'] = String(filtros.stock_bajo);
+    if (filtros.pagina) params['pagina'] = String(filtros.pagina);
+    if (filtros.limite) params['limite'] = String(filtros.limite);
     return this.http
       .get<Lista<InventarioProducto>>(`${this.api}/inventario/productos/`, { params })
       .pipe(capturarError<Lista<InventarioProducto>>());

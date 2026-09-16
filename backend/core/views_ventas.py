@@ -26,6 +26,8 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
+from .paginacion import paginar
+from .serializers_base import url_absoluta_de_imagen
 from .models import (Cliente, DetalleVenta, Empresa, Envio,
                      MovimientoInventario, Notificacion, Producto, Venta)
 from .serializers_monitoreo import NotificacionLecturaSerializer
@@ -49,7 +51,7 @@ def _es_fecha_valida(valor):
     return True
 
 
-def _limite_paginacion(valor, por_defecto=50, maximo=200):
+def _limite_paginacion(valor, por_defecto=50, maximo=200):  # noqa: D401
     """Limite de filas a devolver: acotado a [1, maximo] para que una
     lista nunca devuelva resultados ilimitados (uso de memoria/CPU acotado)."""
     try:
@@ -657,11 +659,13 @@ class InventarioProductosView(APIView):
 
     def get(self, request):
         empresa = _obtener_empresa(request)
-        productos = Producto.objects.filter(
-            empresa=empresa, deleted_at__isnull=True, activo=True
-        ).order_by('nombre')
+        # `select_related('categoria')`: la fila muestra el nombre de la
+        # categoria y sin esto era una consulta por producto.
+        productos = Producto.objects.select_related('categoria').filter(
+            empresa=empresa, deleted_at__isnull=True, activo=True)
 
-        # Filtros
+        # Los dos filtros se combinan en el SERVIDOR: filtrar "stock bajo"
+        # sobre la pagina ya recortada solo miraria los 50 primeros productos.
         busqueda = request.query_params.get('busqueda', '').strip()
         if busqueda:
             productos = productos.filter(
@@ -671,12 +675,12 @@ class InventarioProductosView(APIView):
         if filtro_stock == 'true':
             productos = productos.filter(stock__lte=models.F('stock_minimo'))
 
-        # Lista acotada (nunca ilimitada).
-        limite = _limite_paginacion(
-            request.query_params.get('limite', 50))
-        datos = []
-        for p in productos[:limite]:
-            datos.append({
+        # Misma paginacion que /api/productos/ (BUG-02): `total` es el conteo
+        # real del filtro y el orden desempata con `id` para que el recorte por
+        # pagina sea estable.
+        pagina = paginar(productos.order_by('nombre', 'id'), request.query_params)
+        datos = [
+            {
                 "id": str(p.id),
                 "nombre": p.nombre,
                 "sku": p.sku,
@@ -685,6 +689,8 @@ class InventarioProductosView(APIView):
                 "stock": p.stock,
                 "stock_minimo": p.stock_minimo,
                 "stock_bajo": p.stock <= p.stock_minimo,
-            })
-
-        return Response({"resultados": datos, "total": len(datos)})
+                "imagen": url_absoluta_de_imagen(p, request),
+            }
+            for p in pagina.objetos
+        ]
+        return Response(pagina.como_respuesta(datos))

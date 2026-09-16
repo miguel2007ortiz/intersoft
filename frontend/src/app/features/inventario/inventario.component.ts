@@ -15,11 +15,12 @@ import { FormsModule } from '@angular/forms';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { InventarioProducto, MovimientoInventario } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
+import { PaginadorComponent } from '../../shared/paginador/paginador.component';
 import { debounce } from '../../core/utils/temporizador.util';
 
 @Component({
   selector: 'app-inventario',
-  imports: [DatePipe, DecimalPipe, FormsModule, PanelShellComponent],
+  imports: [DatePipe, DecimalPipe, FormsModule, PanelShellComponent, PaginadorComponent],
   templateUrl: './inventario.component.html',
   styleUrls: ['./inventario.component.css'],
 })
@@ -35,7 +36,23 @@ export class InventarioComponent implements OnInit {
   busquedaProducto = '';
   filtroStockBajo = false;
   /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
-  readonly buscarProductosDebounced = debounce(this.destroyRef, () => this.cargarProductos(), 300);
+  readonly buscarProductosDebounced = debounce(
+    this.destroyRef,
+    () => {
+      // Un filtro nuevo cambia el conjunto: seguir en la pagina 3 dejaria la
+      // tabla vacia sin explicacion.
+      this.pagina.set(1);
+      this.cargarProductos();
+    },
+    300,
+  );
+  /** Contadores del backend para el paginador (BUG-24, mismo cuerpo que
+   * /api/productos/). `total` son los registros que cumplen el filtro. */
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
+  readonly total = signal(0);
+  readonly desde = signal(0);
+  readonly hasta = signal(0);
   readonly mostrarAjuste = signal(false);
 
   ajusteProducto = '';
@@ -55,12 +72,20 @@ export class InventarioComponent implements OnInit {
     this.cargando.set(true);
     this.catalogo
       .listarInventario({
+        // Los dos filtros viajan juntos al servidor: combinarlos en el cliente
+        // sobre la pagina ya recortada solo miraria los 50 primeros productos.
         busqueda: this.busquedaProducto || undefined,
         stock_bajo: this.filtroStockBajo || undefined,
+        pagina: this.pagina(),
       })
       .subscribe({
         next: (r) => {
           this.productos.set(r.resultados);
+          this.total.set(r.total ?? 0);
+          this.pagina.set(r.pagina ?? 1);
+          this.totalPaginas.set(r.total_paginas ?? 1);
+          this.desde.set(r.desde ?? 0);
+          this.hasta.set(r.hasta ?? 0);
           this.error.set(null);
           this.cargando.set(false);
         },
@@ -69,6 +94,18 @@ export class InventarioComponent implements OnInit {
           this.cargando.set(false);
         },
       });
+  }
+
+  /** Marcar o desmarcar "Solo stock bajo" cambia el conjunto: vuelve a la
+   * primera pagina, como la busqueda. */
+  filtrarStockBajo(): void {
+    this.pagina.set(1);
+    this.cargarProductos();
+  }
+
+  irAPagina(numero: number): void {
+    this.pagina.set(numero);
+    this.cargarProductos();
   }
 
   cargarMovimientos(): void {
