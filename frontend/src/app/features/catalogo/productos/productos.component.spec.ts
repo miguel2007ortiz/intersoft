@@ -190,4 +190,44 @@ describe('ProductosComponent', () => {
     fixture.detectChanges();
     expect(img!.src).toContain('data:image/svg+xml');
   });
+
+  it('el boton Eliminar se muestra siempre, deshabilitado si el producto tiene ventas', () => {
+    catalogo.listarProductos.mockReturnValue(
+      of({
+        resultados: [
+          { ...PRODUCTO, id: 'sin', sku: 'SIN-1', tiene_ventas: false },
+          { ...PRODUCTO, id: 'con', sku: 'CON-1', tiene_ventas: true },
+        ],
+        total: 2,
+      }),
+    );
+    const fixture = crear();
+    const botones = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ).filter((b) => b.textContent?.trim() === 'Eliminar');
+
+    // Aparecer y desaparecer segun la fila hacia pensar que la tabla estaba mal.
+    expect(botones).toHaveLength(2);
+    expect(botones[0].disabled).toBe(false);
+    expect(botones[1].disabled).toBe(true);
+  });
+
+  it('el motivo esta disponible como tooltip y para lectores de pantalla', () => {
+    catalogo.listarProductos.mockReturnValue(
+      of({ resultados: [{ ...PRODUCTO, tiene_ventas: true }], total: 1 }),
+    );
+    const fixture = crear();
+    const raiz = fixture.nativeElement as HTMLElement;
+    const boton = Array.from(raiz.querySelectorAll<HTMLButtonElement>('button')).find(
+      (b) => b.textContent?.trim() === 'Eliminar',
+    )!;
+
+    const motivo = 'No se puede eliminar: tiene ventas asociadas. Puedes desactivarlo.';
+    expect(boton.getAttribute('title')).toBe(motivo);
+
+    // Los lectores de pantalla no anuncian `title`: hace falta el texto real.
+    const descrito = boton.getAttribute('aria-describedby');
+    expect(descrito).toBeTruthy();
+    expect(raiz.querySelector(`#${descrito}`)?.textContent?.trim()).toBe(motivo);
+  });
 });

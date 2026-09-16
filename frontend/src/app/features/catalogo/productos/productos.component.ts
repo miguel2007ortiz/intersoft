@@ -81,6 +81,11 @@ export class ProductosComponent implements OnInit {
   /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
   private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
 
+  /** Motivo unico para el tooltip y para el lector de pantalla, para que no
+   * puedan divergir. */
+  readonly motivoNoEliminable =
+    'No se puede eliminar: tiene ventas asociadas. Puedes desactivarlo.';
+
   readonly formulario = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(150)]],
     sku: ['', [Validators.required, Validators.maxLength(50)]],

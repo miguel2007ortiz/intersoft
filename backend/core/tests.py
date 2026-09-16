@@ -496,7 +496,8 @@ class CrudProductosApiTest(BaseCatalogoTest):
                                     cantidad=1, precio_unitario=75000)
         api = self.api_como(self.admin)
         respuesta = api.delete(f"/api/productos/{self.producto.id}/")
-        self.assertEqual(respuesta.status_code, 400)
+        # 409: lo impide el estado del recurso, no un error en la peticion.
+        self.assertEqual(respuesta.status_code, 409)
         cuerpo = respuesta.json()
         self.assertEqual(cuerpo["codigo"], "PRODUCTO_CON_VENTAS")
         self.producto.refresh_from_db()

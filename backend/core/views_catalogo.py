@@ -322,7 +322,11 @@ class ProductoDetalleView(APIView):
                             "registrada(s). No se puede eliminar: desactivalo para "
                             "ocultarlo del catalogo."),
                 "ventas": ventas},
-                status=status.HTTP_400_BAD_REQUEST)
+                # 409 y no 400: la peticion es correcta, lo que lo impide es el
+                # ESTADO del recurso (tiene ventas). Un 400 sugiere que el
+                # cliente mando algo mal y aqui no hay nada que corregir en la
+                # peticion.
+                status=status.HTTP_409_CONFLICT)
 
         nombre = producto.nombre
         with transaction.atomic():
