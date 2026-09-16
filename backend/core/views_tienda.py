@@ -26,6 +26,7 @@ from cuentas.permissions import EsPersonal
 
 from . import cache_key
 
+from .paginacion import paginar
 from .models import (Carrito, CarritoItem, Categoria, Cliente, ComentarioProducto,
                      Cupon, DetalleVenta, Empresa, Envio, Favorito, IntentoPago,
                      MovimientoInventario, Producto, Venta)
@@ -148,28 +149,32 @@ class CatalogoPublicoView(APIView):
         if con_stock == 'true':
             productos = productos.filter(stock__gt=0)
 
+        # `id` desempata siempre: con un orden ambiguo (precios o nombres
+        # repetidos) MySQL puede devolver la misma fila en dos paginas y omitir
+        # otra. No cambia el criterio visible, solo lo hace determinista.
         orden = request.query_params.get('orden', 'nombre')
         if orden == 'precio':
-            productos = productos.order_by('precio')
+            productos = productos.order_by('precio', 'id')
         elif orden == '-precio':
-            productos = productos.order_by('-precio')
+            productos = productos.order_by('-precio', 'id')
         elif orden == 'reciente':
-            productos = productos.order_by('-created_at')
+            productos = productos.order_by('-created_at', 'id')
         else:
-            productos = productos.order_by('nombre')
+            productos = productos.order_by('nombre', 'id')
 
         # Paginacion real: 'total' es el conteo completo del filtro, no el
-        # tamano de la pagina (antes se cortaba a 50 y se reportaba mal).
-        total = productos.count()
-        try:
-            pagina = max(int(request.query_params.get('pagina', 1)), 1)
-        except (TypeError, ValueError):
-            pagina = 1
-        por_pagina = 24
-        inicio = (pagina - 1) * por_pagina
+        # tamano de la pagina. La logica vive en core/paginacion.py, compartida
+        # con los listados del panel (BUG-02).
+        #
+        # El contrato publico de este endpoint NO cambia: `por_pagina` sigue
+        # fijo en 24 y `limite` sigue sin existir aqui, asi que solo se le pasa
+        # `pagina` al helper -- si se le pasaran los query_params completos, el
+        # catalogo empezaria a aceptar `limite`, que es superficie nueva.
+        hoja = paginar(productos, {"pagina": request.query_params.get('pagina', 1)},
+                       por_pagina_por_defecto=24)
+        total, pagina, por_pagina = hoja.total, hoja.pagina, hoja.por_pagina
         serializer = ProductoTiendaSerializer(
-            productos[inicio:inicio + por_pagina], many=True,
-            context={"request": request})
+            hoja.objetos, many=True, context={"request": request})
 
         categorias = Categoria.objects.annotate(
             num_productos=Count('productos', filter=Q(
@@ -181,7 +186,7 @@ class CatalogoPublicoView(APIView):
             "total": total,
             "pagina": pagina,
             "por_pagina": por_pagina,
-            "total_paginas": max((total + por_pagina - 1) // por_pagina, 1),
+            "total_paginas": hoja.total_paginas,
             "categorias": CategoriaTiendaSerializer(categorias, many=True).data,
         }
         cache.set(clave, data, 60)

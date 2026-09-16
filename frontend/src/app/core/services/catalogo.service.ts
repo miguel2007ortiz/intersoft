@@ -33,11 +33,15 @@ import {
 
 interface Lista<T> {
   resultados: T[];
+  /** Registros que cumplen el filtro, NO los de esta pagina. */
   total: number;
   estadisticas?: Record<string, unknown>;
   pagina?: number;
   por_pagina?: number;
   total_paginas?: number;
+  /** Primer y ultimo registro de la pagina (1-based), para "Mostrando X-Y de N". */
+  desde?: number;
+  hasta?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -88,11 +92,13 @@ export class CatalogoService {
 
   // ---- Productos ----
   listarProductos(
-    opciones: { busqueda?: string; activo?: boolean } = {},
+    opciones: { busqueda?: string; activo?: boolean; pagina?: number; limite?: number } = {},
   ): Observable<Lista<Producto>> {
     const params: Record<string, string> = {};
     if (opciones.busqueda) params['busqueda'] = opciones.busqueda;
     if (opciones.activo !== undefined) params['activo'] = String(opciones.activo);
+    if (opciones.pagina) params['pagina'] = String(opciones.pagina);
+    if (opciones.limite) params['limite'] = String(opciones.limite);
     return this.http
       .get<Lista<Producto>>(`${this.api}/productos/`, { params })
       .pipe(capturarError<Lista<Producto>>());

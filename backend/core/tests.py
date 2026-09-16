@@ -3170,3 +3170,125 @@ class ImagenAbsolutaTest(BaseCatalogoTest):
         fila = next(p for p in respuesta.json()["resultados"]
                     if p["sku"] == "SKU-T01")
         self.assertIsNone(fila["imagen"])
+
+
+class PaginacionProductosTest(BaseCatalogoTest):
+    """BUG-02: `total` era el tamano de la pagina, no los registros reales, y
+    no habia parametro `pagina`: con 1.024 productos era imposible pasar del
+    50."""
+
+    CUANTOS = 120
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        Producto.objects.bulk_create([
+            Producto(empresa=cls.empresa, nombre=f"Producto {n:04d}",
+                     sku=f"SKU-P{n:04d}", precio=1000 + n, stock=10,
+                     stock_minimo=1)
+            for n in range(cls.CUANTOS)
+        ])
+        # Producto de otra empresa: no debe contarse nunca.
+        cls.otra = Empresa.objects.create(nombre="Otra SAS", nit="900111333")
+        Producto.objects.create(empresa=cls.otra, nombre="Ajeno", sku="SKU-AJENO",
+                                precio=1, stock=1, stock_minimo=1)
+
+    def listar(self, **params):
+        return self.api_como(self.admin).get("/api/productos/", params).json()
+
+    def test_total_es_el_conteo_real_no_el_de_la_pagina(self):
+        cuerpo = self.listar()
+        # +1 por el producto "Zapatos" de BaseCoreTest; el de la otra empresa no.
+        self.assertEqual(cuerpo["total"], self.CUANTOS + 1)
+        self.assertEqual(len(cuerpo["resultados"]), 50)   # por_pagina por omision
+        self.assertEqual(cuerpo["por_pagina"], 50)
+        self.assertEqual(cuerpo["total_paginas"], 3)
+
+    def test_la_pagina_2_trae_productos_distintos(self):
+        primera = self.listar(pagina=1)
+        segunda = self.listar(pagina=2)
+        self.assertNotEqual(primera["resultados"][0]["sku"],
+                            segunda["resultados"][0]["sku"])
+        # Y no se repite ninguno entre las dos.
+        skus_1 = {p["sku"] for p in primera["resultados"]}
+        skus_2 = {p["sku"] for p in segunda["resultados"]}
+        self.assertEqual(skus_1 & skus_2, set())
+
+    def test_recorrer_todas_las_paginas_devuelve_cada_producto_una_vez(self):
+        """Con un orden inestable MySQL puede repetir una fila en dos paginas
+        y omitir otra; por eso el orden desempata con `id`."""
+        vistos = []
+        for n in range(1, self.listar()["total_paginas"] + 1):
+            vistos += [p["sku"] for p in self.listar(pagina=n)["resultados"]]
+        self.assertEqual(len(vistos), len(set(vistos)))
+        self.assertEqual(len(vistos), self.CUANTOS + 1)
+
+    def test_limite_tiene_tope_de_200(self):
+        cuerpo = self.listar(limite=100000)
+        self.assertEqual(cuerpo["por_pagina"], 200)
+        self.assertLessEqual(len(cuerpo["resultados"]), 200)
+
+    def test_limite_invalido_cae_en_el_valor_por_omision(self):
+        self.assertEqual(self.listar(limite="abc")["por_pagina"], 50)
+
+    def test_pagina_invalida_o_negativa_cae_en_la_primera(self):
+        for valor in ("0", "-3", "abc"):
+            self.assertEqual(self.listar(pagina=valor)["pagina"], 1)
+
+    def test_desde_y_hasta_describen_la_pagina(self):
+        cuerpo = self.listar(pagina=2, limite=10)
+        self.assertEqual(cuerpo["desde"], 11)
+        self.assertEqual(cuerpo["hasta"], 20)
+
+    def test_una_pagina_vacia_no_inventa_contadores(self):
+        cuerpo = self.listar(pagina=999)
+        self.assertEqual(cuerpo["resultados"], [])
+        self.assertEqual(cuerpo["desde"], 0)
+        self.assertEqual(cuerpo["hasta"], 0)
+        self.assertEqual(cuerpo["total"], self.CUANTOS + 1)
+
+    def test_la_busqueda_pagina_sobre_lo_filtrado(self):
+        cuerpo = self.listar(busqueda="Producto 00")
+        self.assertEqual(cuerpo["total"], 100)   # 0000..0099
+        self.assertTrue(all("Producto 00" in p["nombre"]
+                            for p in cuerpo["resultados"]))
+
+    def test_no_cuenta_productos_de_otra_empresa(self):
+        skus = set()
+        for n in range(1, self.listar()["total_paginas"] + 1):
+            skus |= {p["sku"] for p in self.listar(pagina=n)["resultados"]}
+        self.assertNotIn("SKU-AJENO", skus)
+
+
+class ContratoCatalogoPublicoTest(BaseCatalogoTest):
+    """El catalogo publico se refactorizo para usar la paginacion compartida;
+    su contrato NO puede cambiar."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        Producto.objects.bulk_create([
+            Producto(empresa=cls.empresa, nombre=f"Publico {n:03d}",
+                     sku=f"SKU-PUB{n:03d}", precio=1000, stock=5, stock_minimo=1)
+            for n in range(30)
+        ])
+
+    def test_las_claves_de_la_respuesta_son_las_mismas(self):
+        cuerpo = self.client.get("/api/tienda/catalogo/").json()
+        self.assertEqual(set(cuerpo), {"resultados", "total", "pagina",
+                                       "por_pagina", "total_paginas", "categorias"})
+
+    def test_por_pagina_sigue_fijo_en_24(self):
+        cuerpo = self.client.get("/api/tienda/catalogo/").json()
+        self.assertEqual(cuerpo["por_pagina"], 24)
+        self.assertEqual(len(cuerpo["resultados"]), 24)
+
+    def test_el_catalogo_no_acepta_limite(self):
+        """`limite` es superficie del panel; anadirlo aqui seria contrato nuevo."""
+        cuerpo = self.client.get("/api/tienda/catalogo/", {"limite": "200"}).json()
+        self.assertEqual(cuerpo["por_pagina"], 24)
+
+    def test_la_pagina_2_sigue_funcionando(self):
+        cuerpo = self.client.get("/api/tienda/catalogo/", {"pagina": "2"}).json()
+        self.assertEqual(cuerpo["pagina"], 2)
+        self.assertGreater(len(cuerpo["resultados"]), 0)

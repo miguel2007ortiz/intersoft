@@ -246,6 +246,16 @@
             }
           </tbody>
         </table>
+
+        <app-paginador
+          [desde]="desde()"
+          [hasta]="hasta()"
+          [total]="total()"
+          [pagina]="pagina()"
+          [totalPaginas]="totalPaginas()"
+          [cargando]="cargando()"
+          (cambiarPagina)="irAPagina($event)"
+        ></app-paginador>
       }
     </div>
   </section>

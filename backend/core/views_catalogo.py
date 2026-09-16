@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
+from .paginacion import limite_paginacion, paginar
 from .models import Categoria, Cliente, DetalleVenta, Producto
 from .serializers_catalogo import (
     CategoriaSerializer, ClienteDetalleSerializer, ClienteEscrituraSerializer,
@@ -31,12 +32,10 @@ def respuesta_datos_invalidos(errores):
                     status=status.HTTP_400_BAD_REQUEST)
 
 
-def _limite_paginacion(valor, por_defecto=50, maximo=200):
-    """Limite de filas a devolver, acotado a [1, maximo]."""
-    try:
-        return max(1, min(int(valor), maximo))
-    except (TypeError, ValueError):
-        return por_defecto
+# `_limite_paginacion` se movio a core/paginacion.py, compartido con el
+# inventario y con el catalogo publico. Se reexporta con el nombre viejo
+# porque otros listados de este modulo (clientes, categorias) lo usan tal cual.
+_limite_paginacion = limite_paginacion
 
 
 # ------------------------------ Clientes -----------------------------------
@@ -236,11 +235,14 @@ class ProductosView(APIView):
         productos = productos.annotate(
             tiene_ventas_flag=Exists(
                 DetalleVenta.objects.filter(producto=OuterRef("pk"))))
-        limite = _limite_paginacion(request.query_params.get("limite", 50))
-        datos = ProductoLecturaSerializer(
-            productos.order_by("nombre")[:limite], many=True,
-            context={"request": request}).data
-        return Response({"resultados": datos, "total": len(datos)})
+        # Orden estable: `nombre` solo no basta, con nombres repetidos MySQL
+        # puede repetir una fila en dos paginas y omitir otra. `id` desempata.
+        # `total` es el conteo real del filtro, no el tamano de la pagina: sin
+        # eso no habia forma de pasar del producto 50 de 1.024 (BUG-02).
+        pagina = paginar(productos.order_by("nombre", "id"), request.query_params)
+        datos = ProductoLecturaSerializer(pagina.objetos, many=True,
+                                          context={"request": request}).data
+        return Response(pagina.como_respuesta(datos))
 
     def post(self, request):
         entrada = ProductoEscrituraSerializer(data=request.data,

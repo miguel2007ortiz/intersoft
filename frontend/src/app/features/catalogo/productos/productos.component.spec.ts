@@ -98,8 +98,81 @@ describe('ProductosComponent', () => {
     boton?.click();
     fixture.detectChanges();
     html = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(catalogo.listarProductos).toHaveBeenLastCalledWith({ busqueda: '', activo: undefined });
+    expect(catalogo.listarProductos).toHaveBeenLastCalledWith({
+      busqueda: '',
+      activo: undefined,
+      pagina: 1,
+    });
     expect(html).toContain('Aun no hay productos');
+  });
+
+  it('pinta "Mostrando X-Y de N" con el total real, no el de la pagina', () => {
+    catalogo.listarProductos.mockReturnValue(
+      of({
+        resultados: [PRODUCTO],
+        total: 1024,
+        pagina: 2,
+        por_pagina: 50,
+        total_paginas: 21,
+        desde: 51,
+        hasta: 100,
+      }),
+    );
+    const html = (crear().nativeElement as HTMLElement).textContent ?? '';
+    expect(html).toContain('Mostrando 51-100 de 1.024');
+    expect(html).toContain('Pagina 2 de 21');
+  });
+
+  it('cambiar de pagina conserva la busqueda y el filtro', () => {
+    catalogo.listarProductos.mockReturnValue(
+      of({
+        resultados: [PRODUCTO],
+        total: 200,
+        pagina: 1,
+        por_pagina: 50,
+        total_paginas: 4,
+        desde: 1,
+        hasta: 50,
+      }),
+    );
+    const fixture = crear();
+    fixture.componentInstance.busqueda.set('camisa');
+    fixture.componentInstance.filtrar('activos');
+    fixture.detectChanges();
+
+    const siguiente = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ).find((b) => b.textContent?.includes('Siguiente'));
+    siguiente?.click();
+    fixture.detectChanges();
+
+    expect(catalogo.listarProductos).toHaveBeenLastCalledWith({
+      busqueda: 'camisa',
+      activo: true,
+      pagina: 2,
+    });
+  });
+
+  it('buscar vuelve a la pagina 1', () => {
+    catalogo.listarProductos.mockReturnValue(
+      of({
+        resultados: [PRODUCTO],
+        total: 200,
+        pagina: 3,
+        por_pagina: 50,
+        total_paginas: 4,
+        desde: 101,
+        hasta: 150,
+      }),
+    );
+    const fixture = crear();
+    fixture.componentInstance.irAPagina(3);
+    fixture.componentInstance.filtrar('inactivos');
+    expect(catalogo.listarProductos).toHaveBeenLastCalledWith({
+      busqueda: '',
+      activo: false,
+      pagina: 1,
+    });
   });
 
   it('la miniatura carga en diferido y cae a la imagen de respaldo si falla', () => {
