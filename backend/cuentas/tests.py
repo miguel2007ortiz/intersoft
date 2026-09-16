@@ -1,17 +1,21 @@
 import re
+import time
 from datetime import timedelta
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.cache import cache
 from django.core.management import call_command
-from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.core.management.base import CommandError
+from django.db import IntegrityError, connection, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Empresa
 
+from .identidad import buscar, describir
 from .models import ActividadUsuario, Perfil, Permiso, Rol, RolPermiso, TokenRecuperacion
 from .permissions import EsAdministrador, EsPersonal
 
@@ -148,13 +152,16 @@ class LoginTest(BaseCuentasTest):
     def test_correo_inexistente_no_revela_intentos(self):
         respuesta = self.login("fantasma@test.co", "loquesea123")
         self.assertEqual(respuesta.status_code, 401)
-        self.assertIsNone(respuesta.json()["intentos_restantes"])
+        self.assertNotIn("intentos_restantes", respuesta.json())
 
-    def test_usuario_inactivo_devuelve_403(self):
+    def test_usuario_inactivo_no_se_distingue_de_credenciales_malas(self):
+        """Una cuenta desactivada responde el 401 generico: devolver
+        USUARIO_INACTIVO antes de validar la contrasena delataba que el
+        correo estaba registrado (BUG-19)."""
         _, _ = self.crear_cuenta(email="inactivo@test.co", activo=False)
         respuesta = self.login("inactivo@test.co", "Clave12345")
-        self.assertEqual(respuesta.status_code, 403)
-        self.assertEqual(respuesta.json()["codigo"], "USUARIO_INACTIVO")
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()["codigo"], "CREDENCIALES_INVALIDAS")
 
 
 class BloqueoPorIntentosTest(BaseCuentasTest):
@@ -169,8 +176,8 @@ class BloqueoPorIntentosTest(BaseCuentasTest):
             respuesta = self.login("luis@test.co", f"mala-{intento}")
             if intento < 5:
                 self.assertEqual(respuesta.status_code, 401)
-                esperado = 5 - intento
-                self.assertEqual(respuesta.json()["intentos_restantes"], esperado)
+                # El cuerpo nunca dice cuantos intentos quedan (BUG-19).
+                self.assertNotIn("intentos_restantes", respuesta.json())
             else:
                 self.assertEqual(respuesta.status_code, 423)
                 self.assertEqual(respuesta.json()["codigo"], "CUENTA_BLOQUEADA")
@@ -719,3 +726,457 @@ class RecuperacionTokenExpiradoTest(BaseCuentasTest):
             content_type="application/json")
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(respuesta.json()["codigo"], "TOKEN_INVALIDO")
+
+
+# ============ BUG-09: identidad unica en el login (sin ambiguedad) ============
+
+class IdentidadLoginTest(BaseCuentasTest):
+    """El token, el perfil y el contexto (empresa, rol, permisos) tienen que
+    salir todos del MISMO usuario. Antes el perfil se elegia por correo con
+    `Perfil.objects.filter(usuario__email__iexact=...)` y podia no ser el del
+    usuario que `authenticate()` habia validado."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.empresa_b = Empresa.objects.create(nombre="Otra SAS", nit="900888888")
+        cls.user_a, cls.perfil_a = cls.crear_cuenta(email="ana@empresa-a.co",
+                                                    rol="ADMINISTRADOR")
+        cls.user_b = User.objects.create_user(username="beto@empresa-b.co",
+                                              email="beto@empresa-b.co",
+                                              password="Clave12345", first_name="Beto")
+        cls.perfil_b = Perfil.objects.create(usuario=cls.user_b, empresa=cls.empresa_b,
+                                             rol=Rol.de_nombre("EMPLEADO"))
+
+    def test_login_devuelve_id_de_user_y_perfil_id_aparte(self):
+        datos = self.login("ana@empresa-a.co", "Clave12345").json()["usuario"]
+        self.assertEqual(datos["id"], str(self.user_a.id))
+        self.assertEqual(datos["perfil_id"], str(self.perfil_a.id))
+
+    def test_token_y_contexto_son_del_mismo_usuario(self):
+        cuerpo = self.login("beto@empresa-b.co", "Clave12345").json()
+        self.assertEqual(cuerpo["usuario"]["id"], str(self.user_b.id))
+        self.assertEqual(cuerpo["usuario"]["empresa"], str(self.empresa_b.id))
+        self.assertEqual(cuerpo["usuario"]["rol"], "EMPLEADO")
+
+        # El contexto de /auth/me/ (fuente de permisos del frontend) tiene que
+        # describir al mismo usuario que emitio el token.
+        cabecera = "Bearer " + cuerpo["access"]
+        me = self.client.get(reverse("auth-me"),
+                             HTTP_AUTHORIZATION=cabecera).json()
+        self.assertEqual(me["id"], str(self.user_b.id))
+        self.assertEqual(me["perfil_id"], str(self.perfil_b.id))
+        self.assertEqual(me["empresa"], str(self.empresa_b.id))
+        self.assertEqual(me["rol"], "EMPLEADO")
+        permisos_del_rol = set(RolPermiso.objects
+                               .filter(rol=self.perfil_b.rol)
+                               .values_list("permiso__codigo", flat=True))
+        self.assertEqual(set(me["permisos"]), permisos_del_rol)
+
+    def test_fallos_contra_una_empresa_no_bloquean_la_cuenta_de_otra(self):
+        for intento in range(6):
+            self.login("ana@empresa-a.co", "mala-%d" % intento)
+
+        self.perfil_a.refresh_from_db()
+        self.perfil_b.refresh_from_db()
+        self.assertTrue(self.perfil_a.esta_bloqueado())
+        self.assertEqual(self.perfil_b.intentos_fallidos, 0)
+        self.assertFalse(self.perfil_b.esta_bloqueado())
+        self.assertEqual(self.login("beto@empresa-b.co", "Clave12345").status_code, 200)
+
+
+class VerificacionEmailsDuplicadosTest(TestCase):
+    def test_comando_pasa_sin_duplicados(self):
+        User.objects.create_user(username="uno@test.co", email="uno@test.co",
+                                 password="Clave12345")
+        call_command("verificar_emails_duplicados")  # no levanta CommandError
+
+
+# ================= BUG-19: el login no permite enumerar correos ==============
+
+class AntiEnumeracionLoginTest(BaseCuentasTest):
+    REGISTRADO = "registrada@test.co"
+    INEXISTENTE = "no-existe@test.co"
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email=cls.REGISTRADO)
+
+    def setUp(self):
+        cache.clear()
+        self.reiniciar_intentos()
+
+    def reiniciar_intentos(self):
+        Perfil.objects.filter(pk=self.perfil.pk).update(intentos_fallidos=0,
+                                                        fecha_desbloqueo=None)
+
+    def test_401_identico_exista_o_no_el_correo(self):
+        real = self.login(self.REGISTRADO, "contrasena-mala")
+        falso = self.login(self.INEXISTENTE, "contrasena-mala")
+        self.assertEqual(real.status_code, 401)
+        self.assertEqual(falso.status_code, 401)
+        self.assertEqual(real.json(), falso.json())
+        self.assertNotIn("intentos_restantes", real.json())
+
+    def test_aviso_generico_en_el_ultimo_intento_en_ambos_casos(self):
+        def cuerpo_del_intento_numero(email, n):
+            for _ in range(n - 1):
+                self.login(email, "mala")
+            return self.login(email, "mala").json()
+
+        real = cuerpo_del_intento_numero(self.REGISTRADO, 4)
+        falso = cuerpo_del_intento_numero(self.INEXISTENTE, 4)
+        self.assertIn("aviso", real)
+        self.assertEqual(real, falso)
+        # El aviso no cuantifica nada: solo anuncia que el proximo fallo bloquea.
+        self.assertNotIn("4", real["aviso"])
+
+    def test_bloqueo_tambien_para_correo_inexistente(self):
+        for _ in range(4):
+            self.assertEqual(self.login(self.INEXISTENTE, "mala").status_code, 401)
+        bloqueado = self.login(self.INEXISTENTE, "mala")
+        self.assertEqual(bloqueado.status_code, 423)
+        self.assertEqual(bloqueado.json()["codigo"], "CUENTA_BLOQUEADA")
+        self.assertIsNotNone(bloqueado.json()["desbloqueo_en"])
+
+    def test_bloqueo_indistinguible_entre_correo_real_e_inexistente(self):
+        for _ in range(5):
+            real = self.login(self.REGISTRADO, "mala")
+            falso = self.login(self.INEXISTENTE, "mala")
+        self.assertEqual(real.status_code, 423)
+        self.assertEqual(real.status_code, falso.status_code)
+        self.assertEqual(set(real.json()), set(falso.json()))
+
+    def test_sin_diferencia_de_tiempo_notable_entre_los_dos_casos(self):
+        """Ambos caminos calculan el hash de la contrasena (el backend de
+        Django lo hace en vacio cuando el usuario no existe), asi que el
+        tiempo de respuesta no delata si el correo esta registrado."""
+        def mejor_tiempo(email):
+            medidas = []
+            for _ in range(3):
+                self.reiniciar_intentos()
+                cache.clear()
+                inicio = time.perf_counter()
+                self.login(email, "contrasena-mala")
+                medidas.append(time.perf_counter() - inicio)
+            return min(medidas)
+
+        real = mejor_tiempo(self.REGISTRADO)
+        falso = mejor_tiempo(self.INEXISTENTE)
+        # Tolerancia amplia a proposito: lo que se vigila es que no quede una
+        # diferencia de ORDEN DE MAGNITUD (la que dejaba el retorno temprano
+        # sin verificar contrasena), no el ruido de una maquina cargada.
+        self.assertLess(abs(real - falso), 0.5 * max(real, falso),
+                        "real=%.3fs inexistente=%.3fs" % (real, falso))
+
+
+# ============ BUG-05: coste del login exitoso (techo de consultas) ===========
+
+class CosteLoginTest(BaseCuentasTest):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email="rapido@test.co")
+
+    def test_login_exitoso_no_supera_el_techo_de_consultas(self):
+        # 1 resolver usuario+perfil+empresa+rol / 1 authenticate / 1 insert de
+        # auditoria. Sin select_related el contexto costaba 3 consultas extra.
+        with self.assertNumQueries(3):
+            respuesta = self.login("rapido@test.co", "Clave12345")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_me_no_supera_el_techo_de_consultas(self):
+        token = self.login("rapido@test.co", "Clave12345").json()["access"]
+        cabecera = "Bearer " + token
+        with self.assertNumQueries(3):  # usuario del token / perfil / permisos
+            respuesta = self.client.get(reverse("auth-me"),
+                                        HTTP_AUTHORIZATION=cabecera)
+        self.assertEqual(respuesta.status_code, 200)
+
+
+# ================ BUG-18: DEBUG=False no publica el URLconf ==================
+
+class ErroresSinDetalleInternoTest(TestCase):
+    def test_404_con_debug_false_devuelve_json_sin_urlconf(self):
+        with override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"]):
+            respuesta = self.client.get("/api/ruta-inexistente/")
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(respuesta["Content-Type"], "application/json")
+        cuerpo = respuesta.content.decode()
+        self.assertNotIn("URLconf", cuerpo)
+        self.assertNotIn("urlpatterns", cuerpo)
+        self.assertEqual(respuesta.json()["codigo"], "NO_ENCONTRADO")
+
+
+# ====== BUG-13: los conteos de Roles y Usuarios miran la MISMA empresa ======
+
+class ConteoRolesPorEmpresaTest(TestCase):
+    """Roles decia 5 usuarios y Usuarios mostraba 2 sobre la misma empresa.
+
+    Quien estaba mal era Roles: los roles base son GLOBALES (empresa=None), asi
+    que `Count("perfiles")` sin filtro sumaba los perfiles de todos los
+    tenants. Usuarios ya filtraba por empresa y era el correcto.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("seed_roles")
+        cls.empresa_a = Empresa.objects.create(nombre="Empresa A", nit="900100100")
+        cls.empresa_b = Empresa.objects.create(nombre="Empresa B", nit="900200200")
+        cls.admin_a = cls.crear(cls.empresa_a, "admin-a@test.co", "ADMINISTRADOR")
+        cls.admin_b = cls.crear(cls.empresa_b, "admin-b@test.co", "ADMINISTRADOR")
+        # A: 1 admin + 1 empleado. B: 1 admin + 3 empleados.
+        cls.crear(cls.empresa_a, "emp-a1@test.co", "EMPLEADO")
+        for n in range(3):
+            cls.crear(cls.empresa_b, "emp-b%d@test.co" % n, "EMPLEADO")
+
+    @classmethod
+    def crear(cls, empresa, email, rol, activo=True):
+        usuario = User.objects.create_user(username=email, email=email,
+                                           password="Clave12345", first_name=email)
+        if not activo:
+            usuario.is_active = False
+            usuario.save(update_fields=["is_active"])
+        return Perfil.objects.create(usuario=usuario, empresa=empresa,
+                                     rol=Rol.de_nombre(rol))
+
+    def cliente_de(self, perfil):
+        cliente = APIClient()
+        cliente.force_authenticate(user=perfil.usuario)
+        return cliente
+
+    def conteos_de_roles(self, perfil):
+        respuesta = self.cliente_de(perfil).get("/api/seguridad/roles/")
+        self.assertEqual(respuesta.status_code, 200)
+        return {r["nombre"]: r["total_usuarios_activos"]
+                for r in respuesta.json()["resultados"]}
+
+    def test_roles_cuenta_solo_usuarios_de_mi_empresa(self):
+        self.assertEqual(self.conteos_de_roles(self.admin_a),
+                         {"ADMINISTRADOR": 1, "EMPLEADO": 1, "CLIENTE": 0})
+        self.assertEqual(self.conteos_de_roles(self.admin_b),
+                         {"ADMINISTRADOR": 1, "EMPLEADO": 3, "CLIENTE": 0})
+
+    def test_roles_y_usuarios_dan_el_mismo_total(self):
+        for perfil in (self.admin_a, self.admin_b):
+            cliente = self.cliente_de(perfil)
+            usuarios = cliente.get("/api/seguridad/usuarios/").json()["resultados"]
+            activos = [u for u in usuarios if u["activo"]]
+            total_roles = sum(self.conteos_de_roles(perfil).values())
+            self.assertEqual(total_roles, len(activos),
+                             "Roles y Usuarios discrepan en %s" % perfil.empresa.nombre)
+
+    def test_usuarios_no_oculta_cuentas_reales_de_la_empresa(self):
+        """La lista de Usuarios trae TODAS las cuentas de la empresa,
+        incluidas las desactivadas (con activo=False); lo unico que oculta
+        son los perfiles borrados logicamente."""
+        self.crear(self.empresa_a, "desactivado-a@test.co", "EMPLEADO", activo=False)
+        borrado = self.crear(self.empresa_a, "borrado-a@test.co", "EMPLEADO")
+        Perfil.objects.filter(pk=borrado.pk).update(deleted_at=timezone.now())
+
+        correos = {u["email"] for u in self.cliente_de(self.admin_a)
+                   .get("/api/seguridad/usuarios/").json()["resultados"]}
+        esperados = {p.usuario.email for p in
+                     Perfil.objects.filter(empresa=self.empresa_a,
+                                           deleted_at__isnull=True)}
+        self.assertEqual(correos, esperados)
+        self.assertIn("desactivado-a@test.co", correos)
+        self.assertNotIn("borrado-a@test.co", correos)
+
+    def test_borrar_rol_no_revela_el_uso_que_le_da_otra_empresa(self):
+        """El bloqueo ROL_CON_USUARIOS_ACTIVOS contaba perfiles de todos los
+        tenants y su mensaje publicaba cuantos eran. Ahora el conteo solo mira
+        mi empresa; si aun asi queda un perfil ajeno (estado que la API no
+        permite crear), el borrado falla con 400 generico, no con un 500."""
+        rol_a = Rol.objects.create(nombre="AUDITOR", empresa=self.empresa_a)
+        ajeno = self.crear(self.empresa_b, "ajeno@test.co", "EMPLEADO")
+        Perfil.objects.filter(pk=ajeno.pk).update(rol=rol_a)
+
+        respuesta = self.cliente_de(self.admin_a).delete(
+            "/api/seguridad/roles/%s/" % rol_a.id)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "ROL_EN_USO")
+        self.assertNotIn("usuarios_activos", respuesta.json())
+
+    def test_borrar_rol_propio_sin_usuarios_funciona(self):
+        rol_a = Rol.objects.create(nombre="REVISOR", empresa=self.empresa_a)
+        respuesta = self.cliente_de(self.admin_a).delete(
+            "/api/seguridad/roles/%s/" % rol_a.id)
+        self.assertEqual(respuesta.status_code, 204)
+
+    def test_cliente_es_el_rol_sin_permisos_del_marketplace(self):
+        """CLIENTE con 0 permisos es intencional: el comprador del
+        marketplace no usa la tabla de permisos (ver `EsPersonal`, que exige
+        rol de personal o al menos un permiso)."""
+        cliente = Rol.de_nombre("CLIENTE")
+        self.assertEqual(RolPermiso.objects.filter(rol=cliente).count(), 0)
+        perfil = self.crear(self.empresa_a, "comprador@test.co", "CLIENTE")
+        self.assertFalse(EsPersonal().has_permission(
+            SimpleNamespace(user=perfil.usuario), None))
+
+
+# ===== BUG-09 (fase 2.1): la identidad no distingue mayusculas ==============
+
+class CorreoSinMayusculasTest(BaseCuentasTest):
+    """La unicidad y la resolucion de identidad tienen que ignorar mayusculas
+    sin depender de la collation de la base: con `utf8mb4_bin` (o en otro
+    motor) un UNIQUE plano dejaria convivir Ana@x.co y ana@x.co y reabriria
+    el BUG-09."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        call_command("seed_roles")
+        cls.user, cls.perfil = cls.crear_cuenta(email="ana@elprogreso.co",
+                                                rol="ADMINISTRADOR")
+
+    def test_login_funciona_con_el_correo_en_otra_caja(self):
+        respuesta = self.login("ANA@ElProgreso.co", "Clave12345")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["usuario"]["id"], str(self.user.id))
+
+    def test_indice_unico_rechaza_el_mismo_correo_en_otra_caja(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(username="otra@elprogreso.co",
+                                         email="Ana@ElProgreso.co",
+                                         password="Clave12345")
+
+    def test_indice_unico_rechaza_el_mismo_username_en_otra_caja(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(username="ANA@elprogreso.co",
+                                         email="distinto@elprogreso.co",
+                                         password="Clave12345")
+
+    def test_api_rechaza_crear_usuario_que_solo_cambia_mayusculas(self):
+        cliente = APIClient()
+        cliente.force_authenticate(user=self.user)
+        respuesta = cliente.post("/api/seguridad/usuarios/", {
+            "nombre": "Ana Dos", "email": "ANA@ElProgreso.co",
+            "password": "Clave12345", "rol": "EMPLEADO"}, format="json")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["codigo"], "DATOS_INVALIDOS")
+        self.assertIn("email", respuesta.json()["errores"])
+
+    def test_api_guarda_el_correo_normalizado(self):
+        cliente = APIClient()
+        cliente.force_authenticate(user=self.user)
+        respuesta = cliente.post("/api/seguridad/usuarios/", {
+            "nombre": "Beto Nuevo", "email": "  BETO@ElProgreso.CO  ",
+            "password": "Clave12345", "rol": "EMPLEADO"}, format="json")
+        self.assertEqual(respuesta.status_code, 201)
+        creado = User.objects.get(email="beto@elprogreso.co")
+        self.assertEqual(creado.username, "beto@elprogreso.co")
+
+    def test_email_disponible_ignora_mayusculas(self):
+        tomado = self.client.get(reverse("auth-email-disponible"),
+                                 {"email": "ANA@ElProgreso.co"})
+        self.assertFalse(tomado.json()["disponible"])
+
+    def test_recuperacion_encuentra_la_cuenta_en_otra_caja(self):
+        mail.outbox.clear()
+        respuesta = self.client.post(reverse("auth-password-reset"),
+                                     {"email": "ANA@ElProgreso.co"},
+                                     content_type="application/json")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+
+
+class VerificacionIdentidadesDuplicadasTest(TransactionTestCase):
+    """El chequeo previo a la migracion agrupa por LOWER(), no por la
+    comparacion nativa de la base.
+
+    Para poder insertar el duplicado hay que soltar antes los indices unicos:
+    una vez aplicada la migracion 0012 la base ya no los admite. Lo que se
+    prueba aqui es el DIAGNOSTICO -- que la migracion sepa explicar una base
+    heredada sucia en vez de fallar con un `Duplicate entry` a secas.
+    """
+
+    INDICES = [
+        ("username", "ALTER TABLE `auth_user` ADD UNIQUE KEY `username` (`username`)"),
+        ("uniq_auth_user_email_lower",
+         "ALTER TABLE `auth_user` ADD UNIQUE KEY `uniq_auth_user_email_lower` "
+         "((LOWER(`email`)))"),
+        ("uniq_auth_user_username_lower",
+         "ALTER TABLE `auth_user` ADD UNIQUE KEY `uniq_auth_user_username_lower` "
+         "((LOWER(`username`)))"),
+    ]
+
+    def setUp(self):
+        self.soltados = []
+        with connection.cursor() as cursor:
+            for nombre, recrear in self.INDICES:
+                if self._existe(cursor, nombre):
+                    cursor.execute(f"ALTER TABLE `auth_user` DROP KEY `{nombre}`")
+                    self.soltados.append(recrear)
+
+    def tearDown(self):
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM auth_user")
+            for recrear in self.soltados:
+                cursor.execute(recrear)
+
+    @staticmethod
+    def _existe(cursor, nombre):
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.statistics "
+            "WHERE table_schema = DATABASE() AND table_name = 'auth_user' "
+            "AND index_name = %s", [nombre])
+        return cursor.fetchone()[0] > 0
+
+    @staticmethod
+    def _insertar(cursor, username, email):
+        cursor.execute(
+            "INSERT INTO auth_user (password, is_superuser, username, "
+            "first_name, last_name, email, is_staff, is_active, date_joined) "
+            "VALUES ('x', 0, %s, '', '', %s, 0, 1, NOW())", [username, email])
+
+    def test_detecta_duplicado_por_correo_ignorando_mayusculas(self):
+        with connection.cursor() as cursor:
+            self._insertar(cursor, "u1", "dup@test.co")
+            self._insertar(cursor, "u2", "DUP@test.co")
+            hallazgos = buscar(cursor)
+        self.assertIn("email", hallazgos)
+        self.assertEqual(hallazgos["email"][0][0], "dup@test.co")
+        self.assertEqual(hallazgos["email"][0][1], 2)
+
+    def test_detecta_duplicado_por_username_ignorando_mayusculas(self):
+        with connection.cursor() as cursor:
+            self._insertar(cursor, "pepe", "pepe@test.co")
+            self._insertar(cursor, "PEPE", "otro@test.co")
+            hallazgos = buscar(cursor)
+        self.assertIn("username", hallazgos)
+        self.assertEqual(hallazgos["username"][0][0], "pepe")
+
+    def test_correo_vacio_no_cuenta_como_duplicado(self):
+        """Django permite `email=''` (createsuperuser sin correo): esas filas
+        no identifican a nadie y no deben bloquear la migracion."""
+        with connection.cursor() as cursor:
+            self._insertar(cursor, "s1", "")
+            self._insertar(cursor, "s2", "")
+            hallazgos = buscar(cursor)
+        self.assertNotIn("email", hallazgos)
+
+    def test_sin_duplicados_no_hay_hallazgos(self):
+        with connection.cursor() as cursor:
+            self._insertar(cursor, "a@test.co", "a@test.co")
+            self._insertar(cursor, "b@test.co", "b@test.co")
+            self.assertEqual(buscar(cursor), {})
+
+    def test_comando_falla_y_dice_que_arreglar(self):
+        with connection.cursor() as cursor:
+            self._insertar(cursor, "z1", "z@test.co")
+            self._insertar(cursor, "z2", "Z@test.co")
+        with self.assertRaises(CommandError):
+            call_command("verificar_emails_duplicados")
+
+    def test_descripcion_nombra_columna_valor_e_ids(self):
+        texto = describir({"email": [("dup@test.co", 2, "7,9")]})
+        self.assertIn("email", texto)
+        self.assertIn("dup@test.co", texto)
+        self.assertIn("7,9", texto)

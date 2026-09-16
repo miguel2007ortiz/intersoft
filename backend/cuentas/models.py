@@ -173,6 +173,14 @@ class ActividadUsuario(models.Model):
         db_table = "actividad_usuario"
         ordering = ["-fecha"]
         verbose_name_plural = "Actividades de usuarios"
+        indexes = [
+            # La tabla solo se lee por "actividad de este usuario, lo mas
+            # reciente primero". Sin este indice, el orden por defecto
+            # (-fecha) obligaba a un filesort sobre toda la tabla en cuanto
+            # crecia el historial de auditoria.
+            models.Index(fields=["usuario", "-fecha"],
+                         name="actividad_usuario_fecha_idx"),
+        ]
 
     def __str__(self):
         actor = self.usuario.email if self.usuario else "anonimo"

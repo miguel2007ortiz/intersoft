@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework import serializers
 
+from cuentas.identidad import normalizar_correo, por_correo
 from cuentas.models import Perfil, Rol
 from cuentas.serializers import validar_fuerza_password
 
@@ -97,8 +98,8 @@ class EmpleadoEscrituraSerializer(serializers.Serializer):
         return nombre
 
     def validate_email(self, valor):
-        valor = valor.strip().lower()
-        consulta = Usuario.objects.filter(email__iexact=valor)
+        valor = normalizar_correo(valor)
+        consulta = por_correo(Usuario, valor)
         if self.instance is not None:
             consulta = consulta.exclude(pk=self.instance.usuario_id)
         if consulta.exists():

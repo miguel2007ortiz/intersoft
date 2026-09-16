@@ -4,6 +4,7 @@ Solo los consume el rol ADMINISTRADOR (ver cuentas/permissions.py)."""
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from .identidad import normalizar_correo, por_correo
 from .models import Permiso, Perfil, Rol
 from .serializers import validar_fuerza_password
 
@@ -41,8 +42,8 @@ class UsuarioCreacionSerializer(serializers.Serializer):
         return nombre
 
     def validate_email(self, valor):
-        valor = valor.strip().lower()
-        if Usuario.objects.filter(email__iexact=valor).exists():
+        valor = normalizar_correo(valor)
+        if por_correo(Usuario, valor).exists():
             # Regla fase 2: correo duplicado se rechaza y se pide otro
             raise serializers.ValidationError("Ya existe una cuenta con este correo. Usa otro.")
         return valor
@@ -66,8 +67,8 @@ class UsuarioEdicionSerializer(serializers.Serializer):
         return nombre
 
     def validate_email(self, valor):
-        valor = valor.strip().lower()
-        consulta = Usuario.objects.filter(email__iexact=valor)
+        valor = normalizar_correo(valor)
+        consulta = por_correo(Usuario, valor)
         if self.instance is not None:
             consulta = consulta.exclude(pk=self.instance.usuario.pk)
         if consulta.exists():
@@ -88,9 +89,20 @@ class RolLecturaSerializer(serializers.Serializer):
                     .values_list("permiso__codigo", flat=True))
 
     def get_total_usuarios_activos(self, rol) -> int:
+        """Usuarios activos con este rol DENTRO de la empresa que consulta.
+
+        Los roles base son globales, asi que sin acotar por empresa este
+        conteo sumaba los perfiles de todos los tenants y no cuadraba con la
+        pantalla de Usuarios. La vista pasa `empresa` en el contexto; si
+        faltara, se devuelve 0 en vez de filtrar datos de otras empresas.
+        """
         if hasattr(rol, "total_usuarios_activos"):
             return rol.total_usuarios_activos
-        return Perfil.objects.filter(rol=rol, deleted_at__isnull=True,
+        empresa = (self.context or {}).get("empresa")
+        if empresa is None:
+            return 0
+        return Perfil.objects.filter(rol=rol, empresa=empresa,
+                                     deleted_at__isnull=True,
                                      usuario__is_active=True).count()
 
     def get_es_sistema(self, rol) -> bool:

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
@@ -20,6 +21,25 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Handlers propios: con DEBUG=False, Django responde el 404/500 en HTML. El
+# 404 tecnico de DEBUG=True llega a imprimir el URLconf entero (el mapa de
+# todos los endpoints del backend). Estos devuelven JSON generico, sin
+# detalle interno, coherente con el resto de la API.
+handler404 = 'intersoft.urls.error_404'
+handler500 = 'intersoft.urls.error_500'
+
+
+def error_404(request, exception=None):
+    return JsonResponse({"codigo": "NO_ENCONTRADO",
+                         "detalle": "El recurso solicitado no existe."},
+                        status=404)
+
+
+def error_500(request):
+    return JsonResponse({"codigo": "ERROR_SERVIDOR",
+                         "detalle": "El servidor tuvo un problema."},
+                        status=500)
 
 admin.site.site_header = "InterSoft - Administracion"
 admin.site.site_title = "InterSoft Admin"

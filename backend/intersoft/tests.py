@@ -127,6 +127,55 @@ class ConfiguracionSeguridadProduccionTest(SimpleTestCase):
         # CORS solo con origenes explicitos, nunca '*'
         self.assertIn('https://app.intersoft.co', mod.CORS_ALLOWED_ORIGINS)
 
+
+    # --------------------- BUG-18: nada interno con DEBUG=False -------------
+
+    def test_produccion_rechaza_la_clave_de_env_example(self):
+        """`.env.example` esta versionado: su SECRET_KEY es publica y no puede
+        valer para produccion aunque no lleve el prefijo django-insecure-."""
+        with self.assertRaisesRegex(ImproperlyConfigured, 'insegura para produccion'):
+            _cargar_con_env({'DEBUG': 'False',
+                             'SECRET_KEY': 'cambia-esta-clave-en-produccion-intersoft-2026'})
+        self._recargar_para_revertir()
+
+    def test_produccion_solo_renderiza_json(self):
+        """El BrowsableAPIRenderer publica formularios y nombres de campos de
+        los serializers: util en desarrollo, mapa del backend en produccion."""
+        mod = _cargar_con_env({
+            'DEBUG': 'False',
+            'SECRET_KEY': REAL_SECRET,
+            'ALLOWED_HOSTS': 'api.intersoft.co',
+        })
+        renderers = mod.REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES']
+        self.assertEqual(tuple(renderers),
+                         ('rest_framework.renderers.JSONRenderer',))
+        self._recargar_para_revertir()
+
+    def test_desarrollo_conserva_el_navegador_de_la_api(self):
+        mod = _cargar_con_env({'DEBUG': 'True'})
+        self.assertIn('rest_framework.renderers.BrowsableAPIRenderer',
+                      mod.REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'])
+        self._recargar_para_revertir()
+
+    def test_debug_por_defecto_es_false_si_falta_la_variable(self):
+        """Un despliegue que olvide definir DEBUG arranca cerrado."""
+        from decouple import Config as _Config
+
+        real = _Config.get
+
+        def sin_debug(self, option, *args, **kwargs):
+            if option == 'DEBUG':
+                # `default` es el segundo posicional o va por kwargs.
+                if args:
+                    return args[0]
+                return kwargs.get('default')
+            return real(self, option, *args, **kwargs)
+
+        with mock.patch.object(_Config, 'get', sin_debug):
+            with self.assertRaisesRegex(ImproperlyConfigured, 'SECRET_KEY'):
+                _cargar_con_env({'SECRET_KEY': ''})
+        self._recargar_para_revertir()
+
     def test_produccion_allowed_hosts_vacio_o_comodin_falla(self):
         with self.assertRaisesRegex(ImproperlyConfigured, 'ALLOWED_HOSTS invalido'):
             _cargar_con_env({'DEBUG': 'False', 'SECRET_KEY': REAL_SECRET,

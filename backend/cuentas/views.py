@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.core.mail import EmailMultiAlternatives
+from django.db.models.functions import Lower
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -10,6 +11,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .identidad import por_correo
+from .intentos import contador_para
 from .models import ActividadUsuario, Perfil, RolPermiso, TokenRecuperacion
 from .serializers import (
     CambiarPasswordSerializer, ConfirmarRecuperacionSerializer, LoginSerializer,
@@ -20,6 +23,17 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 Usuario = get_user_model()
+
+
+# Cuerpo unico del 401: mismo codigo y mismo texto exista o no el correo, y
+# sin `intentos_restantes` (revelaba que la cuenta era real y cuanto faltaba
+# para bloquearla). Cualquier dato extra aqui vuelve a abrir la enumeracion.
+CREDENCIALES_INVALIDAS = {
+    "codigo": "CREDENCIALES_INVALIDAS",
+    "detalle": "Correo o contrasena incorrectos.",
+}
+AVISO_ULTIMO_INTENTO = ("Si el siguiente intento tambien falla, el acceso se "
+                        "bloqueara temporalmente.")
 
 
 class LoginView(APIView):
@@ -37,59 +51,99 @@ class LoginView(APIView):
         email = entrada.validated_data["email"]
         password = entrada.validated_data["password"]
 
-        perfil = (Perfil.objects.filter(usuario__email__iexact=email)
-                  .select_related("usuario", "rol", "empresa").first())
+        # Identidad candidata resuelta UNA sola vez y sin ambiguedad: por
+        # `auth_user` (LOWER(email) con indice UNIQUE funcional), no por
+        # `Perfil`. Ordenar por pk deja el resultado determinista tambien en
+        # una base heredada a la que aun no se le haya aplicado la
+        # verificacion de duplicados.
+        # Se compara con `Lower(...)` y no con `iexact` porque en MySQL
+        # `iexact` se traduce a un LIKE cuya sensibilidad depende de la
+        # collation del despliegue; `LOWER()` da el mismo resultado en
+        # cualquier collation y ademas es la expresion que indexa la
+        # migracion 0012, asi que la busqueda sigue usando indice.
+        # El select_related trae perfil, empresa y rol en la misma consulta:
+        # evita las 3 consultas extra que costaba armar el contexto al final.
+        candidato = (Usuario.objects
+                     .alias(correo=Lower("email"))
+                     .filter(correo=email)
+                     .select_related("perfil__empresa", "perfil__rol")
+                     .order_by("pk").first())
+        contador = contador_para(candidato, email, request)
 
-        if perfil and perfil.esta_bloqueado():
-            ActividadUsuario.registrar(perfil.usuario, "LOGIN_BLOQUEADO",
-                                       f"Cuenta bloqueada: {email}")
-            return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil.fecha_desbloqueo},
-                            status=status.HTTP_423_LOCKED)
+        # El bloqueo se responde igual haya cuenta o no (el contador anonimo
+        # replica la ventana), y sin llegar a verificar la contrasena: no
+        # introduce diferencia de tiempo porque ninguna de las dos ramas
+        # calcula el hash.
+        if contador.esta_bloqueado():
+            if candidato is not None:
+                ActividadUsuario.registrar(candidato, "LOGIN_BLOQUEADO",
+                                           f"Cuenta bloqueada: {email}")
+            return self._respuesta_bloqueo(contador)
 
-        # La cuenta desactivada o borrada no debe consumir intentos ni
-        # recibir un mensaje de credenciales invalidas.
-        if perfil and (not perfil.usuario.is_active or perfil.deleted_at):
-            return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
-
+        # `authenticate` calcula el hash de la contrasena tanto si el usuario
+        # existe como si no (ModelBackend hace un hash en vacio), asi que el
+        # coste -- y el tiempo de respuesta -- es el mismo en ambos casos.
+        # Devuelve None tambien para cuentas inactivas: esas caen en el 401
+        # generico a proposito, para no delatar que la cuenta existe.
         usuario = authenticate(request, username=email, password=password)
 
         if usuario is None:
-            restantes = None
-            if perfil:
-                perfil.registrar_intento_fallido()
-                restantes = perfil.intentos_restantes()
-                ActividadUsuario.registrar(perfil.usuario, "LOGIN_FALLIDO",
-                                           f"Contrasena invalida para {email}")
-                if perfil.esta_bloqueado():
-                    ActividadUsuario.registrar(perfil.usuario, "CUENTA_BLOQUEADA",
-                                               f"Se superaron los intentos: {email}")
-                    return Response({"codigo": "CUENTA_BLOQUEADA", "desbloqueo_en": perfil.fecha_desbloqueo},
-                                    status=status.HTTP_423_LOCKED)
-            else:
-                ActividadUsuario.registrar(None, "LOGIN_FALLIDO", f"Correo inexistente: {email}")
-            return Response({"codigo": "CREDENCIALES_INVALIDAS", "intentos_restantes": restantes},
-                            status=status.HTTP_401_UNAUTHORIZED)
+            contador.registrar_fallo()
+            ActividadUsuario.registrar(candidato, "LOGIN_FALLIDO",
+                                       f"Credenciales invalidas para {email}")
+            if contador.esta_bloqueado():
+                ActividadUsuario.registrar(candidato, "CUENTA_BLOQUEADA",
+                                           f"Se superaron los intentos: {email}")
+                return self._respuesta_bloqueo(contador)
+            cuerpo = dict(CREDENCIALES_INVALIDAS)
+            if contador.intentos_restantes() == 1:
+                cuerpo["aviso"] = AVISO_ULTIMO_INTENTO
+            return Response(cuerpo, status=status.HTTP_401_UNAUTHORIZED)
 
-        if not usuario.is_active or perfil is None or perfil.deleted_at:
+        # A partir de aqui la contrasena ya esta probada, asi que distinguir
+        # los motivos de rechazo no sirve para enumerar nada.
+        # El perfil sale del OneToOne del usuario AUTENTICADO: el contexto
+        # (empresa, rol, permisos) no puede venir de otra cuenta.
+        perfil = self._perfil_de(usuario, candidato)
+        if perfil is None or perfil.deleted_at:
             return Response({"codigo": "USUARIO_INACTIVO"}, status=status.HTTP_403_FORBIDDEN)
 
         if perfil.empresa_id and not perfil.empresa.activa:
             ActividadUsuario.registrar(usuario, "LOGIN_EMPRESA_INACTIVA", email)
             return Response({"codigo": "EMPRESA_INACTIVA"}, status=status.HTTP_403_FORBIDDEN)
 
-        perfil.reiniciar_intentos()
+        contador.reiniciar()
         refresh = RefreshToken.for_user(usuario)
         nombre = (usuario.get_full_name() or usuario.username).strip()
         ActividadUsuario.registrar(usuario, "LOGIN_EXITOSO", email)
 
         return Response({
             "access": str(refresh.access_token), "refresh": str(refresh),
-            "usuario": {"id": str(perfil.id), "email": usuario.email, "nombre": nombre,
+            # `usuario.id` es el id de auth_user (el sujeto del token). El id
+            # del perfil viaja aparte en `perfil_id`: antes se devolvia el del
+            # perfil bajo la clave `id` y el frontend creia tener el del User.
+            "usuario": {"id": str(usuario.id), "perfil_id": str(perfil.id),
+                        "email": usuario.email, "nombre": nombre,
                         "rol": perfil.nombre_rol,
                         "empresa": str(perfil.empresa_id) if perfil.empresa_id else None,
                         "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None,
                         "debe_cambiar_password": perfil.debe_cambiar_password},
         })
+
+    @staticmethod
+    def _respuesta_bloqueo(contador):
+        return Response({"codigo": "CUENTA_BLOQUEADA",
+                         "desbloqueo_en": contador.desbloqueo_en},
+                        status=status.HTTP_423_LOCKED)
+
+    @staticmethod
+    def _perfil_de(usuario, candidato):
+        """Perfil del usuario autenticado, reutilizando el select_related ya
+        cargado cuando `authenticate` devolvio esa misma fila (caso normal).
+        Asi el login no repite las consultas de perfil, empresa y rol."""
+        if candidato is not None and candidato.pk == usuario.pk:
+            return getattr(candidato, "perfil", None)
+        return getattr(usuario, "perfil", None)
 
 
 class MeView(APIView):
@@ -97,18 +151,23 @@ class MeView(APIView):
     guards se arman a partir de `permisos`, no del nombre del rol."""
 
     def get(self, request):
-        perfil = getattr(request.user, "perfil", None)
+        # Una sola consulta para perfil + empresa + rol (antes eran tres:
+        # el perfil por el OneToOne y luego `perfil.rol` y `perfil.empresa`
+        # al serializar).
+        perfil = (Perfil.objects.filter(usuario=request.user)
+                  .select_related("empresa", "rol").first())
         if perfil is None:
             return Response({"codigo": "SIN_PERFIL"}, status=status.HTTP_403_FORBIDDEN)
 
-        usuario = perfil.usuario
+        usuario = request.user
         nombre = (usuario.get_full_name() or usuario.username).strip()
         permisos = list(
-            RolPermiso.objects.filter(rol=perfil.rol)
+            RolPermiso.objects.filter(rol_id=perfil.rol_id)
             .values_list("permiso__codigo", flat=True)
         )
         return Response({
-            "id": str(perfil.id), "email": usuario.email, "nombre": nombre,
+            "id": str(usuario.id), "perfil_id": str(perfil.id),
+            "email": usuario.email, "nombre": nombre,
             "rol": perfil.nombre_rol,
             "empresa": str(perfil.empresa_id) if perfil.empresa_id else None,
             "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None,
@@ -192,7 +251,7 @@ class EmailDisponibleView(APIView):
         email = (request.query_params.get("email") or "").strip().lower()
         if not email:
             return Response({"disponible": False}, status=status.HTTP_400_BAD_REQUEST)
-        existe = Usuario.objects.filter(email__iexact=email).exists()
+        existe = por_correo(Usuario, email).exists()
         return Response({"disponible": not existe})
 
 
@@ -211,7 +270,8 @@ class SolicitarRecuperacionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST)
         email = entrada.validated_data["email"]
 
-        perfil = (Perfil.objects.filter(usuario__email__iexact=email)
+        perfil = (Perfil.objects
+                  .filter(usuario__in=por_correo(Usuario, email))
                   .select_related("usuario").first())
         if perfil and perfil.usuario.is_active:
             token = TokenRecuperacion.emitir(perfil, minutos=30)

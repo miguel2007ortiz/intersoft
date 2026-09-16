@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 from core.models import Cliente, Empresa
+from .identidad import normalizar_correo, por_correo
 from .models import Perfil, Rol
 
 Usuario = get_user_model()
@@ -28,7 +29,7 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate_email(self, valor):
-        return valor.strip().lower()
+        return normalizar_correo(valor)
 
 
 class CambiarPasswordSerializer(serializers.Serializer):
@@ -52,8 +53,8 @@ class DatosAdministradorSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, validators=[validar_fuerza_password])
 
     def validate_email(self, valor):
-        valor = valor.strip().lower()
-        if Usuario.objects.filter(email__iexact=valor).exists():
+        valor = normalizar_correo(valor)
+        if por_correo(Usuario, valor).exists():
             raise serializers.ValidationError("Ya existe una cuenta con este correo.")
         return valor
 
@@ -97,8 +98,8 @@ class RegistroCompradorSerializer(serializers.Serializer):
     ciudad = serializers.CharField(max_length=80, required=False, allow_blank=True, default='')
 
     def validate_email(self, valor):
-        valor = valor.strip().lower()
-        if Usuario.objects.filter(email__iexact=valor).exists():
+        valor = normalizar_correo(valor)
+        if por_correo(Usuario, valor).exists():
             raise serializers.ValidationError("Ya existe una cuenta con este correo.")
         return valor
 
@@ -138,7 +139,7 @@ class SolicitarRecuperacionSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, valor):
-        return valor.strip().lower()
+        return normalizar_correo(valor)
 
 
 class ConfirmarRecuperacionSerializer(serializers.Serializer):

@@ -31,7 +31,12 @@ if not DEBUG:
             "segura con: python -c \"from django.core.management.utils import "
             "get_random_secret_key; print(get_random_secret_key())\""
         )
-    if _SECRET_KEY == _DEV_SECRET_PLACEHOLDER or _SECRET_KEY.startswith('django-insecure-'):
+    # `cambia-esta-clave` cubre tambien el valor que trae `.env.example`: es
+    # publico (esta versionado), asi que copiar la plantilla y poner
+    # DEBUG=False no puede dejar la app firmando tokens con una clave conocida.
+    if (_SECRET_KEY == _DEV_SECRET_PLACEHOLDER
+            or _SECRET_KEY.startswith('django-insecure-')
+            or 'cambia-esta-clave' in _SECRET_KEY):
         raise ImproperlyConfigured(
             'SECRET_KEY insegura para produccion: no uses el valor de '
             'desarrollo (django-insecure-*) ni placeholders. Define una clave '
@@ -179,6 +184,16 @@ MYSQL_BIN = config('MYSQL_BIN', default='')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
+    # Con DEBUG=False solo JSON: el BrowsableAPIRenderer de DRF publica un
+    # navegador de la API (formularios, nombres de vistas y campos de los
+    # serializers) que es util en desarrollo y un mapa del backend en
+    # produccion.
+    'DEFAULT_RENDERER_CLASSES': (
+        ('rest_framework.renderers.JSONRenderer',
+         'rest_framework.renderers.BrowsableAPIRenderer')
+        if DEBUG else
+        ('rest_framework.renderers.JSONRenderer',)
+    ),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),

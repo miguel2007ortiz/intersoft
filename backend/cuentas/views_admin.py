@@ -5,7 +5,7 @@ en actividad_usuario."""
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, ProtectedError, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -46,6 +46,19 @@ def roles_visibles(empresa: Empresa):
     """Roles que una empresa puede ver y asignar: los globales del sistema
     (empresa=None) mas sus propios roles personalizados."""
     return Rol.objects.filter(Q(empresa=empresa) | Q(empresa__isnull=True))
+
+
+def filtro_usuarios_activos(empresa: Empresa) -> Q:
+    """Condicion de "usuario que cuenta" para un rol, vista desde `empresa`.
+
+    Los roles base (ADMINISTRADOR, EMPLEADO, CLIENTE) son GLOBALES: sus
+    `perfiles` incluyen los de todas las empresas. Sin el filtro por empresa,
+    la pantalla de Roles contaba los perfiles de todos los tenants mientras
+    la de Usuarios -- que si filtra -- mostraba solo los propios.
+    """
+    return Q(perfiles__empresa=empresa,
+             perfiles__deleted_at__isnull=True,
+             perfiles__usuario__is_active=True)
 
 
 class UsuariosSeguridadView(APIView):
@@ -195,13 +208,13 @@ class RolesSeguridadView(APIView):
     permission_classes = [IsAuthenticated, EsAdministrador]
 
     def get(self, request):
-        roles = (roles_visibles(request.user.perfil.empresa)
+        empresa = request.user.perfil.empresa
+        roles = (roles_visibles(empresa)
                  .annotate(total_usuarios_activos=Count(
-                     "perfiles",
-                     filter=Q(perfiles__deleted_at__isnull=True,
-                              perfiles__usuario__is_active=True)))
+                     "perfiles", filter=filtro_usuarios_activos(empresa)))
                  .prefetch_related("rol_permisos__permiso").order_by("nombre"))
-        datos = RolLecturaSerializer(roles, many=True).data
+        datos = RolLecturaSerializer(roles, many=True,
+                                     context={"empresa": empresa}).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):
@@ -219,7 +232,9 @@ class RolesSeguridadView(APIView):
 
         ActividadUsuario.registrar(request.user, "ROL_CREADO",
                                    f"{rol.nombre} ({len(datos.get('permisos', []))} permisos)")
-        return Response(RolLecturaSerializer(rol).data, status=status.HTTP_201_CREATED)
+        return Response(RolLecturaSerializer(
+            rol, context={"empresa": request.user.perfil.empresa}).data,
+            status=status.HTTP_201_CREATED)
 
 
 class RolDetalleView(APIView):
@@ -246,7 +261,8 @@ class RolDetalleView(APIView):
         rol = self.obtener_rol(request.user.perfil.empresa, id)
         if rol is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(RolLecturaSerializer(rol).data)
+        return Response(RolLecturaSerializer(
+            rol, context={"empresa": request.user.perfil.empresa}).data)
 
     def put(self, request, id):
         return self.editar(request, id, parcial=False)
@@ -288,7 +304,8 @@ class RolDetalleView(APIView):
 
         ActividadUsuario.registrar(request.user, "ROL_EDITADO",
                                    f"{nombre_anterior} -> {rol.nombre}")
-        return Response(RolLecturaSerializer(rol).data)
+        return Response(RolLecturaSerializer(
+            rol, context={"empresa": request.user.perfil.empresa}).data)
 
     def delete(self, request, id):
         rol = self.obtener_rol(request.user.perfil.empresa, id)
@@ -301,7 +318,11 @@ class RolDetalleView(APIView):
                                         "pueden eliminar."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        activos = Perfil.objects.filter(rol=rol, deleted_at__isnull=True,
+        # Solo los usuarios de MI empresa: un rol global lo comparten todos
+        # los tenants y no debe contarse (ni revelarse) el uso ajeno.
+        activos = Perfil.objects.filter(rol=rol,
+                                        empresa=request.user.perfil.empresa,
+                                        deleted_at__isnull=True,
                                         usuario__is_active=True).count()
         if activos > 0:
             # Regla fase 2: hay que reasignar los usuarios antes de borrar el rol
@@ -312,8 +333,19 @@ class RolDetalleView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         nombre = rol.nombre
-        with transaction.atomic():
-            rol.delete()
+        try:
+            with transaction.atomic():
+                rol.delete()
+        except ProtectedError:
+            # `Perfil.rol` es PROTECT. El conteo de arriba solo mira MI
+            # empresa (no se puede revelar el uso que le den otras), asi que
+            # todavia puede quedar algun perfil ajeno colgando del rol. Se
+            # responde 400 sin decir de quien es: un 500 no aporta nada y el
+            # dato de otro tenant no debe salir de aqui.
+            return Response({"codigo": "ROL_EN_USO",
+                             "detalle": "El rol sigue asignado a alguna cuenta "
+                                        "y no se puede eliminar."},
+                            status=status.HTTP_400_BAD_REQUEST)
         ActividadUsuario.registrar(request.user, "ROL_ELIMINADO", nombre)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -346,7 +378,8 @@ class RolClonarView(APIView):
         ActividadUsuario.registrar(request.user, "ROL_CLONADO",
                                    f"{origen.nombre} -> {clon.nombre} "
                                    f"({len(codigos)} permisos)")
-        return Response(RolLecturaSerializer(clon).data, status=status.HTTP_201_CREATED)
+        return Response(RolLecturaSerializer(clon, context={"empresa": empresa}).data,
+                        status=status.HTTP_201_CREATED)
 
 
 class PermisosCatalogoView(APIView):
