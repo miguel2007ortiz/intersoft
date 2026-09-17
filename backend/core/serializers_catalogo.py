@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from cuentas.models import Perfil
 
+from .serializers_base import ImagenAbsolutaMixin
 from .models import Categoria, Cliente, Producto, Venta
 
 
@@ -145,7 +146,10 @@ class ClienteEscrituraSerializer(serializers.ModelSerializer):
 
 # ------------------------------ Productos ----------------------------------
 
-class ProductoLecturaSerializer(serializers.ModelSerializer):
+class ProductoLecturaSerializer(ImagenAbsolutaMixin, serializers.ModelSerializer):
+    """`imagen` sale como URL absoluta (ver ImagenAbsolutaMixin): las vistas
+    tienen que pasar el `request` en el contexto."""
+
     categoria_id = serializers.SerializerMethodField()
     categoria_nombre = serializers.CharField(source="categoria.nombre", default=None)
     tiene_ventas = serializers.SerializerMethodField()

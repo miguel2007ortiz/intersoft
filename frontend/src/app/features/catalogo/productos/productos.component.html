@@ -201,7 +201,17 @@
               <tr>
                 <td class="celda-producto">
                   @if (p.imagen) {
-                    <img class="miniatura" [src]="p.imagen" [alt]="p.nombre" />
+                    <!-- loading="lazy": la tabla puede traer 200 filas y no
+                         tiene sentido descargar las miniaturas que no se ven.
+                         (error) cae a una imagen de respaldo si el archivo ya
+                         no esta en disco, en vez de dejar el icono de rota. -->
+                    <img
+                      class="miniatura"
+                      [src]="p.imagen"
+                      [alt]="p.nombre"
+                      loading="lazy"
+                      (error)="imagenFallida($event)"
+                    />
                   }
                   <div>
                     <strong>{{ p.nombre }}</strong>
@@ -226,16 +236,43 @@
                   <button type="button" class="enlace" (click)="alternarActivo(p)">
                     {{ p.activo ? 'Desactivar' : 'Reactivar' }}
                   </button>
-                  @if (!p.tiene_ventas) {
-                    <button type="button" class="enlace peligro" (click)="eliminar(p)">
-                      Eliminar
-                    </button>
+                  <!-- El boton se muestra SIEMPRE: aparecer y desaparecer
+                       segun la fila hacia pensar que la accion fallaba o que
+                       la tabla estaba mal. Con ventas asociadas queda
+                       deshabilitado y explica por que. `title` da el tooltip
+                       del raton y `aria-describedby` apunta al mismo texto
+                       para quien navega con lector de pantalla, que no lee
+                       los `title`. -->
+                  <button
+                    type="button"
+                    class="enlace peligro"
+                    [disabled]="p.tiene_ventas"
+                    [attr.title]="p.tiene_ventas ? motivoNoEliminable : null"
+                    [attr.aria-describedby]="p.tiene_ventas ? 'motivo-' + p.id : null"
+                    (click)="eliminar(p)"
+                  >
+                    Eliminar
+                  </button>
+                  @if (p.tiene_ventas) {
+                    <span class="solo-lectores" [id]="'motivo-' + p.id">
+                      {{ motivoNoEliminable }}
+                    </span>
                   }
                 </td>
               </tr>
             }
           </tbody>
         </table>
+
+        <app-paginador
+          [desde]="desde()"
+          [hasta]="hasta()"
+          [total]="total()"
+          [pagina]="pagina()"
+          [totalPaginas]="totalPaginas()"
+          [cargando]="cargando()"
+          (cambiarPagina)="irAPagina($event)"
+        ></app-paginador>
       }
     </div>
   </section>

@@ -14,6 +14,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { PanelShellComponent } from '../../../shared/layout/panel-shell/panel-shell.component';
 import { EstadoVacioComponent } from '../../../shared/estado-vacio/estado-vacio.component';
+import { PaginadorComponent } from '../../../shared/paginador/paginador.component';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { debounce, programarAviso } from '../../../core/utils/temporizador.util';
 import { Categoria, ErrorCatalogo, Producto } from '../../../core/models/catalogo.model';
@@ -21,9 +22,28 @@ import { ConfirmacionService } from '../../../core/services/confirmacion.service
 
 const CERRAR_AVISO_MS = 4000;
 
+/** Imagen que se pinta cuando la del producto no carga. Es un SVG en linea
+ * (data URI) a proposito: no anade una peticion mas ni un archivo que se
+ * pueda perder al desplegar, que es justo el fallo del que protege. */
+export const IMAGEN_RESPALDO =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">' +
+      '<rect width="48" height="48" rx="6" fill="#e5e7eb"/>' +
+      '<path d="M12 32l7-8 5 6 4-4 8 6z" fill="#9ca3af"/>' +
+      '<circle cx="18" cy="17" r="3" fill="#9ca3af"/>' +
+      '</svg>',
+  );
+
 @Component({
   selector: 'app-productos',
-  imports: [CommonModule, ReactiveFormsModule, PanelShellComponent, EstadoVacioComponent],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    PanelShellComponent,
+    EstadoVacioComponent,
+    PaginadorComponent,
+  ],
   templateUrl: './productos.component.html',
   styleUrl: './productos.component.css',
 })
@@ -51,8 +71,20 @@ export class ProductosComponent implements OnInit {
   readonly busqueda = signal('');
   /** filtro del catalogo: todos | activos | inactivos */
   readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  /** Contadores del backend para el paginador (BUG-02). `total` son los
+   * registros que cumplen el filtro, no los de la pagina. */
+  readonly pagina = signal(1);
+  readonly totalPaginas = signal(1);
+  readonly total = signal(0);
+  readonly desde = signal(0);
+  readonly hasta = signal(0);
   /** Agrupa las teclas del buscador: evita golpear la API en cada tecla. */
   private readonly buscarDebounced = debounce(this.destroyRef, () => this.cargar(), 300);
+
+  /** Motivo unico para el tooltip y para el lector de pantalla, para que no
+   * puedan divergir. */
+  readonly motivoNoEliminable =
+    'No se puede eliminar: tiene ventas asociadas. Puedes desactivarlo.';
 
   readonly formulario = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(150)]],
@@ -73,16 +105,25 @@ export class ProductosComponent implements OnInit {
     this.cargando.set(true);
     this.errorCarga.set(null);
     const activo = this.filtroEstado() === 'todos' ? undefined : this.filtroEstado() === 'activos';
-    this.catalogo.listarProductos({ busqueda: this.busqueda(), activo }).subscribe({
-      next: ({ resultados }) => {
-        this.productos.set(resultados);
-        this.cargando.set(false);
-      },
-      error: (e) => {
-        this.errorCarga.set(e.detalle ?? 'No se pudo cargar la lista.');
-        this.cargando.set(false);
-      },
-    });
+    // La busqueda y los filtros viajan siempre: cambiar de pagina no puede
+    // perderlos (el paginador solo dice que pagina quiere).
+    this.catalogo
+      .listarProductos({ busqueda: this.busqueda(), activo, pagina: this.pagina() })
+      .subscribe({
+        next: (lista) => {
+          this.productos.set(lista.resultados);
+          this.total.set(lista.total ?? 0);
+          this.pagina.set(lista.pagina ?? 1);
+          this.totalPaginas.set(lista.total_paginas ?? 1);
+          this.desde.set(lista.desde ?? 0);
+          this.hasta.set(lista.hasta ?? 0);
+          this.cargando.set(false);
+        },
+        error: (e) => {
+          this.errorCarga.set(e.detalle ?? 'No se pudo cargar la lista.');
+          this.cargando.set(false);
+        },
+      });
   }
 
   cargarCategorias(): void {
@@ -91,18 +132,36 @@ export class ProductosComponent implements OnInit {
 
   buscar(evento: Event): void {
     this.busqueda.set((evento.target as HTMLInputElement).value.trim());
+    // Un filtro nuevo cambia el conjunto: seguir en la pagina 7 dejaria la
+    // tabla vacia sin explicacion.
+    this.pagina.set(1);
     this.buscarDebounced();
   }
 
   filtrar(estado: 'todos' | 'activos' | 'inactivos'): void {
     this.filtroEstado.set(estado);
+    this.pagina.set(1);
     this.cargar();
   }
 
   limpiarFiltros(): void {
     this.busqueda.set('');
     this.filtroEstado.set('todos');
+    this.pagina.set(1);
     this.cargar();
+  }
+
+  irAPagina(numero: number): void {
+    this.pagina.set(numero);
+    this.cargar();
+  }
+
+  /** Imagen de respaldo si la URL del producto no carga (archivo borrado del
+   * disco, permisos de media, etc.): sin esto queda el icono de rota. */
+  imagenFallida(evento: Event): void {
+    const img = evento.target as HTMLImageElement;
+    if (img.src.endsWith(IMAGEN_RESPALDO)) return;
+    img.src = IMAGEN_RESPALDO;
   }
 
   abrirCreacion(): void {

@@ -1,0 +1,25 @@
+<nav class="paginador" aria-label="Paginacion de resultados">
+  <p class="paginador__resumen" aria-live="polite">{{ resumen() }}</p>
+
+  @if (totalPaginas() > 1) {
+    <div class="paginador__controles">
+      <button
+        type="button"
+        class="paginador__boton"
+        [disabled]="!hayAnterior() || cargando()"
+        (click)="anterior()"
+      >
+        Anterior
+      </button>
+      <span class="paginador__pagina">Pagina {{ pagina() }} de {{ totalPaginas() }}</span>
+      <button
+        type="button"
+        class="paginador__boton"
+        [disabled]="!haySiguiente() || cargando()"
+        (click)="siguiente()"
+      >
+        Siguiente
+      </button>
+    </div>
+  }
+</nav>

@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -495,7 +496,8 @@ class CrudProductosApiTest(BaseCatalogoTest):
                                     cantidad=1, precio_unitario=75000)
         api = self.api_como(self.admin)
         respuesta = api.delete(f"/api/productos/{self.producto.id}/")
-        self.assertEqual(respuesta.status_code, 400)
+        # 409: lo impide el estado del recurso, no un error en la peticion.
+        self.assertEqual(respuesta.status_code, 409)
         cuerpo = respuesta.json()
         self.assertEqual(cuerpo["codigo"], "PRODUCTO_CON_VENTAS")
         self.producto.refresh_from_db()
@@ -3118,3 +3120,277 @@ class EmpleadoEdicionSerializerTest(BaseCatalogoTest):
             {"tipo_documento": "CC", "numero_documento": "88889999"}, format="json")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("88889999", str(resp.data["errores"]["numero_documento"]))
+
+
+# ============ Fase 4: imagenes y paginacion de productos ====================
+
+class ImagenAbsolutaTest(BaseCatalogoTest):
+    """BUG-01: /api/productos/ devolvia "/media/..." relativa y el catalogo
+    publico devolvia la absoluta. En desarrollo el panel se sirve desde otro
+    origen que la API, asi que la ruta relativa apuntaba al servidor de Angular
+    y la imagen salia rota."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.con_imagen = Producto.objects.create(
+            empresa=cls.empresa, nombre="Con imagen", sku="SKU-IMG",
+            precio=1000, stock=5, stock_minimo=1,
+            imagen=SimpleUploadedFile("foto.jpg", b"contenido-falso",
+                                      content_type="image/jpeg"))
+
+    def test_el_panel_devuelve_la_imagen_absoluta(self):
+        respuesta = self.api_como(self.admin).get("/api/productos/")
+        fila = next(p for p in respuesta.json()["resultados"]
+                    if p["sku"] == "SKU-IMG")
+        self.assertTrue(fila["imagen"].startswith("http"),
+                        f"no es absoluta: {fila['imagen']}")
+        self.assertIn("/media/", fila["imagen"])
+
+    def test_el_catalogo_publico_devuelve_la_imagen_absoluta(self):
+        respuesta = self.client.get("/api/tienda/catalogo/")
+        fila = next(p for p in respuesta.json()["resultados"]
+                    if p["sku"] == "SKU-IMG")
+        self.assertTrue(fila["imagen"].startswith("http"),
+                        f"no es absoluta: {fila['imagen']}")
+
+    def test_los_dos_endpoints_dan_la_misma_url(self):
+        panel = self.api_como(self.admin).get("/api/productos/").json()["resultados"]
+        publico = self.client.get("/api/tienda/catalogo/").json()["resultados"]
+        del_panel = next(p for p in panel if p["sku"] == "SKU-IMG")["imagen"]
+        del_publico = next(p for p in publico if p["sku"] == "SKU-IMG")["imagen"]
+        self.assertEqual(del_panel, del_publico)
+
+    def test_el_detalle_y_la_creacion_tambien_son_absolutas(self):
+        api = self.api_como(self.admin)
+        detalle = api.get(f"/api/productos/{self.con_imagen.id}/").json()
+        self.assertTrue(detalle["imagen"].startswith("http"))
+
+    def test_un_producto_sin_imagen_devuelve_null(self):
+        respuesta = self.api_como(self.admin).get("/api/productos/")
+        fila = next(p for p in respuesta.json()["resultados"]
+                    if p["sku"] == "SKU-T01")
+        self.assertIsNone(fila["imagen"])
+
+
+class PaginacionProductosTest(BaseCatalogoTest):
+    """BUG-02: `total` era el tamano de la pagina, no los registros reales, y
+    no habia parametro `pagina`: con 1.024 productos era imposible pasar del
+    50."""
+
+    CUANTOS = 120
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        Producto.objects.bulk_create([
+            Producto(empresa=cls.empresa, nombre=f"Producto {n:04d}",
+                     sku=f"SKU-P{n:04d}", precio=1000 + n, stock=10,
+                     stock_minimo=1)
+            for n in range(cls.CUANTOS)
+        ])
+        # Producto de otra empresa: no debe contarse nunca.
+        cls.otra = Empresa.objects.create(nombre="Otra SAS", nit="900111333")
+        Producto.objects.create(empresa=cls.otra, nombre="Ajeno", sku="SKU-AJENO",
+                                precio=1, stock=1, stock_minimo=1)
+
+    def listar(self, **params):
+        return self.api_como(self.admin).get("/api/productos/", params).json()
+
+    def test_total_es_el_conteo_real_no_el_de_la_pagina(self):
+        cuerpo = self.listar()
+        # +1 por el producto "Zapatos" de BaseCoreTest; el de la otra empresa no.
+        self.assertEqual(cuerpo["total"], self.CUANTOS + 1)
+        self.assertEqual(len(cuerpo["resultados"]), 50)   # por_pagina por omision
+        self.assertEqual(cuerpo["por_pagina"], 50)
+        self.assertEqual(cuerpo["total_paginas"], 3)
+
+    def test_la_pagina_2_trae_productos_distintos(self):
+        primera = self.listar(pagina=1)
+        segunda = self.listar(pagina=2)
+        self.assertNotEqual(primera["resultados"][0]["sku"],
+                            segunda["resultados"][0]["sku"])
+        # Y no se repite ninguno entre las dos.
+        skus_1 = {p["sku"] for p in primera["resultados"]}
+        skus_2 = {p["sku"] for p in segunda["resultados"]}
+        self.assertEqual(skus_1 & skus_2, set())
+
+    def test_recorrer_todas_las_paginas_devuelve_cada_producto_una_vez(self):
+        """Con un orden inestable MySQL puede repetir una fila en dos paginas
+        y omitir otra; por eso el orden desempata con `id`."""
+        vistos = []
+        for n in range(1, self.listar()["total_paginas"] + 1):
+            vistos += [p["sku"] for p in self.listar(pagina=n)["resultados"]]
+        self.assertEqual(len(vistos), len(set(vistos)))
+        self.assertEqual(len(vistos), self.CUANTOS + 1)
+
+    def test_limite_tiene_tope_de_200(self):
+        cuerpo = self.listar(limite=100000)
+        self.assertEqual(cuerpo["por_pagina"], 200)
+        self.assertLessEqual(len(cuerpo["resultados"]), 200)
+
+    def test_limite_invalido_cae_en_el_valor_por_omision(self):
+        self.assertEqual(self.listar(limite="abc")["por_pagina"], 50)
+
+    def test_pagina_invalida_o_negativa_cae_en_la_primera(self):
+        for valor in ("0", "-3", "abc"):
+            self.assertEqual(self.listar(pagina=valor)["pagina"], 1)
+
+    def test_desde_y_hasta_describen_la_pagina(self):
+        cuerpo = self.listar(pagina=2, limite=10)
+        self.assertEqual(cuerpo["desde"], 11)
+        self.assertEqual(cuerpo["hasta"], 20)
+
+    def test_una_pagina_vacia_no_inventa_contadores(self):
+        cuerpo = self.listar(pagina=999)
+        self.assertEqual(cuerpo["resultados"], [])
+        self.assertEqual(cuerpo["desde"], 0)
+        self.assertEqual(cuerpo["hasta"], 0)
+        self.assertEqual(cuerpo["total"], self.CUANTOS + 1)
+
+    def test_la_busqueda_pagina_sobre_lo_filtrado(self):
+        cuerpo = self.listar(busqueda="Producto 00")
+        self.assertEqual(cuerpo["total"], 100)   # 0000..0099
+        self.assertTrue(all("Producto 00" in p["nombre"]
+                            for p in cuerpo["resultados"]))
+
+    def test_no_cuenta_productos_de_otra_empresa(self):
+        skus = set()
+        for n in range(1, self.listar()["total_paginas"] + 1):
+            skus |= {p["sku"] for p in self.listar(pagina=n)["resultados"]}
+        self.assertNotIn("SKU-AJENO", skus)
+
+
+class ContratoCatalogoPublicoTest(BaseCatalogoTest):
+    """El catalogo publico se refactorizo para usar la paginacion compartida;
+    su contrato NO puede cambiar."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        Producto.objects.bulk_create([
+            Producto(empresa=cls.empresa, nombre=f"Publico {n:03d}",
+                     sku=f"SKU-PUB{n:03d}", precio=1000, stock=5, stock_minimo=1)
+            for n in range(30)
+        ])
+
+    def test_las_claves_de_la_respuesta_son_las_mismas(self):
+        cuerpo = self.client.get("/api/tienda/catalogo/").json()
+        self.assertEqual(set(cuerpo), {"resultados", "total", "pagina",
+                                       "por_pagina", "total_paginas", "categorias"})
+
+    def test_por_pagina_sigue_fijo_en_24(self):
+        cuerpo = self.client.get("/api/tienda/catalogo/").json()
+        self.assertEqual(cuerpo["por_pagina"], 24)
+        self.assertEqual(len(cuerpo["resultados"]), 24)
+
+    def test_el_catalogo_no_acepta_limite(self):
+        """`limite` es superficie del panel; anadirlo aqui seria contrato nuevo."""
+        cuerpo = self.client.get("/api/tienda/catalogo/", {"limite": "200"}).json()
+        self.assertEqual(cuerpo["por_pagina"], 24)
+
+    def test_la_pagina_2_sigue_funcionando(self):
+        cuerpo = self.client.get("/api/tienda/catalogo/", {"pagina": "2"}).json()
+        self.assertEqual(cuerpo["pagina"], 2)
+        self.assertGreater(len(cuerpo["resultados"]), 0)
+
+
+# ============ BUG-24: inventario con buscador y paginacion ==================
+
+class InventarioBusquedaYPaginacionTest(BaseCatalogoTest):
+    """El panel de inventario cortaba con `[:limite]` y devolvia
+    `total = len(datos)`, sin `pagina` ni contadores reales. Ademas, los dos
+    filtros tienen que combinarse en el SERVIDOR: aplicar "solo stock bajo"
+    sobre la pagina ya recortada solo miraria los primeros 50 productos."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # 60 productos con stock sano y 15 bajo minimo; 8 de los bajos
+        # contienen "Alerta" en el nombre para probar los filtros combinados.
+        Producto.objects.bulk_create(
+            [Producto(empresa=cls.empresa, nombre=f"Sano {n:03d}",
+                      sku=f"SKU-SANO{n:03d}", precio=1000, stock=99,
+                      stock_minimo=5)
+             for n in range(60)]
+            + [Producto(empresa=cls.empresa, nombre=f"Alerta {n:03d}",
+                        sku=f"SKU-ALERTA{n:03d}", precio=1000, stock=1,
+                        stock_minimo=10)
+               for n in range(8)]
+            + [Producto(empresa=cls.empresa, nombre=f"Escaso {n:03d}",
+                        sku=f"SKU-ESCASO{n:03d}", precio=1000, stock=0,
+                        stock_minimo=10)
+               for n in range(7)]
+        )
+        cls.otra = Empresa.objects.create(nombre="Otra SAS", nit="900444555")
+        Producto.objects.create(empresa=cls.otra, nombre="Alerta ajena",
+                                sku="SKU-AJENO", precio=1, stock=0, stock_minimo=10)
+
+    def listar(self, **params):
+        return self.api_como(self.admin).get("/api/inventario/productos/", params).json()
+
+    def test_devuelve_contadores_de_paginacion(self):
+        cuerpo = self.listar()
+        # 60 sanos + 15 bajos + "Zapatos" de BaseCoreTest.
+        self.assertEqual(cuerpo["total"], 76)
+        self.assertEqual(cuerpo["por_pagina"], 50)
+        self.assertEqual(cuerpo["total_paginas"], 2)
+        self.assertEqual(cuerpo["desde"], 1)
+        self.assertEqual(cuerpo["hasta"], 50)
+
+    def test_la_pagina_2_trae_productos_distintos(self):
+        primera = {p["sku"] for p in self.listar(pagina=1)["resultados"]}
+        segunda = {p["sku"] for p in self.listar(pagina=2)["resultados"]}
+        self.assertEqual(primera & segunda, set())
+
+    def test_busca_por_nombre_y_por_sku(self):
+        por_nombre = self.listar(busqueda="Alerta")
+        self.assertEqual(por_nombre["total"], 8)
+        por_sku = self.listar(busqueda="SKU-ESCASO")
+        self.assertEqual(por_sku["total"], 7)
+
+    def test_solo_stock_bajo(self):
+        cuerpo = self.listar(stock_bajo="true")
+        self.assertEqual(cuerpo["total"], 15)
+        self.assertTrue(all(p["stock_bajo"] for p in cuerpo["resultados"]))
+
+    def test_busqueda_y_stock_bajo_se_combinan_en_el_servidor(self):
+        """El caso que se rompia: filtrar en el cliente sobre la pagina ya
+        recortada habria devuelto solo los "Alerta" que cayeran en los
+        primeros 50 por nombre."""
+        cuerpo = self.listar(busqueda="Alerta", stock_bajo="true")
+        self.assertEqual(cuerpo["total"], 8)
+        self.assertTrue(all(p["stock_bajo"] and "Alerta" in p["nombre"]
+                            for p in cuerpo["resultados"]))
+
+    def test_los_filtros_combinados_pueden_no_dar_resultados(self):
+        cuerpo = self.listar(busqueda="Sano", stock_bajo="true")
+        self.assertEqual(cuerpo["total"], 0)
+        self.assertEqual(cuerpo["resultados"], [])
+        self.assertEqual(cuerpo["desde"], 0)
+
+    def test_limite_tiene_tope_de_200(self):
+        self.assertEqual(self.listar(limite=100000)["por_pagina"], 200)
+
+    def test_no_incluye_productos_de_otra_empresa(self):
+        skus = {p["sku"] for p in self.listar(busqueda="Alerta")["resultados"]}
+        self.assertNotIn("SKU-AJENO", skus)
+
+    def test_la_otra_empresa_ve_solo_lo_suyo(self):
+        ajeno = User.objects.create_user(username="jefe-otra@test.co",
+                                         email="jefe-otra@test.co",
+                                         password="Clave12345")
+        Perfil.objects.create(usuario=ajeno, empresa=self.otra,
+                              rol=Rol.de_nombre("ADMINISTRADOR"))
+        cuerpo = self.api_como(ajeno).get("/api/inventario/productos/").json()
+        self.assertEqual(cuerpo["total"], 1)
+        self.assertEqual(cuerpo["resultados"][0]["sku"], "SKU-AJENO")
+
+    def test_la_imagen_tambien_es_absoluta(self):
+        Producto.objects.create(
+            empresa=self.empresa, nombre="Con foto", sku="SKU-FOTO",
+            precio=1000, stock=5, stock_minimo=1,
+            imagen=SimpleUploadedFile("inv.jpg", b"x", content_type="image/jpeg"))
+        fila = next(p for p in self.listar(busqueda="Con foto")["resultados"]
+                    if p["sku"] == "SKU-FOTO")
+        self.assertTrue(fila["imagen"].startswith("http"))

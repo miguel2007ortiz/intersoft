@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
+from .paginacion import limite_paginacion, paginar
 from .models import Categoria, Cliente, DetalleVenta, Producto
 from .serializers_catalogo import (
     CategoriaSerializer, ClienteDetalleSerializer, ClienteEscrituraSerializer,
@@ -31,12 +32,10 @@ def respuesta_datos_invalidos(errores):
                     status=status.HTTP_400_BAD_REQUEST)
 
 
-def _limite_paginacion(valor, por_defecto=50, maximo=200):
-    """Limite de filas a devolver, acotado a [1, maximo]."""
-    try:
-        return max(1, min(int(valor), maximo))
-    except (TypeError, ValueError):
-        return por_defecto
+# `_limite_paginacion` se movio a core/paginacion.py, compartido con el
+# inventario y con el catalogo publico. Se reexporta con el nombre viejo
+# porque otros listados de este modulo (clientes, categorias) lo usan tal cual.
+_limite_paginacion = limite_paginacion
 
 
 # ------------------------------ Clientes -----------------------------------
@@ -236,10 +235,14 @@ class ProductosView(APIView):
         productos = productos.annotate(
             tiene_ventas_flag=Exists(
                 DetalleVenta.objects.filter(producto=OuterRef("pk"))))
-        limite = _limite_paginacion(request.query_params.get("limite", 50))
-        datos = ProductoLecturaSerializer(
-            productos.order_by("nombre")[:limite], many=True).data
-        return Response({"resultados": datos, "total": len(datos)})
+        # Orden estable: `nombre` solo no basta, con nombres repetidos MySQL
+        # puede repetir una fila en dos paginas y omitir otra. `id` desempata.
+        # `total` es el conteo real del filtro, no el tamano de la pagina: sin
+        # eso no habia forma de pasar del producto 50 de 1.024 (BUG-02).
+        pagina = paginar(productos.order_by("nombre", "id"), request.query_params)
+        datos = ProductoLecturaSerializer(pagina.objetos, many=True,
+                                          context={"request": request}).data
+        return Response(pagina.como_respuesta(datos))
 
     def post(self, request):
         entrada = ProductoEscrituraSerializer(data=request.data,
@@ -252,8 +255,10 @@ class ProductosView(APIView):
         ActividadUsuario.registrar(request.user, "PRODUCTO_CREADO",
                                    f"{producto.nombre} (${producto.precio}, "
                                    f"stock {producto.stock})")
-        return Response(ProductoLecturaSerializer(producto).data,
-                        status=status.HTTP_201_CREATED)
+        return Response(
+            ProductoLecturaSerializer(producto,
+                                      context={"request": request}).data,
+            status=status.HTTP_201_CREATED)
 
 
 class ProductoDetalleView(APIView):
@@ -274,7 +279,8 @@ class ProductoDetalleView(APIView):
         producto = self.obtener_producto(request, id)
         if producto is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(ProductoLecturaSerializer(producto).data)
+        return Response(ProductoLecturaSerializer(
+            producto, context={"request": request}).data)
 
     def put(self, request, id):
         return self.editar(request, id, parcial=False)
@@ -300,7 +306,8 @@ class ProductoDetalleView(APIView):
         ActividadUsuario.registrar(request.user, "PRODUCTO_EDITADO",
                                    f"{producto.nombre} (${producto.precio}, "
                                    f"stock {producto.stock})")
-        return Response(ProductoLecturaSerializer(producto).data)
+        return Response(ProductoLecturaSerializer(
+            producto, context={"request": request}).data)
 
     def delete(self, request, id):
         producto = self.obtener_producto(request, id)
@@ -315,7 +322,11 @@ class ProductoDetalleView(APIView):
                             "registrada(s). No se puede eliminar: desactivalo para "
                             "ocultarlo del catalogo."),
                 "ventas": ventas},
-                status=status.HTTP_400_BAD_REQUEST)
+                # 409 y no 400: la peticion es correcta, lo que lo impide es el
+                # ESTADO del recurso (tiene ventas). Un 400 sugiere que el
+                # cliente mando algo mal y aqui no hay nada que corregir en la
+                # peticion.
+                status=status.HTTP_409_CONFLICT)
 
         nombre = producto.nombre
         with transaction.atomic():
@@ -346,7 +357,8 @@ class ProductoEstadoView(APIView):
         producto.save(update_fields=["activo"])
         evento = "PRODUCTO_REACTIVADO" if deseado else "PRODUCTO_DESACTIVADO"
         ActividadUsuario.registrar(request.user, evento, producto.nombre)
-        return Response(ProductoLecturaSerializer(producto).data)
+        return Response(ProductoLecturaSerializer(
+            producto, context={"request": request}).data)
 
 
 # ------------------------------ Categorias ---------------------------------
