@@ -9,7 +9,7 @@
 
 .paginador__resumen {
   margin: 0;
-  color: var(--color-texto-suave, #6b7280);
+  color: var(--gris);
   font-size: 0.875rem;
 }
 
@@ -20,21 +20,21 @@
 }
 
 .paginador__pagina {
-  color: var(--color-texto-suave, #6b7280);
+  color: var(--gris);
   font-size: 0.875rem;
 }
 
 .paginador__boton {
   padding: 0.4rem 0.9rem;
-  border: 1px solid var(--color-borde, #d1d5db);
+  border: 1px solid var(--linea);
   border-radius: 6px;
-  background: #fff;
+  background: var(--tarjeta);
   cursor: pointer;
   font: inherit;
 }
 
 .paginador__boton:hover:not(:disabled) {
-  background: var(--color-fondo-suave, #f3f4f6);
+  background: var(--fila-hover);
 }
 
 .paginador__boton:disabled {
