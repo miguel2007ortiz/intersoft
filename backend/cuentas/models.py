@@ -212,3 +212,15 @@ class TokenRecuperacion(models.Model):
 
     def es_valido(self) -> bool:
         return not self.usado and self.expira > timezone.now()
+
+class IntentoLoginFallido(models.Model):
+    email = models.EmailField(max_length=255, db_index=True)
+    perfil = models.ForeignKey("Perfil", on_delete=models.CASCADE, null=True, blank=True, related_name="registros_intentofallido")
+    intentos = models.PositiveSmallIntegerField(default=0)
+    bloqueado_hasta = models.DateTimeField(null=True, blank=True)
+    ultimo_intento = models.DateTimeField(null=True, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "cuentas"
+        unique_together = (("email", "perfil"),)

@@ -103,7 +103,8 @@ class LoginView(APIView):
 
         return Response({
             "access": str(refresh.access_token), "refresh": str(refresh),
-            "usuario": {"id": str(perfil.id), "email": usuario.email, "nombre": nombre,
+            "usuario": {"id": str(perfil.id),
+                    "perfil_id": str(perfil.id), "email": usuario.email, "nombre": nombre,
                         "rol": perfil.nombre_rol,
                         "empresa": str(perfil.empresa_id) if perfil.empresa_id else None,
                         "empresa_nombre": perfil.empresa.nombre if perfil.empresa_id else None,
