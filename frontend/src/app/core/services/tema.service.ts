@@ -2,12 +2,17 @@
  * TemaService — modo claro y modo noche
  *
  * Que hace: guarda la preferencia en localStorage y pone o quita la clase
- * `oscuro` en el <body>.
- * Donde se usa: el interruptor de la topbar y la pantalla de configuracion.
+ * `noche` en el <body>.
+ * Donde se usa: el interruptor de la pantalla de configuracion.
  * Por que asi: aplicarlo en el <body> y no en cada componente permite que un
  * unico bloque de variables CSS cambie los colores de toda la aplicacion. Al
  * arrancar se lee la preferencia antes de pintar, para no ver un fogonazo
  * blanco antes del modo noche.
+ *
+ * Consecuencia para los componentes: un color escrito en duro en su CSS NO
+ * cambia con el tema. Por eso `styles.css` define un token para cada
+ * superficie y estado, y `tema.service.spec.ts` falla si alguno vuelve a
+ * colarse.
  */
 
 import { Injectable, signal } from '@angular/core';

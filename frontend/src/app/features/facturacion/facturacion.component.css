@@ -69,11 +69,11 @@
   font-size: 15px;
 }
 .error-box {
-  background: #fef3f2;
-  border: 1px solid #fecdca;
+  background: var(--error-fondo);
+  border: 1px solid var(--error-borde);
   border-radius: 8px;
   padding: 12px 16px;
-  color: #b42318;
+  color: var(--error);
   font-size: 14px;
 }
 
@@ -118,24 +118,24 @@
   text-transform: uppercase;
 }
 .badge[data-estado='aprobada'] {
-  background: #ecfdf3;
-  color: #067647;
+  background: var(--ok-fondo);
+  color: var(--ok);
 }
 .badge[data-estado='rechazada'] {
-  background: #fef3f2;
-  color: #b42318;
+  background: var(--error-fondo);
+  color: var(--error);
 }
 .badge[data-estado='fallida'] {
-  background: #fef3f2;
-  color: #b42318;
+  background: var(--error-fondo);
+  color: var(--error);
 }
 .badge[data-estado='pendiente'] {
-  background: #fff8ed;
-  color: #b54708;
+  background: var(--alerta-fondo);
+  color: var(--alerta);
 }
 .badge[data-estado='enviada'] {
-  background: #eff8ff;
-  color: #175cd3;
+  background: var(--info-fondo);
+  color: var(--info);
 }
 
 .btn-sm {
@@ -165,9 +165,9 @@
   opacity: 0.9;
 }
 .btn-warning {
-  background: #b54708;
+  background: var(--alerta);
   color: #fff;
-  border-color: #b54708;
+  border-color: var(--alerta);
 }
 .btn-outline {
   background: var(--blanco);
@@ -224,7 +224,7 @@
   font-size: 14px;
 }
 .cufe-full {
-  background: #f1f5f9;
+  background: var(--neutro-fondo);
   padding: 10px;
   border-radius: 6px;
   font-size: 12px;
@@ -232,21 +232,21 @@
   margin: 4px 0;
 }
 .motivo-rechazo {
-  background: #fef3f2;
-  border: 1px solid #fecdca;
+  background: var(--error-fondo);
+  border: 1px solid var(--error-borde);
   border-radius: 6px;
   padding: 10px;
   margin: 8px 0;
-  color: #b42318;
+  color: var(--error);
   font-size: 13px;
 }
 .exito-inline {
-  background: #ecfdf3;
-  border: 1px solid #d1fadf;
+  background: var(--ok-fondo);
+  border: 1px solid var(--ok-borde);
   border-radius: 6px;
   padding: 10px;
   margin-top: var(--e2);
-  color: #067647;
+  color: var(--ok);
   font-size: 13px;
 }
 
@@ -255,7 +255,7 @@
   bottom: 24px;
   right: 24px;
   z-index: 9999;
-  background: #067647;
+  background: var(--ok);
   color: #fff;
   padding: 12px 24px;
   border-radius: 8px;

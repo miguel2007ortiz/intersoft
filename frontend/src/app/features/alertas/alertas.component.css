@@ -14,8 +14,8 @@
   font-size: clamp(22px, 4vw, 28px);
 }
 .contador {
-  background: #fef3f2;
-  color: #b42318;
+  background: var(--error-fondo);
+  color: var(--error);
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 13px;
@@ -31,7 +31,7 @@
 .estado-error {
   text-align: center;
   padding: var(--e6) var(--e4);
-  color: #b42318;
+  color: var(--error);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -80,7 +80,7 @@
   align-items: flex-start;
   gap: var(--e4);
   background: var(--blanco);
-  border: 1px solid #fecdca;
+  border: 1px solid var(--error-borde);
   border-left: 4px solid #f97316;
   border-radius: 10px;
   padding: var(--e4);
@@ -110,9 +110,9 @@
 
 .btn-revisar {
   padding: 6px 14px;
-  border: 1px solid #d1fadf;
-  background: #ecfdf3;
-  color: #067647;
+  border: 1px solid var(--ok-borde);
+  background: var(--ok-fondo);
+  color: var(--ok);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
@@ -121,5 +121,5 @@
   white-space: nowrap;
 }
 .btn-revisar:hover {
-  background: #d1fadf;
+  background: var(--ok-borde);
 }

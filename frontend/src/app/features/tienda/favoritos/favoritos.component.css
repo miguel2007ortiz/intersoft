@@ -111,7 +111,7 @@ h1 {
 .card-img {
   position: relative;
   height: 160px;
-  background: #f1f5f9;
+  background: var(--neutro-fondo);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,11 +207,11 @@ h1 {
   cursor: not-allowed;
 }
 .btn-agregar-ok {
-  background: #067647;
+  background: var(--ok);
 }
 .sin-stock {
   font-size: 13px;
-  color: #b42318;
+  color: var(--error);
   font-weight: 600;
 }
 .vacio {
@@ -228,11 +228,11 @@ h1 {
   margin-top: 16px;
 }
 .error-box {
-  background: #fef3f2;
-  border: 1px solid #fecdca;
+  background: var(--error-fondo);
+  border: 1px solid var(--error-borde);
   border-radius: 8px;
   padding: 12px 16px;
-  color: #b42318;
+  color: var(--error);
   font-size: 14px;
 }
 .exito-toast {
@@ -240,7 +240,7 @@ h1 {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: #067647;
+  background: var(--ok);
   color: #fff;
   padding: 10px 16px;
   border-radius: 8px;
@@ -253,7 +253,7 @@ h1 {
   pointer-events: none;
 }
 .skeleton {
-  background: #eef1f5;
+  background: var(--neutro-fondo);
   border-radius: 6px;
 }
 .skeleton-img {
