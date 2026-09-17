@@ -11,8 +11,14 @@ urlpatterns = [
     path("facturacion/<uuid:id>/", views_facturacion.FacturaDetalleView.as_view()),
     path("facturacion/<uuid:id>/reenviar/", views_facturacion.FacturaReenviarView.as_view()),
     path("facturacion/<uuid:id>/reintentar/", views_facturacion.FacturaReintentarView.as_view()),
+    # Descarga autenticada del comprobante: enlazar /media/ directo lo dejaba
+    # publico y con rutas adivinables.
+    path("facturacion/<uuid:id>/archivo/<str:tipo>/",
+         views_facturacion.FacturaArchivoView.as_view()),
 
     # Notas credito
     path("notas-credito/", views_facturacion.NotasCreditoView.as_view()),
     path("notas-credito/<uuid:id>/", views_facturacion.NotaCreditoDetalleView.as_view()),
+    path("notas-credito/<uuid:id>/archivo/<str:tipo>/",
+         views_facturacion.NotaCreditoArchivoView.as_view()),
 ]

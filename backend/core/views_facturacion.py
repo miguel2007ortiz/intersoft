@@ -17,6 +17,7 @@ Flujo:
 import os
 
 from django.core.files.base import ContentFile
+from django.http import HttpResponse
 from django.db import IntegrityError, models, transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -138,7 +139,8 @@ class FacturasView(APIView):
             )
 
         datos = FacturaElectronicaLecturaSerializer(
-            facturas[:50], many=True).data
+            facturas[:50], many=True,
+            context={'request': request}).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):
@@ -248,7 +250,7 @@ class FacturasView(APIView):
                 f"Factura {numero_f} - Venta {venta.numero_factura} "
                 f"[{factura.get_estado_display()}]")
 
-        return Response(FacturaElectronicaLecturaSerializer(factura).data,
+        return Response(FacturaElectronicaLecturaSerializer(factura, context={'request': request}).data,
                         status=status.HTTP_201_CREATED)
 
 
@@ -263,7 +265,7 @@ class FacturaDetalleView(APIView):
         ).filter(id=id, venta__empresa=empresa).first()
         if not factura:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(FacturaElectronicaLecturaSerializer(factura).data)
+        return Response(FacturaElectronicaLecturaSerializer(factura, context={'request': request}).data)
 
 
 class FacturaReenviarView(APIView):
@@ -385,7 +387,7 @@ class FacturaReintentarView(APIView):
                 f"Factura {factura.numero} - Intento #{factura.intentos} "
                 f"[{factura.get_estado_display()}]")
 
-        return Response(FacturaElectronicaLecturaSerializer(factura).data)
+        return Response(FacturaElectronicaLecturaSerializer(factura, context={'request': request}).data)
 
 
 # ------------------------------ Notas Credito ----------------------------
@@ -400,7 +402,8 @@ class NotasCreditoView(APIView):
             'venta_original__cliente'
         ).filter(venta_original__empresa=empresa)
 
-        datos = NotaCreditoLecturaSerializer(notas[:50], many=True).data
+        datos = NotaCreditoLecturaSerializer(notas[:50], many=True,
+                                             context={'request': request}).data
         return Response({"resultados": datos, "total": len(datos)})
 
     def post(self, request):
@@ -552,7 +555,7 @@ class NotasCreditoView(APIView):
                 f"Nota credito {numero_nc} sobre {venta.numero_factura} "
                 f"[{nota.get_estado_display()}]")
 
-        return Response(NotaCreditoLecturaSerializer(nota).data,
+        return Response(NotaCreditoLecturaSerializer(nota, context={'request': request}).data,
                         status=status.HTTP_201_CREATED)
 
 
@@ -567,4 +570,77 @@ class NotaCreditoDetalleView(APIView):
         ).filter(id=id, venta_original__empresa=empresa).first()
         if not nota:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(NotaCreditoLecturaSerializer(nota).data)
+        return Response(NotaCreditoLecturaSerializer(nota, context={'request': request}).data)
+
+
+# --------------------- Descarga de comprobantes ---------------------------
+#
+# Los archivos NO se enlazan directo a /media/. Sirviendolos por URL quedan
+# publicos: MEDIA no pasa por la autenticacion de Django, y las rutas son
+# adivinables (`FE-<numero_factura>.pdf`), asi que cualquiera con el enlace
+# -- o con paciencia -- se descarga la facturacion de otra empresa. Estas
+# vistas exigen sesion y filtran por empresa.
+
+TIPOS_ARCHIVO = {
+    'pdf': ('application/pdf', 'pdf'),
+    'xml': ('application/xml', 'xml'),
+}
+
+
+def _responder_archivo(documento, tipo, nombre):
+    """Devuelve el PDF o XML del documento, o 404 si todavia no existe."""
+    if tipo not in TIPOS_ARCHIVO:
+        return Response(
+            {"codigo": "TIPO_INVALIDO",
+             "detalle": "Tipo de archivo no valido (usa pdf o xml)."},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    content_type, extension = TIPOS_ARCHIVO[tipo]
+    archivo = getattr(documento, tipo, None)
+    if not archivo:
+        # Pasa con una factura rechazada o aun sin aprobar: no es un error del
+        # cliente, simplemente todavia no hay comprobante.
+        return Response(
+            {"codigo": "COMPROBANTE_NO_DISPONIBLE",
+             "detalle": "Este documento todavia no tiene comprobante "
+                        f"{tipo.upper()}."},
+            status=status.HTTP_409_CONFLICT)
+
+    try:
+        contenido = archivo.read()
+    except (FileNotFoundError, OSError):
+        # La fila apunta a un archivo que ya no esta en disco.
+        return Response(
+            {"codigo": "COMPROBANTE_NO_DISPONIBLE",
+             "detalle": "El comprobante no se encuentra en el servidor."},
+            status=status.HTTP_410_GONE)
+
+    respuesta = HttpResponse(contenido, content_type=content_type)
+    respuesta['Content-Disposition'] = (
+        f'inline; filename="{nombre}.{extension}"')
+    return respuesta
+
+
+class FacturaArchivoView(APIView):
+    """GET descarga el PDF o el XML de una factura electronica."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request, id, tipo):
+        factura = FacturaElectronica.objects.filter(
+            venta__empresa=_obtener_empresa(request), id=id).first()
+        if not factura:
+            # 404 y no 403: el id de otra empresa no se confirma.
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return _responder_archivo(factura, tipo, factura.numero)
+
+
+class NotaCreditoArchivoView(APIView):
+    """GET descarga el PDF o el XML de una nota credito."""
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def get(self, request, id, tipo):
+        nota = NotaCredito.objects.filter(
+            venta_original__empresa=_obtener_empresa(request), id=id).first()
+        if not nota:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return _responder_archivo(nota, tipo, nota.numero)

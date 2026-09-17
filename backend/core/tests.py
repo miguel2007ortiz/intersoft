@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -16,7 +17,8 @@ from cuentas.models import Perfil, Rol
 from .models import (Camara, Categoria, Carrito, Cliente, ComentarioProducto,
                      Cupon, DetalleVenta, Empresa, Envio, Favorito,
                      IAConversacion, IntentoPago, MovimientoInventario,
-                     Notificacion, Producto, Recibo, Venta)
+                     FacturaElectronica, Notificacion, Producto, Recibo,
+                     Venta)
 from . import recibos
 from .services import RespuestaPago
 
@@ -3644,3 +3646,90 @@ class ReciboEndpointTest(BaseCatalogoTest):
         r = self.api_como(self.admin).get(f"/api/ventas/{pendiente.id}/recibo/")
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.json()["codigo"], "VENTA_NO_COMPLETADA")
+
+
+# ======= Descarga de comprobantes de facturacion (PDF / XML) ===============
+
+class ComprobanteDescargaTest(BaseCatalogoTest):
+    """El PDF de la factura se enlazaba directo a /media/. Eso fallaba en el
+    panel (ruta relativa: la pedia al servidor de Angular, "Cannot GET
+    /media/...") y, peor, dejaba los comprobantes publicos: MEDIA no pasa por
+    la autenticacion de Django y las rutas son adivinables."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.venta = Venta.objects.create(
+            empresa=cls.empresa, cliente=cls.cliente, vendedor=cls.admin,
+            numero_factura="FT-5001", subtotal=75000, descuento=0, total=75000,
+            estado="completada", metodo_pago="efectivo")
+        DetalleVenta.objects.create(venta=cls.venta, producto=cls.producto,
+                                    cantidad=1, precio_unitario=75000)
+        cls.factura = FacturaElectronica.objects.create(
+            venta=cls.venta, numero="FE-FT-5001", estado="aprobada",
+            cufe="CUFE-DEMO")
+        cls.factura.pdf.save("FE-FT-5001.pdf",
+                             ContentFile(b"%PDF-1.4 contenido"), save=True)
+
+        cls.otra = Empresa.objects.create(nombre="Otra SAS", nit="900555444")
+        cls.cliente_otra = Cliente.objects.create(
+            empresa=cls.otra, nombre="Ajeno", tipo_documento="CC",
+            numero_documento="7777777")
+        cls.venta_ajena = Venta.objects.create(
+            empresa=cls.otra, cliente=cls.cliente_otra, numero_factura="FT-X",
+            subtotal=1000, descuento=0, total=1000, estado="completada",
+            metodo_pago="efectivo")
+        cls.factura_ajena = FacturaElectronica.objects.create(
+            venta=cls.venta_ajena, numero="FE-FT-X", estado="aprobada")
+        cls.factura_ajena.pdf.save("FE-FT-X.pdf",
+                                   ContentFile(b"%PDF-1.4 ajeno"), save=True)
+
+    def test_el_listado_devuelve_la_url_del_endpoint_no_la_de_media(self):
+        cuerpo = self.api_como(self.admin).get("/api/facturacion/").json()
+        fila = next(f for f in cuerpo["resultados"] if f["numero"] == "FE-FT-5001")
+        self.assertTrue(fila["pdf"].startswith("http"), fila["pdf"])
+        self.assertIn("/api/facturacion/", fila["pdf"])
+        self.assertNotIn("/media/", fila["pdf"])
+
+    def test_descarga_el_pdf_con_sesion(self):
+        r = self.api_como(self.admin).get(
+            f"/api/facturacion/{self.factura.id}/archivo/pdf/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/pdf")
+        self.assertIn("FE-FT-5001.pdf", r["Content-Disposition"])
+        self.assertEqual(r.content, b"%PDF-1.4 contenido")
+
+    def test_sin_sesion_no_se_descarga(self):
+        r = APIClient().get(f"/api/facturacion/{self.factura.id}/archivo/pdf/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_el_comprobante_de_otra_empresa_da_404(self):
+        r = self.api_como(self.admin).get(
+            f"/api/facturacion/{self.factura_ajena.id}/archivo/pdf/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_tipo_de_archivo_invalido(self):
+        r = self.api_como(self.admin).get(
+            f"/api/facturacion/{self.factura.id}/archivo/exe/")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["codigo"], "TIPO_INVALIDO")
+
+    def test_una_factura_sin_xml_lo_explica(self):
+        r = self.api_como(self.admin).get(
+            f"/api/facturacion/{self.factura.id}/archivo/xml/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()["codigo"], "COMPROBANTE_NO_DISPONIBLE")
+
+    def test_una_factura_sin_comprobante_devuelve_pdf_nulo(self):
+        """Una factura rechazada o pendiente no tiene archivo: el campo llega
+        en None para que el frontend oculte el boton."""
+        venta = Venta.objects.create(
+            empresa=self.empresa, cliente=self.cliente, numero_factura="FT-5002",
+            subtotal=100, descuento=0, total=100, estado="completada",
+            metodo_pago="efectivo")
+        FacturaElectronica.objects.create(venta=venta, numero="FE-FT-5002",
+                                          estado="pendiente")
+        cuerpo = self.api_como(self.admin).get("/api/facturacion/").json()
+        fila = next(f for f in cuerpo["resultados"] if f["numero"] == "FE-FT-5002")
+        self.assertIsNone(fila["pdf"])
+        self.assertIsNone(fila["xml"])

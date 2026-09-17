@@ -283,6 +283,17 @@ export class CatalogoService {
   }
 
   // ---- Notas Credito ----
+  /** Descarga el PDF o el XML de un comprobante.
+   *
+   * Va por HttpClient y no por un `<a href>` a /media/: esa ruta es relativa
+   * (el panel se sirve desde otro origen que la API) y ademas MEDIA no pasa
+   * por la autenticacion de Django, asi que dejaba los comprobantes de
+   * cualquier empresa al alcance de quien adivinara el nombre del archivo.
+   */
+  descargarComprobante(url: string): Observable<Blob> {
+    return this.http.get(url, { responseType: 'blob' }).pipe(capturarError<Blob>());
+  }
+
   listarNotasCredito(): Observable<Lista<NotaCredito>> {
     return this.http
       .get<Lista<NotaCredito>>(`${this.api}/notas-credito/`)

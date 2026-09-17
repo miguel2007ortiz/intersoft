@@ -33,6 +33,7 @@ export class FacturacionComponent implements OnInit {
   readonly ventasDisponibles = signal<Venta[]>([]);
   readonly ventasFacturadas = signal<Venta[]>([]);
   readonly cargando = signal(true);
+  readonly descargando = signal(false);
   readonly cargandoVentas = signal(false);
   readonly cargandoNotas = signal(false);
   readonly error = signal('');
@@ -135,6 +136,26 @@ export class FacturacionComponent implements OnInit {
         this.error.set(e.detalle || 'Error al generar factura.');
         this.generandoId.set(null);
       },
+    });
+  }
+
+  /** Abre el comprobante en una pestana nueva. La peticion pasa por
+   * HttpClient (y por el interceptor, que pone el token) y lo que se abre es
+   * el blob ya descargado: un enlace directo daria 401, porque el endpoint
+   * exige sesion. */
+  abrirComprobante(url: string | null | undefined): void {
+    if (!url || this.descargando()) return;
+    this.descargando.set(true);
+    this.catalogo.descargarComprobante(url).subscribe({
+      next: (blob) => {
+        const objeto = URL.createObjectURL(blob);
+        window.open(objeto, '_blank');
+        // No se revoca de inmediato: la pestana todavia lo esta leyendo.
+        setTimeout(() => URL.revokeObjectURL(objeto), 60_000);
+      },
+      error: (e: { detalle?: string }) =>
+        this.error.set(e.detalle ?? 'No se pudo abrir el comprobante.'),
+      complete: () => this.descargando.set(false),
     });
   }
 

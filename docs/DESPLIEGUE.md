@@ -163,6 +163,12 @@ server {
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
     }
+    # Facturas y recibos NO se sirven como estaticos: las rutas son
+    # adivinables y /media/ no pasa por la autenticacion de Django. Se
+    # descargan por la API, que exige sesion y filtra por empresa.
+    location ~ ^/media/(facturas|recibos)/ {
+        return 404;
+    }
     # Imagenes de productos (media del backend) servidas por este mismo
     # nginx para que img-src 'self' las permita.
     location /media/ {

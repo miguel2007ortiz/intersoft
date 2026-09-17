@@ -457,24 +457,28 @@ class DescargaComprobantesTest(BaseFase5Test):
         cuerpo = self.api_como(self.empleado).get(
             f"/api/facturacion/{factura.id}/").json()
         self.assertEqual(cuerpo["estado"], "aprobada")
-        # El serializer expone las URLs de los FileField (path bajo /media/).
+        # El serializer expone el endpoint AUTENTICADO, no la ruta de /media/:
+        # esa era relativa (el panel la pedia al servidor de Angular) y ademas
+        # publica, porque MEDIA no pasa por la autenticacion de Django.
         self.assertTrue(cuerpo["pdf"], "Debe existir URL de PDF")
         self.assertTrue(cuerpo["xml"], "Debe existir URL de XML")
-        self.assertIn("/media/", cuerpo["pdf"])
-        self.assertIn("/media/", cuerpo["xml"])
+        for url in (cuerpo["pdf"], cuerpo["xml"]):
+            self.assertIn(f"/api/facturacion/{factura.id}/archivo/", url)
+            self.assertNotIn("/media/", url)
 
-    def test_descarga_del_pdf_de_factura_por_su_ruta(self):
-        # El PDF queda persistido en MEDIA_ROOT bajo la ruta que expone la
-        # URL del FileField; cualquier servidor de estaticos (static() en
-        # DEBUG, nginx en produccion) puede servirlo. Se verifica el archivo
-        # en disco y que su contenido es el guardado.
+    def test_descarga_del_pdf_de_factura_por_el_endpoint(self):
+        """El PDF se sirve por la API, no por /media/. Asi la descarga exige
+        sesion y se filtra por empresa; el archivo sigue en MEDIA_ROOT."""
         factura = self._factuar_venta()
-        ruta = factura.pdf.name
-        url_expuesta = self.api_como(self.empleado).get(
-            f"/api/facturacion/{factura.id}/").json()["pdf"]
-        # La URL expuesta termina en la ruta del archivo en media/.
-        self.assertTrue(url_expuesta.endswith(ruta), f"{url_expuesta} != .../{ruta}")
-        with open(settings.MEDIA_ROOT / ruta, "rb") as fh:
+        api = self.api_como(self.empleado)
+
+        respuesta = api.get(f"/api/facturacion/{factura.id}/archivo/pdf/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/pdf")
+        self.assertEqual(respuesta.content.decode(), "contenido pdf descargable")
+
+        # Y el archivo sigue guardado en disco, como antes.
+        with open(settings.MEDIA_ROOT / factura.pdf.name, "rb") as fh:
             self.assertEqual(fh.read().decode(), "contenido pdf descargable")
 
     def test_nota_credito_expone_urls_pdf_y_xml(self):
@@ -497,8 +501,9 @@ class DescargaComprobantesTest(BaseFase5Test):
         cuerpo = api.get(f"/api/notas-credito/{nota.id}/").json()
         self.assertTrue(cuerpo["pdf"])
         self.assertTrue(cuerpo["xml"])
-        self.assertIn("/media/", cuerpo["pdf"])
-        self.assertIn("/media/", cuerpo["xml"])
+        for url in (cuerpo["pdf"], cuerpo["xml"]):
+            self.assertIn(f"/api/notas-credito/{nota.id}/archivo/", url)
+            self.assertNotIn("/media/", url)
 
     def test_factura_no_aprobada_no_expone_comprobantes(self):
         # Sin respuesta aprobada, el comprobante queda sin PDF/XML: no hay
