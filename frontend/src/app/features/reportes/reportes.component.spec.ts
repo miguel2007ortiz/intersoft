@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { ReportesComponent } from './reportes.component';
@@ -10,7 +10,7 @@ describe('ReportesComponent', () => {
     tiposReporte: ReturnType<typeof vi.fn>;
     categorias: ReturnType<typeof vi.fn>;
     verReporte: ReturnType<typeof vi.fn>;
-    exportarUrl: ReturnType<typeof vi.fn>;
+    exportarReporte: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe('ReportesComponent', () => {
       verReporte: vi.fn(() =>
         of({ titulo: 'Ventas por dia', columnas: [], filas: [], total: 0, total_paginas: 1 }),
       ),
-      exportarUrl: vi.fn(() => 'http://api.test/exportar'),
+      exportarReporte: vi.fn(() => of(new Blob(['col1,col2'], { type: 'text/csv' }))),
     };
     TestBed.configureTestingModule({
       imports: [ReportesComponent],
@@ -80,5 +80,38 @@ describe('ReportesComponent', () => {
       'ventas',
       expect.objectContaining({ fecha_inicio: '2026-09-01', fecha_fin: '2026-09-30' }),
     );
+  });
+
+  it('exportar descarga por HttpClient, no abriendo una pestana', () => {
+    // `window.open` sale sin la cabecera Authorization (el token esta en
+    // localStorage, no en una cookie) y el endpoint respondia 401.
+    const abrir = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const crearUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:falso');
+    const liberar = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+    const fixture = crear();
+    boton(fixture, 'Excel')?.click();
+
+    expect(analytics.exportarReporte).toHaveBeenCalledWith('ventas', 'excel', expect.anything());
+    expect(abrir).not.toHaveBeenCalled();
+    expect(crearUrl).toHaveBeenCalled();
+    // El blob se libera: si no, queda en memoria hasta recargar la pagina.
+    expect(liberar).toHaveBeenCalledWith('blob:falso');
+
+    abrir.mockRestore();
+    crearUrl.mockRestore();
+    liberar.mockRestore();
+  });
+
+  it('un fallo al exportar se avisa y no deja los botones bloqueados', () => {
+    analytics.exportarReporte = vi.fn(() =>
+      throwError(() => ({ detalle: 'No se pudo exportar.' })),
+    );
+    const fixture = crear();
+    boton(fixture, 'PDF')?.click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No se pudo exportar.');
+    expect(fixture.componentInstance.exportando()).toBe(false);
   });
 });

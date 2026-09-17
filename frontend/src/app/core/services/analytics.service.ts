@@ -95,13 +95,22 @@ export class AnalyticsService {
       .pipe(capturarError<DatosReporte>());
   }
 
-  /** Construye la URL de exportacion (excel=csv, pdf). */
-  exportarUrl(tipo: string, formato: 'excel' | 'pdf', f: FiltrosAnalitica = {}): string {
-    const params = new URLSearchParams(this.params(f));
-    params.set('tipo', tipo);
-    params.set('formato', formato);
-    const query = params.toString();
-    return `${this.api}/reportes/exportar/${query ? '?' + query : ''}`;
+  /** Descarga el reporte exportado (excel=CSV con BOM, pdf=HTML de impresion).
+   *
+   * Va por HttpClient y NO por `window.open`: el endpoint exige JWT y el token
+   * vive en localStorage, no en una cookie, asi que una pestana nueva sale sin
+   * cabecera `Authorization` y el servidor responde 401. Pasando por aqui, el
+   * interceptor pone el token (y renueva el access si hiciera falta).
+   */
+  exportarReporte(
+    tipo: string,
+    formato: 'excel' | 'pdf',
+    f: FiltrosAnalitica = {},
+  ): Observable<Blob> {
+    const params = { tipo, formato, ...this.params(f) };
+    return this.http
+      .get(`${this.api}/reportes/exportar/`, { params, responseType: 'blob' })
+      .pipe(capturarError<Blob>());
   }
 }
 

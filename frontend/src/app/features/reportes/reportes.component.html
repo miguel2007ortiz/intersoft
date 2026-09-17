@@ -14,7 +14,7 @@
           type="button"
           class="btn btn-secundario"
           (click)="exportar('excel')"
-          [disabled]="!tipoSel() || cargando() || rangoInvalido()"
+          [disabled]="!tipoSel() || cargando() || exportando() || rangoInvalido()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -37,7 +37,7 @@
           type="button"
           class="btn btn-primario"
           (click)="exportar('pdf')"
-          [disabled]="!tipoSel() || cargando() || rangoInvalido()"
+          [disabled]="!tipoSel() || cargando() || exportando() || rangoInvalido()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -96,7 +96,7 @@
         type="button"
         class="btn btn-primario"
         (click)="verReporte()"
-        [disabled]="!tipoSel() || cargando() || rangoInvalido()"
+        [disabled]="!tipoSel() || cargando() || exportando() || rangoInvalido()"
       >
         {{ cargando() ? 'Generando...' : 'Generar' }}
       </button>

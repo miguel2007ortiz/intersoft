@@ -51,6 +51,7 @@ export class ReportesComponent {
   readonly categoriaSel = signal('');
 
   readonly cargando = signal(false);
+  readonly exportando = signal(false);
   readonly error = signal<string | null>(null);
 
   /** Columnas del reporte seleccionado para la tabla (claves legibles). */
@@ -101,10 +102,38 @@ export class ReportesComponent {
     });
   }
 
-  /** Abre la descarga en una pestaña nueva (El servidor fija Content-Disposition). */
+  /** Descarga el reporte. Antes abria una pestana con `window.open`, que sale
+   * sin la cabecera `Authorization` (el token esta en localStorage, no en una
+   * cookie): el endpoint respondia 401 y no se descargaba nada. Ahora la
+   * peticion va por HttpClient, que si pasa por el interceptor, y el archivo
+   * se guarda desde el blob recibido. */
   exportar(formato: 'excel' | 'pdf'): void {
-    if (!this.tipoSel()) return;
-    window.open(this.analytics.exportarUrl(this.tipoSel(), formato, this.filtros()), '_blank');
+    if (!this.tipoSel() || this.exportando()) return;
+    this.exportando.set(true);
+    this.error.set(null);
+    this.analytics.exportarReporte(this.tipoSel(), formato, this.filtros()).subscribe({
+      next: (blob) => this.guardarArchivo(blob, formato),
+      error: (e: ErrorCatalogo) => {
+        this.error.set(e.detalle ?? 'No se pudo exportar el reporte.');
+        this.exportando.set(false);
+      },
+      complete: () => this.exportando.set(false),
+    });
+  }
+
+  /** Fuerza la descarga con un enlace temporal sobre el blob. El nombre lo
+   * pone el cliente: leer `Content-Disposition` exigiria exponer la cabecera
+   * por CORS y no aporta nada aqui. */
+  private guardarArchivo(blob: Blob, formato: 'excel' | 'pdf'): void {
+    const fecha = new Date().toISOString().slice(0, 10);
+    const extension = formato === 'excel' ? 'csv' : 'html';
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `${this.tipoSel()}-${fecha}.${extension}`;
+    enlace.click();
+    // Liberar el objeto: si no, el blob queda en memoria hasta recargar.
+    URL.revokeObjectURL(url);
   }
 
   esNumero(valor: string | number | null | undefined): boolean {
