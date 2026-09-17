@@ -115,30 +115,30 @@
   letter-spacing: 0.03em;
 }
 .badge.completada {
-  background: #ecfdf3;
-  color: #067647;
+  background: var(--ok-fondo);
+  color: var(--ok);
 }
 .badge.anulada {
-  background: #fef3f2;
-  color: #b42318;
+  background: var(--error-fondo);
+  color: var(--error);
 }
 .badge.pendiente {
-  background: #fef9ec;
-  color: #b54708;
+  background: var(--alerta-fondo);
+  color: var(--alerta);
 }
 
 .btn-anular {
   padding: 5px 12px;
-  border: 1px solid #fecdca;
-  background: #fef3f2;
-  color: #b42318;
+  border: 1px solid var(--error-borde);
+  background: var(--error-fondo);
+  color: var(--error);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
 }
 .btn-anular:hover {
-  background: #fecdca;
+  background: var(--error-borde);
 }
 
 .modal-overlay {
@@ -171,12 +171,12 @@
   resize: vertical;
 }
 .error-box {
-  background: #fef3f2;
-  border: 1px solid #fecdca;
+  background: var(--error-fondo);
+  border: 1px solid var(--error-borde);
   border-radius: 8px;
   padding: 10px 14px;
   margin-top: var(--e3);
-  color: #b42318;
+  color: var(--error);
   font-size: 13px;
 }
 .modal-acciones {
@@ -196,7 +196,7 @@
 .btn-confirmar-anular {
   padding: 10px 20px;
   border: 0;
-  background: #b42318;
+  background: var(--error);
   color: #fff;
   border-radius: 8px;
   cursor: pointer;

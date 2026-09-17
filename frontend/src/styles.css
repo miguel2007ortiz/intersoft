@@ -35,6 +35,21 @@
   --alerta-fondo: #fbf1e3;
   --alerta-borde: #efd9b4;
 
+  /* Estados que faltaban como token y se venian escribiendo en duro dentro de
+     los componentes. Sin token no tenian variante de noche, asi que en modo
+     noche quedaban como parches claros con texto oscuro. */
+  --info: #175cd3;
+  --info-fondo: #eff8ff;
+  --info-borde: #b2ddff;
+  /* "en transito": morado/indigo de los estados de envio. */
+  --via: #5b34c7;
+  --via-fondo: #f3f0ff;
+  --via-borde: #dcd2fb;
+  /* Neutro: cajas de datos sin carga semantica (un CUFE, un bloque tecnico). */
+  --neutro: #475569;
+  --neutro-fondo: #f1f5f9;
+  --neutro-borde: #dde5ee;
+
   --oscuro: #0a1220;
   --brillo: rgba(38, 87, 217, 0.35);
   --brillo-suave: rgba(38, 87, 217, 0.16);
@@ -65,6 +80,16 @@ body.noche {
   --error-borde: #55231e;
   --alerta-fondo: #33240f;
   --alerta-borde: #55401c;
+
+  --info: #7fb2ff;
+  --info-fondo: #10233f;
+  --info-borde: #1d3c6b;
+  --via: #b49cff;
+  --via-fondo: #1d1836;
+  --via-borde: #352a5c;
+  --neutro: #9aa7bd;
+  --neutro-fondo: #18233c;
+  --neutro-borde: #27334d;
 }
 
 * {

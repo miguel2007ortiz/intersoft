@@ -37,8 +37,8 @@
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 .notif-card.resaltada {
-  border-left-color: #f79009;
-  background: #fffcf5;
+  border-left-color: var(--alerta);
+  background: var(--alerta-fondo);
 }
 
 .notif-icono {
@@ -67,7 +67,7 @@
   margin-bottom: 6px;
 }
 .badge-tipo {
-  background: #eef2ff;
+  background: var(--via-fondo);
   color: #3538cd;
   font-size: 11px;
   font-weight: 700;
@@ -75,16 +75,16 @@
   border-radius: 999px;
 }
 .badge-estado {
-  background: #fffaeb;
-  color: #b54708;
+  background: var(--alerta-fondo);
+  color: var(--alerta);
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
 }
 .badge-canal {
-  background: #ecfdf3;
-  color: #067647;
+  background: var(--ok-fondo);
+  color: var(--ok);
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;

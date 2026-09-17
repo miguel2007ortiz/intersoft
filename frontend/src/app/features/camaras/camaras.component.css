@@ -58,6 +58,8 @@
 .camara-video {
   position: relative;
   aspect-ratio: 16/9;
+  /* Lienzo oscuro a proposito: el video se ve igual en tema claro y de noche,
+     no es una superficie de la interfaz. */
   background: #111827;
 }
 .camara-video img {
@@ -105,14 +107,14 @@
 .estado {
   font-size: 11px;
   font-weight: 700;
-  color: #b54708;
-  background: #fffaeb;
+  color: var(--alerta);
+  background: var(--alerta-fondo);
   padding: 2px 8px;
   border-radius: 999px;
 }
 .estado.activada {
-  color: #067647;
-  background: #ecfdf3;
+  color: var(--ok);
+  background: var(--ok-fondo);
 }
 .camara-ubicacion {
   margin: 6px 0 0;
@@ -170,7 +172,7 @@
   font-size: 15px;
 }
 .grabadora-lista code {
-  background: #f2f4f7;
+  background: var(--neutro-fondo);
   padding: 1px 5px;
   border-radius: 5px;
   font-size: 12px;
@@ -188,7 +190,7 @@
   align-items: center;
   gap: var(--e3);
   padding: var(--e2) var(--e3);
-  background: #f9fafb;
+  background: var(--neutro-fondo);
   border: 1px solid #eef0f3;
   border-radius: 8px;
   font-size: 13px;

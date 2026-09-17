@@ -12,10 +12,10 @@
   color: var(--gris);
 }
 .estado.error {
-  color: #b42318;
+  color: var(--error);
 }
 .estado.error .mensaje {
-  color: #b42318;
+  color: var(--error);
 }
 .icono {
   opacity: 0.55;
@@ -45,7 +45,7 @@
   color: var(--texto);
 }
 .error .accion {
-  color: #b42318;
+  color: var(--error);
 }
 .accion:hover {
   border-color: var(--primario);

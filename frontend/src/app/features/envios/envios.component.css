@@ -94,32 +94,32 @@
   letter-spacing: 0.02em;
 }
 .estado-pendiente {
-  background: #fef9ec;
-  color: #b54708;
+  background: var(--alerta-fondo);
+  color: var(--alerta);
 }
 .estado-preparando {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--info-fondo);
+  color: var(--info);
 }
 .estado-despachado {
-  background: #f5f3ff;
-  color: #6d28d9;
+  background: var(--via-fondo);
+  color: var(--via);
 }
 .estado-en_transito {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--via-fondo);
+  color: var(--via);
 }
 .estado-entregado {
-  background: #ecfdf3;
-  color: #067647;
+  background: var(--ok-fondo);
+  color: var(--ok);
 }
 .estado-no_entregado {
-  background: #fef3f2;
-  color: #b42318;
+  background: var(--error-fondo);
+  color: var(--error);
 }
 .estado-devuelto {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--neutro-fondo);
+  color: var(--neutro);
 }
 
 .envio-datos {
@@ -247,12 +247,12 @@
 }
 
 .error-box {
-  background: #fef3f2;
-  border: 1px solid #fecdca;
+  background: var(--error-fondo);
+  border: 1px solid var(--error-borde);
   border-radius: 8px;
   padding: 10px 14px;
   margin-top: var(--e3);
-  color: #b42318;
+  color: var(--error);
   font-size: 13px;
 }
 .modal-acciones {

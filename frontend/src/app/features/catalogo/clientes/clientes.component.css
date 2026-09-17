@@ -88,8 +88,8 @@ p.gris {
   letter-spacing: 0.03em;
 }
 .badge.activo {
-  background: #ecfdf3;
-  color: #067647;
+  background: var(--ok-fondo);
+  color: var(--ok);
 }
 .badge.inactivo {
   background: var(--papel);

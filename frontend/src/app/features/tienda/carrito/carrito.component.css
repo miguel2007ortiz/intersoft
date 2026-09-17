@@ -40,11 +40,11 @@
   font-weight: 600;
 }
 .error-box {
-  background: #fef3f2;
-  border: 1px solid #fecdca;
+  background: var(--error-fondo);
+  border: 1px solid var(--error-borde);
   border-radius: 8px;
   padding: 12px 16px;
-  color: #b42318;
+  color: var(--error);
   font-size: 14px;
 }
 
@@ -79,7 +79,7 @@
   width: 32px;
   height: 32px;
   border: 0;
-  background: #f1f5f9;
+  background: var(--neutro-fondo);
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
@@ -102,7 +102,7 @@
 .btn-eliminax {
   border: 0;
   background: none;
-  color: #b42318;
+  color: var(--error);
   cursor: pointer;
   font-size: 16px;
   padding: 4px 8px;
@@ -143,17 +143,17 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #ecfdf3;
-  border: 1px solid #d1fadf;
+  background: var(--ok-fondo);
+  border: 1px solid var(--ok-borde);
   border-radius: 8px;
   padding: 10px 14px;
   font-weight: 600;
-  color: #067647;
+  color: var(--ok);
 }
 .btn-quitar-cupon {
   border: 0;
   background: none;
-  color: #b42318;
+  color: var(--error);
   cursor: pointer;
   font-size: 16px;
 }
@@ -161,7 +161,7 @@
   display: block;
   margin-top: var(--e1);
   font-size: 13px;
-  color: #b42318;
+  color: var(--error);
 }
 
 .resumen {
@@ -175,7 +175,7 @@
   font-size: 15px;
 }
 .fila.descuento {
-  color: #b42318;
+  color: var(--error);
 }
 .fila.total {
   font-size: 20px;
