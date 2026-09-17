@@ -1,0 +1,183 @@
+.detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.btn-imprimir {
+  padding: 0.45rem 1.1rem;
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  background: var(--tarjeta);
+  cursor: pointer;
+  font: inherit;
+}
+
+.btn-imprimir:hover {
+  background: var(--fila-hover);
+}
+
+.encabezado__titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.encabezado__titulo h2 {
+  margin: 0;
+}
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 1rem 0 0;
+}
+
+.datos dt,
+.totales dt {
+  color: var(--gris);
+  font-size: 0.8125rem;
+}
+
+.datos dd,
+.totales dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.lineas .num {
+  text-align: right;
+}
+
+.linea-dato {
+  display: block;
+  font-size: 0.8125rem;
+}
+
+.gris {
+  color: var(--gris);
+}
+
+.totales {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-self: flex-end;
+  min-width: 260px;
+  margin: 0;
+}
+
+.totales > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.totales .total {
+  padding-top: 0.5rem;
+  border-top: 2px solid var(--linea);
+  font-size: 1.125rem;
+}
+
+.aviso-anulada {
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--error);
+  background: var(--error-fondo);
+  color: var(--error);
+}
+
+.centrado {
+  display: block;
+  text-align: center;
+}
+
+.solo-lectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------ Impresion ---------------------------------
+   Dos formatos sin librerias de PDF: el navegador ya sabe imprimir. Carta por
+   omision y ticket de 80 mm cuando el papel es estrecho, que es lo que declara
+   una impresora termica de punto de venta. */
+@media print {
+  /* El armazon del panel (menu lateral, barra superior) y los botones no
+     pertenecen al documento impreso. */
+  .no-imprimir,
+  app-panel-shell nav,
+  app-panel-shell aside,
+  app-panel-shell header {
+    display: none !important;
+  }
+
+  .detalle {
+    gap: 0.75rem;
+    color: #000;
+  }
+
+  .aviso-anulada {
+    border-left-color: #000;
+    background: transparent;
+    color: #000;
+  }
+
+  .lineas {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .lineas th,
+  .lineas td {
+    padding: 0.25rem 0.4rem;
+    border-bottom: 1px solid #999;
+  }
+
+  /* Que no se parta una linea entre dos hojas. */
+  .lineas tr {
+    break-inside: avoid;
+  }
+
+  @page {
+    size: letter;
+    margin: 14mm;
+  }
+}
+
+/* Ticket de 80 mm: la impresora termica declara un ancho de papel pequeno. */
+@media print and (max-width: 80mm) {
+  @page {
+    size: 80mm auto;
+    margin: 3mm;
+  }
+
+  .detalle {
+    font-size: 11px;
+  }
+
+  .datos {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .totales {
+    min-width: 0;
+    align-self: stretch;
+  }
+
+  .encabezado__titulo h2 {
+    font-size: 13px;
+  }
+}

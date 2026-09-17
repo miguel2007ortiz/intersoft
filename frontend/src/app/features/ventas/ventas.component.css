@@ -207,3 +207,18 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Fila que abre el detalle: el cursor y el foco visible avisan de que es
+   interactiva, porque un <tr> no lo parece por si solo. */
+.fila-navegable {
+  cursor: pointer;
+}
+
+.fila-navegable:hover {
+  background: var(--fila-hover);
+}
+
+.fila-navegable:focus-visible {
+  outline: 2px solid var(--primario);
+  outline-offset: -2px;
+}

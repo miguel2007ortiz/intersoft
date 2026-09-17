@@ -12,7 +12,7 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { CatalogoService } from '../../core/services/catalogo.service';
 import { Venta } from '../../core/models/catalogo.model';
 import { PanelShellComponent } from '../../shared/layout/panel-shell/panel-shell.component';
@@ -34,6 +34,7 @@ import { debounce } from '../../core/utils/temporizador.util';
 })
 export class VentasComponent implements OnInit {
   private readonly catalogo = inject(CatalogoService);
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly ventas = signal<Venta[]>([]);
@@ -75,6 +76,13 @@ export class VentasComponent implements OnInit {
           this.cargando.set(false);
         },
       });
+  }
+
+  /** Abre el detalle de la venta. Lo llaman el clic y la tecla Enter sobre
+   * la fila: dos vias para lo mismo, para no dejar la navegacion solo en el
+   * raton. */
+  abrirDetalle(venta: { id: string }): void {
+    this.router.navigate(['/ventas', venta.id]);
   }
 
   iniciarAnulacion(venta: Venta): void {
