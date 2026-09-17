@@ -744,3 +744,41 @@ class IntentoPago(TimeStampedModel):
     def __str__(self):
         estado = self.get_estado_display()
         return f"IntentoPago {self.transaccion_id or self.idempotencia_clave} [{estado}]"
+
+
+class Recibo(TimeStampedModel):
+    """Comprobante de una venta, para la empresa y para quien compro.
+
+    NO es la factura electronica DIAN (ver `FacturaElectronica`): un recibo no
+    se reporta a la DIAN, no lleva CUFE y anularlo no exige nota credito. Por
+    eso se puede emitir solo, en cuanto la venta queda completada, mientras que
+    la factura sigue siendo una accion deliberada del administrador.
+
+    Se guarda como HTML con estilos de impresion, igual que los reportes: el
+    navegador lo imprime o lo guarda como PDF y el proyecto no suma una
+    dependencia de generacion de PDF.
+    """
+
+    venta = models.OneToOneField(Venta, on_delete=models.CASCADE,
+                                 related_name='recibo')
+    numero = models.CharField(max_length=50, unique=True)
+    archivo = models.FileField(upload_to='recibos/%Y/%m/', blank=True, null=True)
+    # A quien se le mando y cuando. Vacio = no habia correo del comprador; el
+    # recibo existe igual y la empresa puede descargarlo o reenviarlo.
+    enviado_a = models.EmailField(blank=True, default='')
+    enviado_en = models.DateTimeField(null=True, blank=True)
+    # Ultimo fallo de envio. El recibo NUNCA se pierde por no poder enviarlo:
+    # queda generado y el error se registra para poder reintentar.
+    error_envio = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        db_table = 'recibo'
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['venta'])]
+
+    def __str__(self):
+        return f"Recibo {self.numero}"
+
+    @property
+    def entregado(self) -> bool:
+        return bool(self.enviado_en)

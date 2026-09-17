@@ -38,6 +38,9 @@ export class VentaDetalleComponent implements OnInit {
   /** Distingue "no existe o no es de tu empresa" de un fallo de red, para
    * poder ofrecer reintentar solo cuando tiene sentido. */
   readonly noEncontrada = signal(false);
+  /** Mensaje de la ultima accion sobre el recibo (envio o descarga). */
+  readonly avisoRecibo = signal<string | null>(null);
+  readonly reciboEnCurso = signal(false);
 
   readonly tieneLineas = computed(() => (this.venta()?.detalles?.length ?? 0) > 0);
 
@@ -78,5 +81,43 @@ export class VentaDetalleComponent implements OnInit {
 
   imprimir(): void {
     window.print();
+  }
+
+  /** Descarga el comprobante que el sistema emitio solo al completarse la
+   * venta. Se pide al backend en vez de imprimir la pantalla: es el mismo
+   * documento que recibio el comprador por correo. */
+  descargarRecibo(): void {
+    const venta = this.venta();
+    if (!venta || this.reciboEnCurso()) return;
+    this.reciboEnCurso.set(true);
+    this.avisoRecibo.set(null);
+    this.catalogo.descargarRecibo(venta.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = `recibo-${venta.numero_factura}.html`;
+        enlace.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (e: ErrorCatalogo) =>
+        this.avisoRecibo.set(e.detalle ?? 'No se pudo descargar el recibo.'),
+      complete: () => this.reciboEnCurso.set(false),
+    });
+  }
+
+  /** Reenvia el recibo por correo. Util cuando el envio automatico fallo o el
+   * cliente no tenia correo cuando se hizo la venta. */
+  reenviarRecibo(): void {
+    const venta = this.venta();
+    if (!venta || this.reciboEnCurso()) return;
+    this.reciboEnCurso.set(true);
+    this.avisoRecibo.set(null);
+    this.catalogo.reenviarRecibo(venta.id).subscribe({
+      next: (r) => this.avisoRecibo.set(`Recibo ${r.numero} enviado a ${r.enviado_a}.`),
+      error: (e: ErrorCatalogo) =>
+        this.avisoRecibo.set(e.detalle ?? 'No se pudo reenviar el recibo.'),
+      complete: () => this.reciboEnCurso.set(false),
+    });
   }
 }

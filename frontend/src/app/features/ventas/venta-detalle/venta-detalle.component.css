@@ -181,3 +181,23 @@
     font-size: 13px;
   }
 }
+
+.acciones__botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.btn-imprimir:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.aviso-recibo {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--info-borde);
+  border-radius: 6px;
+  background: var(--info-fondo);
+  color: var(--info);
+  margin: 0;
+}

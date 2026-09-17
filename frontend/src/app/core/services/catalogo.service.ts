@@ -168,6 +168,22 @@ export class CatalogoService {
       .pipe(capturarError<Lista<Venta>>());
   }
 
+  /** Descarga el recibo de la venta. Va por HttpClient y no por `window.open`
+   * porque el endpoint exige JWT y una pestana nueva no lleva la cabecera
+   * Authorization (mismo motivo que la exportacion de reportes). */
+  descargarRecibo(id: string): Observable<Blob> {
+    return this.http
+      .get(`${this.api}/ventas/${id}/recibo/`, { responseType: 'blob' })
+      .pipe(capturarError<Blob>());
+  }
+
+  /** Reenvia el recibo al correo del comprador. */
+  reenviarRecibo(id: string): Observable<{ numero: string; enviado_a: string }> {
+    return this.http
+      .post<{ numero: string; enviado_a: string }>(`${this.api}/ventas/${id}/recibo/`, {})
+      .pipe(capturarError<{ numero: string; enviado_a: string }>());
+  }
+
   obtenerVenta(id: string): Observable<Venta> {
     return this.http.get<Venta>(`${this.api}/ventas/${id}/`).pipe(capturarError<Venta>());
   }

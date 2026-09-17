@@ -21,8 +21,30 @@
       <!-- Barra de acciones: fuera de la impresion (@media print la oculta). -->
       <div class="acciones no-imprimir">
         <a class="enlace" routerLink="/ventas">&larr; Volver a ventas</a>
-        <button type="button" class="btn-imprimir" (click)="imprimir()">Imprimir</button>
+        <div class="acciones__botones">
+          <button
+            type="button"
+            class="btn-imprimir"
+            [disabled]="reciboEnCurso()"
+            (click)="descargarRecibo()"
+          >
+            Descargar recibo
+          </button>
+          <button
+            type="button"
+            class="btn-imprimir"
+            [disabled]="reciboEnCurso()"
+            (click)="reenviarRecibo()"
+          >
+            Reenviar al comprador
+          </button>
+          <button type="button" class="btn-imprimir" (click)="imprimir()">Imprimir</button>
+        </div>
       </div>
+
+      @if (avisoRecibo()) {
+        <p class="aviso-recibo no-imprimir" role="status">{{ avisoRecibo() }}</p>
+      }
 
       <header class="encabezado">
         <div class="encabezado__titulo">

@@ -1,0 +1,105 @@
+{% load humanize %}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Recibo {{ numero }}</title>
+<style>
+  /* Sin librerias de PDF: el navegador imprime o guarda como PDF.
+     Carta por omision; ticket de 80 mm cuando el papel es estrecho, que es lo
+     que declara una impresora termica de punto de venta. */
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; padding: 24px; }
+  .hoja { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .empresa { font-size: 13px; color: #444; }
+  .cabecera { border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 16px; }
+  .datos { display: flex; flex-wrap: wrap; gap: 8px 32px; font-size: 13px; margin-bottom: 16px; }
+  .datos div { min-width: 180px; }
+  .datos dt { color: #666; font-size: 11px; text-transform: uppercase; margin: 0; }
+  .datos dd { margin: 2px 0 0; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 4px; border-bottom: 1px solid #ccc; text-align: left; }
+  th.num, td.num { text-align: right; }
+  .totales { margin-top: 16px; margin-left: auto; width: 260px; font-size: 13px; }
+  .totales div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .totales .total { border-top: 2px solid #111; margin-top: 6px; padding-top: 8px;
+                    font-size: 16px; font-weight: 700; }
+  .anulada { border: 2px solid #b3261e; color: #b3261e; padding: 8px 12px;
+             margin-bottom: 16px; font-weight: 700; }
+  .pie { margin-top: 24px; font-size: 11px; color: #666; border-top: 1px solid #ccc;
+         padding-top: 10px; }
+  @page { size: letter; margin: 14mm; }
+  @media print and (max-width: 80mm) {
+    @page { size: 80mm auto; margin: 3mm; }
+    body { padding: 0; font-size: 11px; }
+    .datos { display: block; }
+    .totales { width: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="hoja">
+  <div class="cabecera">
+    <h1>Recibo {{ numero }}</h1>
+    <p class="empresa">
+      {{ empresa.nombre }}{% if empresa.nit %} &middot; NIT {{ empresa.nit }}{% endif %}
+      {% if empresa.direccion %}<br>{{ empresa.direccion }}{% endif %}
+      {% if empresa.telefono %}<br>Tel. {{ empresa.telefono }}{% endif %}
+    </p>
+  </div>
+
+  {% if venta.estado == 'anulada' %}
+    <p class="anulada">VENTA ANULADA{% if venta.motivo_anulacion %} &mdash; {{ venta.motivo_anulacion }}{% endif %}</p>
+  {% endif %}
+
+  <dl class="datos">
+    <div><dt>Factura interna</dt><dd>{{ venta.numero_factura|default:"—" }}</dd></div>
+    <div><dt>Fecha</dt><dd>{{ venta.fecha|date:"d/m/Y H:i" }}</dd></div>
+    <div><dt>Cliente</dt><dd>{{ cliente.nombre }}</dd></div>
+    <div><dt>Documento</dt><dd>{{ cliente.tipo_documento }} {{ cliente.numero_documento }}</dd></div>
+    <div><dt>Metodo de pago</dt><dd>{{ venta.get_metodo_pago_display }}</dd></div>
+    <div><dt>Estado</dt><dd>{{ venta.get_estado_display }}</dd></div>
+  </dl>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Producto</th>
+        <th class="num">Cant.</th>
+        <th class="num">Precio</th>
+        <th class="num">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for linea in lineas %}
+        <tr>
+          <td>{{ linea.producto.nombre }}<br><small>{{ linea.producto.sku }}</small></td>
+          <td class="num">{{ linea.cantidad }}</td>
+          <td class="num">{{ linea.precio_unitario|floatformat:0|intcomma }}</td>
+          <td class="num">{{ linea.subtotal|floatformat:0|intcomma }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">Esta venta no tiene lineas registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totales">
+    <div><span>Subtotal</span><span>{{ venta.subtotal|floatformat:0|intcomma }} COP</span></div>
+    {% if venta.descuento > 0 %}
+      <div><span>Descuento</span><span>-{{ venta.descuento|floatformat:0|intcomma }} COP</span></div>
+    {% endif %}
+    {# TODO(BUG-21): aqui va el desglose de IVA cuando el backend lo calcule.
+       No se calcula en la plantilla: el impuesto tiene que salir del mismo
+       sitio que el total para que no discrepen. #}
+    <div class="total"><span>Total</span><span>{{ venta.total|floatformat:0|intcomma }} COP</span></div>
+    <div><span>Articulos</span><span>{{ total_items }}</span></div>
+  </div>
+
+  <p class="pie">
+    Emitido el {{ emitido|date:"d/m/Y H:i" }}.
+    Este documento es un comprobante de la operacion y no constituye factura
+    electronica ante la DIAN.
+  </p>
+</div>
+</body>
+</html>

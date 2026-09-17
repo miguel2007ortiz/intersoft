@@ -11,6 +11,8 @@ urlpatterns = [
     path("ventas/pos/", views_ventas.VentaPOSView.as_view()),
     path("ventas/<uuid:id>/", views_ventas.VentaDetalleView.as_view()),
     path("ventas/<uuid:id>/anular/", views_ventas.VentaDetalleView.as_view()),
+    # GET descarga el recibo; POST lo reenvia por correo.
+    path("ventas/<uuid:id>/recibo/", views_ventas.VentaReciboView.as_view()),
 
     # Envios (fase 10)
     path("envios/", views_ventas.EnviosView.as_view()),

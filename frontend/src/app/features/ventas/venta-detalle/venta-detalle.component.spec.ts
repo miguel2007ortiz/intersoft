@@ -38,10 +38,18 @@ const VENTA: Venta = {
 };
 
 describe('VentaDetalleComponent', () => {
-  let catalogo: { obtenerVenta: ReturnType<typeof vi.fn> };
+  let catalogo: {
+    obtenerVenta: ReturnType<typeof vi.fn>;
+    descargarRecibo: ReturnType<typeof vi.fn>;
+    reenviarRecibo: ReturnType<typeof vi.fn>;
+  };
 
   const configurar = (id: string | null = 'v1') => {
-    catalogo = { obtenerVenta: vi.fn(() => of(VENTA)) };
+    catalogo = {
+      obtenerVenta: vi.fn(() => of(VENTA)),
+      descargarRecibo: vi.fn(() => of(new Blob(['<html></html>']))),
+      reenviarRecibo: vi.fn(() => of({ numero: 'RC-1', enviado_a: 'a@b.co' })),
+    };
     TestBed.configureTestingModule({
       imports: [VentaDetalleComponent],
       providers: [
@@ -62,6 +70,11 @@ describe('VentaDetalleComponent', () => {
       ],
     });
   };
+
+  const boton = (fixture: ReturnType<typeof crear>, texto: string) =>
+    Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ).find((b) => b.textContent?.includes(texto));
 
   const crear = () => {
     const fixture = TestBed.createComponent(VentaDetalleComponent);
@@ -158,5 +171,52 @@ describe('VentaDetalleComponent', () => {
     const html = (crear().nativeElement as HTMLElement).textContent ?? '';
     expect(html).toContain('Venta anulada');
     expect(html).toContain('Error de digitacion');
+  });
+
+  it('descarga el recibo por HttpClient, no abriendo una pestana', () => {
+    configurar();
+    catalogo.descargarRecibo = vi.fn(() => of(new Blob(['<html></html>'])));
+    const abrir = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const crearUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:falso');
+    const liberar = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+    const fixture = crear();
+    boton(fixture, 'Descargar recibo')?.click();
+
+    expect(catalogo.descargarRecibo).toHaveBeenCalledWith('v1');
+    expect(abrir).not.toHaveBeenCalled();
+    expect(liberar).toHaveBeenCalledWith('blob:falso');
+
+    abrir.mockRestore();
+    crearUrl.mockRestore();
+    liberar.mockRestore();
+  });
+
+  it('reenviar el recibo confirma a quien se mando', () => {
+    configurar();
+    catalogo.reenviarRecibo = vi.fn(() =>
+      of({ numero: 'RC-FAC-0001', enviado_a: 'comprador@test.co' }),
+    );
+    const fixture = crear();
+    boton(fixture, 'Reenviar al comprador')?.click();
+    fixture.detectChanges();
+
+    const html = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(html).toContain('RC-FAC-0001');
+    expect(html).toContain('comprador@test.co');
+  });
+
+  it('si el cliente no tiene correo lo explica en vez de fallar en silencio', () => {
+    configurar();
+    catalogo.reenviarRecibo = vi.fn(() =>
+      throwError(() => ({ detalle: 'El cliente no tiene correo registrado.' })),
+    );
+    const fixture = crear();
+    boton(fixture, 'Reenviar al comprador')?.click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'El cliente no tiene correo registrado.',
+    );
   });
 });

@@ -8,3 +8,6 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         import core.signals  # noqa
+        # Emision automatica del recibo al completarse una venta. Modulo
+        # aparte de signals.py para no cruzarse con el trabajo en curso ahi.
+        import core.recibos  # noqa

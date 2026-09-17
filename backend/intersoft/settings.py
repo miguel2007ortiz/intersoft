@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',  # separador de miles en la plantilla del recibo
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',

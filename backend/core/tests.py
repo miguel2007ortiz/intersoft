@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core import mail
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -15,7 +16,8 @@ from cuentas.models import Perfil, Rol
 from .models import (Camara, Categoria, Carrito, Cliente, ComentarioProducto,
                      Cupon, DetalleVenta, Empresa, Envio, Favorito,
                      IAConversacion, IntentoPago, MovimientoInventario,
-                     Notificacion, Producto, Venta)
+                     Notificacion, Producto, Recibo, Venta)
+from . import recibos
 from .services import RespuestaPago
 
 
@@ -3468,3 +3470,177 @@ class DetalleVentaApiTest(BaseCatalogoTest):
     def test_anonimo_no_entra(self):
         self.assertEqual(
             APIClient().get(f"/api/ventas/{self.venta.id}/").status_code, 401)
+
+
+# ============ Recibo automatico de cada venta ==============================
+
+class ReciboAutomaticoTest(BaseCatalogoTest):
+    """Una venta completada emite su recibo sola, sin que nadie lo pida.
+
+    El recibo NO es la factura electronica DIAN: no se reporta, no lleva CUFE
+    y anularlo no exige nota credito, por eso puede emitirse automaticamente.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.cliente.email = "comprador@test.co"
+        cls.cliente.save(update_fields=["email"])
+
+    def crear_venta(self, estado="completada", cantidad=2):
+        """El recibo se emite en `transaction.on_commit`, que dentro de un
+        TestCase no corre solo (todo el test vive en una transaccion que se
+        revierte). `captureOnCommitCallbacks` los ejecuta como lo haria un
+        commit real."""
+        with self.captureOnCommitCallbacks(execute=True):
+            venta = Venta.objects.create(
+                empresa=self.empresa, cliente=self.cliente, vendedor=self.admin,
+                numero_factura=f"FV-{Venta.objects.count() + 1:04d}",
+                subtotal=150000, descuento=0, total=150000,
+                estado=estado, metodo_pago="efectivo")
+            DetalleVenta.objects.create(venta=venta, producto=self.producto,
+                                        cantidad=cantidad, precio_unitario=75000)
+        return venta
+
+    def test_una_venta_completada_emite_recibo_sola(self):
+        mail.outbox.clear()
+        venta = self.crear_venta()
+        recibo = Recibo.objects.filter(venta=venta).first()
+        self.assertIsNotNone(recibo, "la venta completada no genero recibo")
+        self.assertTrue(recibo.numero.startswith("RC-"))
+        self.assertTrue(recibo.archivo.name.endswith(".html"))
+
+    def test_el_recibo_le_llega_al_comprador(self):
+        mail.outbox.clear()
+        venta = self.crear_venta()
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, ["comprador@test.co"])
+        self.assertIn("Recibo", correo.subject)
+        recibo = Recibo.objects.get(venta=venta)
+        self.assertEqual(recibo.enviado_a, "comprador@test.co")
+        self.assertIsNotNone(recibo.enviado_en)
+        self.assertTrue(recibo.entregado)
+
+    def test_una_venta_pendiente_no_emite_recibo(self):
+        """En el marketplace la venta queda pendiente hasta que el pago se
+        aprueba: dar comprobante ahi seria certificar algo sin cobrar."""
+        mail.outbox.clear()
+        venta = self.crear_venta(estado="pendiente")
+        self.assertFalse(Recibo.objects.filter(venta=venta).exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_al_completarse_despues_si_lo_emite(self):
+        venta = self.crear_venta(estado="pendiente")
+        self.assertFalse(Recibo.objects.filter(venta=venta).exists())
+        mail.outbox.clear()
+        with self.captureOnCommitCallbacks(execute=True):
+            venta.estado = "completada"
+            venta.save(update_fields=["estado"])
+        self.assertTrue(Recibo.objects.filter(venta=venta).exists())
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_no_se_duplica_al_guardar_la_venta_otra_vez(self):
+        venta = self.crear_venta()
+        mail.outbox.clear()
+        with self.captureOnCommitCallbacks(execute=True):
+            venta.notas = "algo"
+            venta.save(update_fields=["notas"])
+            venta.save(update_fields=["notas"])
+        self.assertEqual(Recibo.objects.filter(venta=venta).count(), 1)
+        self.assertEqual(len(mail.outbox), 0, "reenvio un correo ya mandado")
+
+    def test_sin_correo_del_cliente_el_recibo_igual_existe(self):
+        self.cliente.email = ""
+        self.cliente.save(update_fields=["email"])
+        mail.outbox.clear()
+        venta = self.crear_venta()
+        recibo = Recibo.objects.get(venta=venta)
+        self.assertEqual(recibo.enviado_a, "")
+        self.assertFalse(recibo.entregado)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_un_fallo_de_correo_no_tumba_la_venta(self):
+        from unittest.mock import patch
+        with patch("core.recibos.EmailMultiAlternatives.send",
+                   side_effect=Exception("SMTP caido")):
+            venta = self.crear_venta()
+        # La venta existe y el recibo tambien; solo queda anotado el error.
+        recibo = Recibo.objects.get(venta=venta)
+        self.assertFalse(recibo.entregado)
+        self.assertIn("SMTP caido", recibo.error_envio)
+
+    def test_el_html_trae_los_datos_de_la_compra(self):
+        venta = self.crear_venta()
+        html = recibos.construir_html(venta)
+        self.assertIn(venta.numero_factura, html)
+        self.assertIn("Zapatos", html)
+        self.assertIn("Carlos Ramirez", html)
+        self.assertIn("Tienda Test", html)
+        # Deja claro que no sustituye a la factura electronica.
+        self.assertIn("no constituye factura", html)
+
+
+class ReciboEndpointTest(BaseCatalogoTest):
+    """Descarga y reenvio del recibo, aislados por empresa."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.cliente.email = "comprador@test.co"
+        cls.cliente.save(update_fields=["email"])
+        cls.venta = Venta.objects.create(
+            empresa=cls.empresa, cliente=cls.cliente, vendedor=cls.admin,
+            numero_factura="FV-9001", subtotal=75000, descuento=0, total=75000,
+            estado="completada", metodo_pago="efectivo")
+        DetalleVenta.objects.create(venta=cls.venta, producto=cls.producto,
+                                    cantidad=1, precio_unitario=75000)
+        # `setUpTestData` no puede capturar los callbacks de on_commit, asi que
+        # el recibo de la venta de partida se emite a mano. La emision
+        # automatica la cubre ReciboAutomaticoTest.
+        recibos.generar_para(cls.venta, enviar=False)
+
+        cls.otra = Empresa.objects.create(nombre="Otra SAS", nit="900666777")
+        cls.cliente_otra = Cliente.objects.create(
+            empresa=cls.otra, nombre="Ajeno", tipo_documento="CC",
+            numero_documento="8888888")
+        cls.venta_ajena = Venta.objects.create(
+            empresa=cls.otra, cliente=cls.cliente_otra, numero_factura="FV-X",
+            subtotal=1000, descuento=0, total=1000, estado="completada",
+            metodo_pago="efectivo")
+
+    def test_descarga_el_recibo_como_html(self):
+        r = self.api_como(self.admin).get(f"/api/ventas/{self.venta.id}/recibo/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/html", r["Content-Type"])
+        self.assertIn("attachment", r["Content-Disposition"])
+        self.assertIn("RC-FV-9001", r["Content-Disposition"])
+        self.assertIn("FV-9001", r.content.decode())
+
+    def test_el_recibo_de_otra_empresa_da_404(self):
+        r = self.api_como(self.admin).get(
+            f"/api/ventas/{self.venta_ajena.id}/recibo/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_reenviar_manda_el_correo_otra_vez(self):
+        mail.outbox.clear()
+        r = self.api_como(self.admin).post(f"/api/ventas/{self.venta.id}/recibo/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["enviado_a"], "comprador@test.co")
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_reenviar_sin_correo_lo_explica(self):
+        self.cliente.email = ""
+        self.cliente.save(update_fields=["email"])
+        r = self.api_como(self.admin).post(f"/api/ventas/{self.venta.id}/recibo/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()["codigo"], "SIN_CORREO")
+
+    def test_una_venta_pendiente_no_tiene_recibo(self):
+        pendiente = Venta.objects.create(
+            empresa=self.empresa, cliente=self.cliente, numero_factura="FV-9002",
+            subtotal=100, descuento=0, total=100, estado="pendiente",
+            metodo_pago="efectivo")
+        r = self.api_como(self.admin).get(f"/api/ventas/{pendiente.id}/recibo/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()["codigo"], "VENTA_NO_COMPLETADA")

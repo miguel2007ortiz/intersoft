@@ -15,6 +15,7 @@ Reglas clave:
 import re
 from decimal import Decimal
 
+from django.http import HttpResponse
 from django.db import models, transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
@@ -26,6 +27,7 @@ from rest_framework.views import APIView
 from cuentas.models import ActividadUsuario
 from cuentas.permissions import EsPersonal
 
+from . import recibos
 from .paginacion import paginar
 from .serializers_base import url_absoluta_de_imagen
 from .models import (Cliente, DetalleVenta, Empresa, Envio,
@@ -694,3 +696,72 @@ class InventarioProductosView(APIView):
             for p in pagina.objetos
         ]
         return Response(pagina.como_respuesta(datos))
+
+
+class VentaReciboView(APIView):
+    """GET descarga el recibo de una venta / POST lo reenvia por correo.
+
+    El recibo lo emite sola la senal de `core/recibos.py` al completarse la
+    venta. Esta vista existe para volver a descargarlo y para reintentar el
+    envio cuando el correo fallo o el cliente no tenia correo en su momento.
+    """
+    permission_classes = [IsAuthenticated, EsPersonal]
+
+    def _venta(self, request, id):
+        # Filtrado por empresa: el id de una venta de otro tenant da 404, no
+        # 403, para no confirmar que existe.
+        return (Venta.objects.select_related('cliente', 'empresa')
+                .prefetch_related('detalles__producto')
+                .filter(empresa=_obtener_empresa(request),
+                        deleted_at__isnull=True, id=id).first())
+
+    def get(self, request, id):
+        venta = self._venta(request, id)
+        if not venta:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        recibo = recibos.generar_para(venta, enviar=False)
+        if recibo is None:
+            return Response(
+                {"codigo": "VENTA_NO_COMPLETADA",
+                 "detalle": "Solo las ventas completadas tienen recibo."},
+                status=status.HTTP_409_CONFLICT)
+
+        # Se re-renderiza en vez de servir el archivo guardado: asi el recibo
+        # refleja una anulacion posterior sin dejar el archivo viejo colgando.
+        html = recibos.construir_html(venta)
+        respuesta = HttpResponse(html, content_type='text/html; charset=utf-8')
+        respuesta['Content-Disposition'] = (
+            f'attachment; filename="{recibo.numero}.html"')
+        return respuesta
+
+    def post(self, request, id):
+        venta = self._venta(request, id)
+        if not venta:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        recibo = recibos.generar_para(venta, enviar=False)
+        if recibo is None:
+            return Response(
+                {"codigo": "VENTA_NO_COMPLETADA",
+                 "detalle": "Solo las ventas completadas tienen recibo."},
+                status=status.HTTP_409_CONFLICT)
+
+        if not recibos.correo_del_comprador(venta):
+            return Response(
+                {"codigo": "SIN_CORREO",
+                 "detalle": "El cliente no tiene correo registrado. Descarga "
+                            "el recibo y enviaselo por otro medio."},
+                status=status.HTTP_409_CONFLICT)
+
+        recibos.enviar_por_correo(recibo, venta, recibos.construir_html(venta))
+        recibo.refresh_from_db()
+        if recibo.error_envio:
+            return Response(
+                {"codigo": "ENVIO_FALLIDO", "detalle": recibo.error_envio},
+                status=status.HTTP_502_BAD_GATEWAY)
+
+        ActividadUsuario.registrar(request.user, "RECIBO_REENVIADO",
+                                   f"{recibo.numero} a {recibo.enviado_a}")
+        return Response({"numero": recibo.numero, "enviado_a": recibo.enviado_a,
+                         "enviado_en": recibo.enviado_en})
