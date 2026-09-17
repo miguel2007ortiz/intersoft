@@ -3129,12 +3129,6 @@ class ImagenAbsolutaTest(BaseCatalogoTest):
     publico devolvia la absoluta. En desarrollo el panel se sirve desde otro
     origen que la API, asi que la ruta relativa apuntaba al servidor de Angular
     y la imagen salia rota."""
-# ============ BUG-20: detalle de venta aislado por empresa =================
-
-class DetalleVentaApiTest(BaseCatalogoTest):
-    """GET /api/ventas/<uuid>/ tiene que responder 404 para una venta de otra
-    empresa (no 403 ni 200: el id de otro tenant no debe ni confirmarse) y
-    traer las lineas con producto, cantidad, precio y subtotal."""
 
     @classmethod
     def setUpTestData(cls):
@@ -3400,6 +3394,18 @@ class InventarioBusquedaYPaginacionTest(BaseCatalogoTest):
         fila = next(p for p in self.listar(busqueda="Con foto")["resultados"]
                     if p["sku"] == "SKU-FOTO")
         self.assertTrue(fila["imagen"].startswith("http"))
+
+
+# ============ BUG-20: detalle de venta aislado por empresa =================
+
+class DetalleVentaApiTest(BaseCatalogoTest):
+    """GET /api/ventas/<uuid>/ tiene que responder 404 para una venta de otra
+    empresa (no 403 ni 200: el id de otro tenant no debe ni confirmarse) y
+    traer las lineas con producto, cantidad, precio y subtotal."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
         cls.venta = Venta.objects.create(
             empresa=cls.empresa, cliente=cls.cliente, vendedor=cls.admin,
             numero_factura="FAC-0001", subtotal=150000, descuento=0,
