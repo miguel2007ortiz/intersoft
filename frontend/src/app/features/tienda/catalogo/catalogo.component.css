@@ -7,7 +7,9 @@
   position: sticky;
   top: 0;
   z-index: 500;
-  background: rgba(255, 255, 255, 0.92);
+  /* --barra-fondo ya es translucido y tiene variante de noche; en duro esta
+     barra se quedaba blanca sobre el catalogo oscuro. */
+  background: var(--barra-fondo);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--linea);
   padding: var(--e3) 0;
@@ -168,7 +170,7 @@
   height: 42px;
   border: 1px solid var(--linea);
   border-radius: 8px;
-  background: var(--superficie, #fff);
+  background: var(--superficie);
   cursor: pointer;
   transition:
     border-color 0.15s,
@@ -178,27 +180,54 @@
   border-color: var(--primario);
   background: var(--primario-suave);
 }
+/* Las tres barras se dibujan con la barra del medio (el propio span) y dos
+   pseudoelementos desplazados con `transform`. Antes eran tres `border-top`
+   colocados por flex: un borde no se puede mover con transform, asi que el
+   icono solo podia aparecer y desaparecer de golpe. Con transform las barras
+   giran y forman una X al abrir. */
 .icono-menu {
   position: relative;
-  width: 18px;
-  height: 14px;
-}
-.icono-menu::before,
-.icono-menu::after,
-.icono-menu {
   display: block;
-  content: '';
-  border-top: 2px solid var(--tinta);
-}
-.icono-menu {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--tinta);
+  transition: background 0.2s ease;
 }
 .icono-menu::before,
 .icono-menu::after {
+  content: '';
+  position: absolute;
+  left: 0;
   width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--tinta);
+  /* La misma curva que usa el resto de la barra al abrir el desplegable. */
+  transition: transform 0.28s cubic-bezier(0.4, 0.15, 0.2, 1);
 }
+.icono-menu::before {
+  transform: translateY(-6px);
+}
+.icono-menu::after {
+  transform: translateY(6px);
+}
+/* Se engancha a aria-expanded, que la plantilla ya enlaza: el estado visual y
+   el que anuncia el lector de pantalla no se pueden desincronizar. */
+.btn-menu[aria-expanded='true'] .icono-menu {
+  background: transparent;
+}
+.btn-menu[aria-expanded='true'] .icono-menu::before {
+  transform: rotate(45deg);
+}
+.btn-menu[aria-expanded='true'] .icono-menu::after {
+  transform: rotate(-45deg);
+}
+/* El desplegable se queda montado y se muestra con opacidad y transform, en
+   vez de entrar y salir del DOM. Con `@if` la animacion solo podia verse al
+   abrir: al cerrar, Angular quitaba el nodo al instante y el menu desaparecia
+   de golpe. Cerrado queda `inert` (ver la plantilla) para que no reciba foco
+   de teclado mientras es invisible, igual que el sidebar del panel. */
 .menu-desplegable {
   position: absolute;
   top: calc(100% + 8px);
@@ -210,7 +239,37 @@
   border-radius: 12px;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
   padding: var(--e2);
-  animation: menu-entrar 0.18s ease;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.97);
+  transform-origin: top right;
+  transition:
+    opacity 0.2s ease,
+    transform 0.24s cubic-bezier(0.4, 0.15, 0.2, 1),
+    visibility 0.24s;
+}
+.menu-desplegable.menu-abierto {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+/* Quien prefiere menos movimiento solo ve el cambio de opacidad. */
+@media (prefers-reduced-motion: reduce) {
+  .icono-menu,
+  .icono-menu::before,
+  .icono-menu::after,
+  .menu-desplegable {
+    transition-duration: 0.01ms;
+  }
+  .menu-desplegable {
+    transform: none;
+  }
+  .menu-desplegable.menu-abierto {
+    transform: none;
+  }
 }
 @keyframes menu-entrar {
   from {
@@ -711,7 +770,7 @@
 .badge-nuevo {
   background: var(--primario-suave);
   color: var(--primario-osc);
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--info-borde);
 }
 .card-body {
   padding: 14px;
@@ -730,7 +789,7 @@
   margin: 0 0 6px;
   font-size: 12.5px;
   font-weight: 600;
-  color: #b45309;
+  color: var(--alerta);
 }
 .estrellas-mini {
   color: #f59e0b;
@@ -787,7 +846,7 @@
   cursor: not-allowed;
 }
 .btn-agregar-ok {
-  background: var(--ok);
+  background: var(--ok-solido);
   animation: pulso-ok 0.35s ease;
 }
 @keyframes pulso-ok {
@@ -831,7 +890,7 @@
 }
 .btn-corazon:hover:not(:disabled) {
   transform: scale(1.1);
-  color: #e11d48;
+  color: var(--favorito);
 }
 .btn-corazon:active:not(:disabled) {
   transform: scale(0.92);
@@ -841,7 +900,7 @@
   cursor: default;
 }
 .btn-corazon.corazon-activo {
-  color: #e11d48;
+  color: var(--favorito);
   background: var(--error-fondo);
   border-color: var(--error-borde);
 }
@@ -1028,7 +1087,7 @@
   bottom: 24px;
   right: 24px;
   z-index: 9999;
-  background: var(--ok);
+  background: var(--ok-solido);
   color: #fff;
   padding: 12px 24px;
   border-radius: 8px;
@@ -1094,18 +1153,38 @@
   position: absolute;
   top: 14px;
   right: 14px;
-  width: 32px;
-  height: 32px;
+  /* z-index: la imagen del detalle y su corazon comparten esquina; sin esto
+     el boton quedaba debajo en algunos tamanos de pantalla. */
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  /* El icono se centra con flex: antes el glifo colgaba segun la linea base de
+     la fuente y no quedaba en el medio del circulo. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: 50%;
   border: 1px solid var(--linea);
   background: var(--blanco);
   cursor: pointer;
-  font-size: 14px;
   color: var(--gris);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
 }
 .modal-cerrar:hover {
   color: var(--tinta);
   border-color: var(--gris);
+  background: var(--fila-hover);
+  transform: rotate(90deg);
+}
+.modal-cerrar:focus-visible {
+  outline: none;
+  border-color: var(--primario);
+  box-shadow: 0 0 0 3px var(--primario-suave);
 }
 
 .detalle {
@@ -1307,6 +1386,6 @@
 
 /* Aviso flotante de error (mismo sitio que el toast de exito). */
 .toast-error {
-  background: var(--error);
+  background: var(--error-solido);
   color: #fff;
 }

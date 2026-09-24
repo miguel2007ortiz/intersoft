@@ -164,7 +164,7 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
         color: #fff;
       }
       .btn-destructivo {
-        background: var(--error);
+        background: var(--error-solido);
         border-color: var(--error);
         color: #fff;
       }

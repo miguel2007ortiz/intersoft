@@ -10,6 +10,13 @@
   --error: #b3261e;
   --alerta: #a85b00;
   --ok: #0f766e;
+  /* Version solida de los tres estados, para cuando el color va de FONDO con
+     texto blanco encima (un boton de borrar, un toast de exito). No cambia en
+     modo noche: sobre ella el texto es blanco en los dos temas. Los tokens de
+     arriba si se aclaran de noche, porque ahi hacen de color de TEXTO. */
+  --error-solido: #b3261e;
+  --alerta-solido: #a85b00;
+  --ok-solido: #0f766e;
   --e1: 4px;
   --e2: 8px;
   --e3: 12px;
@@ -24,6 +31,11 @@
 
   /* Tokens semanticos usados por los componentes (tema claro) */
   --tarjeta: #ffffff;
+  /* Superficie elevada (tarjetas y paneles de la tienda). Varios componentes
+     la venian pidiendo como `var(--superficie, #fff)` sin que el token
+     existiera, asi que siempre caian al blanco del respaldo y en modo noche
+     quedaban como parches claros. */
+  --superficie: #ffffff;
   --btn-fin: #16326e;
   --barra-fondo: rgba(255, 255, 255, 0.82);
   --fila-hover: #f3f7ff;
@@ -50,6 +62,11 @@
   --neutro-fondo: #f1f5f9;
   --neutro-borde: #dde5ee;
 
+  /* Rosa del corazon de favoritos (boton de la tarjeta e icono del estado
+     vacio). Tiene variante de noche porque el rosa oscuro sobre la tarjeta
+     oscura se apagaba. */
+  --favorito: #e11d48;
+
   --oscuro: #0a1220;
   --brillo: rgba(38, 87, 217, 0.35);
   --brillo-suave: rgba(38, 87, 217, 0.16);
@@ -67,7 +84,17 @@ body.noche {
   --papel: #0b1220;
   --blanco: #121b2e;
   --tarjeta: #121b2e;
+  --superficie: #121b2e;
   --sombra: 0 1px 3px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.35);
+
+  /* Los colores de estado se quedaban con el valor del tema claro, que es
+     oscuro por diseno (texto sobre fondo claro). Sobre los fondos de noche
+     (--error-fondo y compania, ya oscuros) el texto quedaba casi ilegible: un
+     rojo #b3261e sobre #331512 no se lee. Estas son las variantes claras, del
+     mismo tono y en la linea de --info / --via / --neutro. */
+  --error: #ff8b80;
+  --alerta: #f0b357;
+  --ok: #5ecfc0;
 
   --btn-fin: #1e3a85;
   --barra-fondo: rgba(11, 18, 32, 0.86);
@@ -90,6 +117,7 @@ body.noche {
   --neutro: #9aa7bd;
   --neutro-fondo: #18233c;
   --neutro-borde: #27334d;
+  --favorito: #ff7a96;
 }
 
 * {
@@ -189,8 +217,13 @@ body {
   font-weight: 600;
   margin-bottom: var(--e1);
 }
+/* `textarea` va en la misma lista que input y select: sin el, se quedaba con
+   la fuente por omision del navegador (monoespaciada y mas pequena) y con su
+   borde propio, asi que la descripcion de un producto se leia peor que el
+   resto del formulario y no parecia del mismo diseno. */
 .campo input,
-.campo select {
+.campo select,
+.campo textarea {
   width: 100%;
   font: inherit;
   padding: var(--e3);
@@ -199,12 +232,16 @@ body {
   background: var(--blanco);
   color: var(--tinta);
 }
-.campo input:focus {
+.campo input:focus,
+.campo select:focus,
+.campo textarea:focus {
   border-color: var(--primario);
   outline: none;
   box-shadow: 0 0 0 3px var(--primario-suave);
 }
-.campo input.ng-invalid.ng-touched {
+.campo input.ng-invalid.ng-touched,
+.campo select.ng-invalid.ng-touched,
+.campo textarea.ng-invalid.ng-touched {
   border-color: var(--error);
 }
 .mensaje-error {

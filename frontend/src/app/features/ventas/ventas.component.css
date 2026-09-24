@@ -196,7 +196,7 @@
 .btn-confirmar-anular {
   padding: 10px 20px;
   border: 0;
-  background: var(--error);
+  background: var(--error-solido);
   color: #fff;
   border-radius: 8px;
   cursor: pointer;

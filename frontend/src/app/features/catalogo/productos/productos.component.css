@@ -40,7 +40,12 @@ p.gris {
   max-width: 240px;
 }
 textarea {
+  /* La descripcion del producto suele ser de varias lineas; con dos filas
+     habia que desplazar para releer lo escrito. Se puede seguir agrandando a
+     mano (resize), pero el tamano de partida ya muestra el texto completo. */
   resize: vertical;
+  min-height: 140px;
+  line-height: 1.5;
 }
 .acciones-form {
   display: flex;

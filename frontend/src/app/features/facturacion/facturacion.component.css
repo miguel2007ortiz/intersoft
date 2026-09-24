@@ -165,7 +165,7 @@
   opacity: 0.9;
 }
 .btn-warning {
-  background: var(--alerta);
+  background: var(--alerta-solido);
   color: #fff;
   border-color: var(--alerta);
 }
@@ -255,7 +255,7 @@
   bottom: 24px;
   right: 24px;
   z-index: 9999;
-  background: var(--ok);
+  background: var(--ok-solido);
   color: #fff;
   padding: 12px 24px;
   border-radius: 8px;

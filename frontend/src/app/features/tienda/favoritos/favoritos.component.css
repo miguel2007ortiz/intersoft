@@ -5,7 +5,7 @@
   color: var(--tinta, #0f172a);
 }
 .barra {
-  background: var(--superficie, #fff);
+  background: var(--superficie);
   border-bottom: 1px solid var(--linea, #e2e8f0);
 }
 .barra-int {
@@ -63,7 +63,7 @@
   opacity: 0.92;
 }
 .btn-secundario {
-  background: var(--superficie, #fff);
+  background: var(--superficie);
   color: var(--tinta, #0f172a);
 }
 .area {
@@ -89,7 +89,7 @@ h1 {
 }
 .card {
   position: relative;
-  background: var(--superficie, #fff);
+  background: var(--superficie);
   border: 1px solid var(--linea, #e2e8f0);
   border-radius: 12px;
   overflow: hidden;
@@ -146,7 +146,7 @@ h1 {
   align-items: center;
   justify-content: center;
   background: var(--blanco);
-  color: #e11d48;
+  color: var(--favorito);
   border: 1px solid var(--linea);
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
@@ -207,7 +207,7 @@ h1 {
   cursor: not-allowed;
 }
 .btn-agregar-ok {
-  background: var(--ok);
+  background: var(--ok-solido);
 }
 .sin-stock {
   font-size: 13px;
@@ -221,7 +221,7 @@ h1 {
 }
 .vacio-icono {
   font-size: 40px;
-  color: #e11d48;
+  color: var(--favorito);
   margin: 0 0 8px;
 }
 .vacio .btn {
@@ -240,7 +240,7 @@ h1 {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ok);
+  background: var(--ok-solido);
   color: #fff;
   padding: 10px 16px;
   border-radius: 8px;

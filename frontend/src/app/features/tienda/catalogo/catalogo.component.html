@@ -109,58 +109,25 @@
             <span class="icono-menu" aria-hidden="true"></span>
           </button>
 
-          @if (menuAbierto()) {
-            <div
-              class="menu-desplegable"
-              role="menu"
-              tabindex="-1"
-              (click)="menuAbierto.set(false)"
-              (keydown.enter)="menuAbierto.set(false)"
-            >
-              @if (sesion(); as u) {
-                <div class="menu-usuario">
-                  <strong>{{ u.nombre }}</strong>
-                  <span class="menu-rol">{{ u.rol }}</span>
-                </div>
-                @if (esAdministrador()) {
-                  <a routerLink="/dashboard" class="menu-item" role="menuitem">
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="17"
-                      height="17"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <rect x="3" y="3" width="7" height="9" rx="1" />
-                      <rect x="14" y="3" width="7" height="5" rx="1" />
-                      <rect x="14" y="12" width="7" height="9" rx="1" />
-                      <rect x="3" y="16" width="7" height="5" rx="1" />
-                    </svg>
-                    Volver al panel
-                  </a>
-                }
-                <a routerLink="/favoritos" class="menu-item" role="menuitem">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="17"
-                    height="17"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"
-                    />
-                  </svg>
-                  Mis favoritos
-                </a>
-                <a routerLink="/pedidos" class="menu-item" role="menuitem">
+          <!-- Sigue montado y se muestra por CSS, para que la animacion se vea
+               tambien al cerrar. `inert` mientras esta cerrado: invisible pero
+               presente, no debe recibir foco de teclado. -->
+          <div
+            class="menu-desplegable"
+            [class.menu-abierto]="menuAbierto()"
+            [attr.inert]="menuAbierto() ? null : ''"
+            role="menu"
+            tabindex="-1"
+            (click)="menuAbierto.set(false)"
+            (keydown.enter)="menuAbierto.set(false)"
+          >
+            @if (sesion(); as u) {
+              <div class="menu-usuario">
+                <strong>{{ u.nombre }}</strong>
+                <span class="menu-rol">{{ u.rol }}</span>
+              </div>
+              @if (esAdministrador()) {
+                <a routerLink="/dashboard" class="menu-item" role="menuitem">
                   <svg
                     viewBox="0 0 24 24"
                     width="17"
@@ -172,43 +139,79 @@
                     stroke-linejoin="round"
                     aria-hidden="true"
                   >
-                    <path d="M6 2l4-1v4L6 8V2z" />
-                    <path d="M18 2l-4-1v4l4-1V2z" />
-                    <path d="M10 2h4" />
-                    <path d="M6 8h12v12a2 2 0 01-2 2H8a2 2 0 01-2-2V8z" />
+                    <rect x="3" y="3" width="7" height="9" rx="1" />
+                    <rect x="14" y="3" width="7" height="5" rx="1" />
+                    <rect x="14" y="12" width="7" height="9" rx="1" />
+                    <rect x="3" y="16" width="7" height="5" rx="1" />
                   </svg>
-                  Mis pedidos
-                </a>
-                <button type="button" class="menu-item" role="menuitem" (click)="salir()">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="17"
-                    height="17"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  Salir
-                </button>
-              } @else {
-                <a routerLink="/login" class="menu-item" role="menuitem">Iniciar sesion</a>
-                <a
-                  routerLink="/registro-comprador"
-                  class="menu-item menu-item-primario"
-                  role="menuitem"
-                >
-                  Registrarse
+                  Volver al panel
                 </a>
               }
-            </div>
-          }
+              <a routerLink="/favoritos" class="menu-item" role="menuitem">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="17"
+                  height="17"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"
+                  />
+                </svg>
+                Mis favoritos
+              </a>
+              <a routerLink="/pedidos" class="menu-item" role="menuitem">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="17"
+                  height="17"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 2l4-1v4L6 8V2z" />
+                  <path d="M18 2l-4-1v4l4-1V2z" />
+                  <path d="M10 2h4" />
+                  <path d="M6 8h12v12a2 2 0 01-2 2H8a2 2 0 01-2-2V8z" />
+                </svg>
+                Mis pedidos
+              </a>
+              <button type="button" class="menu-item" role="menuitem" (click)="salir()">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="17"
+                  height="17"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Salir
+              </button>
+            } @else {
+              <a routerLink="/login" class="menu-item" role="menuitem">Iniciar sesion</a>
+              <a
+                routerLink="/registro-comprador"
+                class="menu-item menu-item-primario"
+                role="menuitem"
+              >
+                Registrarse
+              </a>
+            }
+          </div>
         </div>
       </nav>
     </div>
@@ -620,7 +623,21 @@
     >
       <div class="modal-caja" role="dialog" aria-modal="true" [attr.aria-label]="p.nombre">
         <button type="button" class="modal-cerrar" (click)="cerrarDetalle()" aria-label="Cerrar">
-          âœ•
+          <!-- SVG en vez del caracter ✕: el glifo se habia guardado con la
+               codificacion mal y se veia "âœ•" en la pantalla. Un trazo
+               dibujado no depende de la codificacion ni de la fuente. -->
+          <svg
+            viewBox="0 0 24 24"
+            width="15"
+            height="15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
         </button>
 
         <div class="detalle">
