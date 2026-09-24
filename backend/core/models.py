@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
 
+from .almacenamiento import documentos_privados
+
 
 class TimeStampedModel(models.Model):
     """UUID + timestamps + borrado logico para todos los modelos hijos."""
@@ -553,8 +555,12 @@ class FacturaElectronica(TimeStampedModel):
     cufe = models.CharField(max_length=100, blank=True, default='')
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     motivo_rechazo = models.TextField(blank=True, default='')
-    pdf = models.FileField(upload_to='facturas/%Y/%m/pdf/', blank=True, null=True)
-    xml = models.FileField(upload_to='facturas/%Y/%m/xml/', blank=True, null=True)
+    # storage: fuera de MEDIA_ROOT, ver core/almacenamiento.py. Se descargan
+    # por /api/facturacion/<id>/archivo/<tipo>/, que exige sesion.
+    pdf = models.FileField(upload_to='facturas/%Y/%m/pdf/', blank=True, null=True,
+                           storage=documentos_privados)
+    xml = models.FileField(upload_to='facturas/%Y/%m/xml/', blank=True, null=True,
+                           storage=documentos_privados)
     intentos = models.PositiveSmallIntegerField(default=0)
     ultimo_intento = models.DateTimeField(null=True, blank=True)
     enviado_correo = models.BooleanField(default=False)
@@ -586,8 +592,10 @@ class NotaCredito(TimeStampedModel):
     cufe_nota = models.CharField(max_length=100, blank=True, default='')
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     motivo = models.TextField()
-    pdf = models.FileField(upload_to='notas_credito/%Y/%m/pdf/', blank=True, null=True)
-    xml = models.FileField(upload_to='notas_credito/%Y/%m/xml/', blank=True, null=True)
+    pdf = models.FileField(upload_to='notas_credito/%Y/%m/pdf/', blank=True,
+                           null=True, storage=documentos_privados)
+    xml = models.FileField(upload_to='notas_credito/%Y/%m/xml/', blank=True,
+                           null=True, storage=documentos_privados)
     reverso_stock = models.BooleanField(default=False)
 
     class Meta:
@@ -762,7 +770,8 @@ class Recibo(TimeStampedModel):
     venta = models.OneToOneField(Venta, on_delete=models.CASCADE,
                                  related_name='recibo')
     numero = models.CharField(max_length=50, unique=True)
-    archivo = models.FileField(upload_to='recibos/%Y/%m/', blank=True, null=True)
+    archivo = models.FileField(upload_to='recibos/%Y/%m/', blank=True, null=True,
+                               storage=documentos_privados)
     # A quien se le mando y cuando. Vacio = no habia correo del comprador; el
     # recibo existe igual y la empresa puede descargarlo o reenviarlo.
     enviado_a = models.EmailField(blank=True, default='')

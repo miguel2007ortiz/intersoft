@@ -192,6 +192,19 @@ else:
     MEDIA_ROOT = Path(config('MEDIA_ROOT',
                              default=str(BASE_DIR / 'media')))
 
+# -- Documentos privados -------------------------------------------
+# Facturas, notas credito y recibos. NO van en MEDIA_ROOT: /media/ lo sirve
+# nginx sin pasar por la autenticacion de Django y los nombres son adivinables
+# (FE-<numero_factura>.pdf), asi que ahi quedaban publicos. Se descargan por la
+# API, que exige sesion y filtra por empresa. En multi-servidor apunta a un
+# disco compartido, igual que MEDIA_ROOT.
+DOCUMENTOS_ROOT = Path(config('DOCUMENTOS_ROOT',
+                              default=str(BASE_DIR / 'documentos')))
+if 'test' in sys.argv:
+    # Un directorio temporal por corrida, como con MEDIA_ROOT: los tests
+    # escriben comprobantes reales y no deben ensuciar el repo.
+    DOCUMENTOS_ROOT = Path(tempfile.mkdtemp(prefix='intersoft_test_docs_'))
+
 # -- Backups y monitoreo (ops) -----------------------------------
 # Directorio de respaldos de BD generados por `manage.py backup_db`
 # (nunca versionado; ver .gitignore) y retencion en dias.

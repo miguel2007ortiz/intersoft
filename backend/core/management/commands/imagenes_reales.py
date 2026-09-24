@@ -65,6 +65,7 @@ BUSQUEDAS = {
     'Chaqueta': ('jacket', ('jacket',)),
     'Vestido': ('dress clothing', ('dress',)),
     'Sudadera': ('hoodie sweatshirt', ('hoodie', 'sweatshirt')),
+    'Medias': ('sport socks', ('sock',)),
     'Zapatos deportivos': ('sport shoes', ('shoe', 'trainer')),
     'Sandalias': ('sandals', ('sandal',)),
     'Botas': ('leather boots', ('boot',)),
@@ -76,6 +77,9 @@ BUSQUEDAS = {
     'Enlatado': ('canned food tin', ('can', 'tin')),
     'Snack': ('potato chips snack', ('chips', 'snack', 'crisps')),
     'Gaseosa': ('soft drink bottle', ('soda', 'cola', 'soft drink')),
+    # Producto de `seed_demo`, no de `seed_masivo`: el nombre viene en
+    # minuscula ('colombiana - postobon') y es un refresco.
+    'colombiana': ('soft drink bottle', ('soda', 'cola', 'soft drink')),
     'Jugo': ('orange juice glass', ('juice',)),
     'Agua': ('bottled water', ('water',)),
     'Cafe': ('coffee cup', ('coffee',)),
@@ -129,6 +133,7 @@ CATEGORIAS_COMMONS = {
     'Chaqueta': ('Jackets',),
     'Vestido': ('Dresses',),
     'Sudadera': ('Sweatshirts', 'Hoodies'),
+    'Medias': ('Socks', 'Sport socks'),
     'Zapatos deportivos': ('Sports shoes', 'Athletic shoes'),
     'Sandalias': ('Sandals',),
     'Botas': ('Boots',),

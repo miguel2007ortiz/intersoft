@@ -468,7 +468,12 @@ class DescargaComprobantesTest(BaseFase5Test):
 
     def test_descarga_del_pdf_de_factura_por_el_endpoint(self):
         """El PDF se sirve por la API, no por /media/. Asi la descarga exige
-        sesion y se filtra por empresa; el archivo sigue en MEDIA_ROOT."""
+        sesion y se filtra por empresa.
+
+        El archivo vive en DOCUMENTOS_ROOT, fuera de MEDIA_ROOT: nginx sirve
+        /media/ sin pasar por la autenticacion de Django, asi que guardarlo ahi
+        lo dejaba publico (ver core/almacenamiento.py).
+        """
         factura = self._factuar_venta()
         api = self.api_como(self.empleado)
 
@@ -477,9 +482,11 @@ class DescargaComprobantesTest(BaseFase5Test):
         self.assertEqual(respuesta["Content-Type"], "application/pdf")
         self.assertEqual(respuesta.content.decode(), "contenido pdf descargable")
 
-        # Y el archivo sigue guardado en disco, como antes.
-        with open(settings.MEDIA_ROOT / factura.pdf.name, "rb") as fh:
+        # Y el archivo sigue guardado en disco, ahora bajo DOCUMENTOS_ROOT.
+        with open(settings.DOCUMENTOS_ROOT / factura.pdf.name, "rb") as fh:
             self.assertEqual(fh.read().decode(), "contenido pdf descargable")
+        self.assertFalse((settings.MEDIA_ROOT / factura.pdf.name).exists(),
+                         "el PDF quedo dentro de MEDIA_ROOT, donde es publico")
 
     def test_nota_credito_expone_urls_pdf_y_xml(self):
         api = self.api_como(self.empleado)

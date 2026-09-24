@@ -1,7 +1,9 @@
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.files.base import ContentFile
@@ -3581,6 +3583,47 @@ class ReciboAutomaticoTest(BaseCatalogoTest):
         self.assertIn("Tienda Test", html)
         # Deja claro que no sustituye a la factura electronica.
         self.assertIn("no constituye factura", html)
+
+
+class DocumentosFueraDeMediaTest(BaseCatalogoTest):
+    """Los comprobantes no viven en MEDIA_ROOT ni tienen URL publica.
+
+    `/media/` lo sirve nginx sin pasar por la autenticacion de Django y los
+    nombres son adivinables, asi que estar ahi los deja publicos. Bloquear la
+    ruta en nginx dependia de que nadie volviera a abrirla; guardarlos en
+    DOCUMENTOS_ROOT lo cierra por construccion, y estas pruebas lo fijan.
+    """
+
+    def crear_venta(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            venta = Venta.objects.create(
+                empresa=self.empresa, cliente=self.cliente, vendedor=self.admin,
+                numero_factura=f"FV-{Venta.objects.count() + 1:04d}",
+                subtotal=75000, descuento=0, total=75000,
+                estado="completada", metodo_pago="efectivo")
+            DetalleVenta.objects.create(venta=venta, producto=self.producto,
+                                        cantidad=1, precio_unitario=75000)
+        return venta
+
+    def test_el_recibo_se_guarda_fuera_de_media_root(self):
+        recibo = Recibo.objects.get(venta=self.crear_venta())
+        ruta = Path(recibo.archivo.path)
+        self.assertTrue(ruta.is_file(), "el recibo no quedo escrito en disco")
+        self.assertTrue(ruta.is_relative_to(Path(settings.DOCUMENTOS_ROOT)))
+        self.assertFalse(ruta.is_relative_to(Path(settings.MEDIA_ROOT)),
+                         f"el recibo quedo dentro de MEDIA_ROOT: {ruta}")
+
+    def test_pedir_la_url_del_recibo_falla_en_vez_de_dar_una_ruta_publica(self):
+        recibo = Recibo.objects.get(venta=self.crear_venta())
+        # Falla en el sitio: si alguien intenta publicar el enlace se entera
+        # ahi, en vez de servir el documento sin sesion.
+        with self.assertRaises(ValueError):
+            recibo.archivo.url
+
+    def test_la_imagen_de_producto_sigue_publica(self):
+        # El catalogo es anonimo a proposito; el cambio no debe alcanzarlo.
+        self.assertTrue(
+            Producto._meta.get_field("imagen").storage.base_url)
 
 
 class ReciboEndpointTest(BaseCatalogoTest):

@@ -22,6 +22,7 @@ htmlcov/
 
 # Artefactos de runtime del backend
 media/
+documentos/
 staticfiles/
 logs/
 *.log
