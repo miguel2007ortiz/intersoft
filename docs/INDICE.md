@@ -8,7 +8,7 @@ trabajo y decisiones informales viven en `vault/`.
 > gates obligatorios y las invariantes que ningún agente puede romper.
 
 ## Documentos raíz
-- [AGENTS.md](../AGENTS.md) — orquestación Claude + OpenCode, invariantes y gates.
+- [AGENTS.md](../AGENTS.md) — contrato de OpenCode (agente único): roles, invariantes y gates.
 - [README.md](../README.md) — requisitos exactos e instalación.
 - [docs/INDICE.md](INDICE.md) — este mapa.
 

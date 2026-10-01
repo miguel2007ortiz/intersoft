@@ -1,33 +1,41 @@
-# AGENTS.md — Orquestación Claude (supervisor) + OpenCode (ejecutor)
+# AGENTS.md — Contrato de OpenCode (agente único)
 
 Proyecto: **intersoft-prueba_tecnica** (Django REST + MySQL 8 + Angular SPA,
-multi-tenant). Este archivo es el contrato único que leen ambos agentes antes
-de tocar código. OpenCode lee este archivo automáticamente al arrancar en
-este repo (convención `AGENTS.md`); Claude lo usa como referencia de
-supervisión en cada sesión.
+multi-tenant). OpenCode lee este contrato al arrancar en este repo
+(convención `AGENTS.md`) y lo cumple en cada sesión.
+
+> Cambio de modelo (2026-10-01): antes había una orquestación Claude
+> (supervisor) + OpenCode (ejecutor). A partir de ahora **no hay rol de
+> supervisor separado**: OpenCode es el único agente y opera de forma
+> autónoma (especifica, implementa, gatea y mergea él mismo). El humano del
+> equipo es el dueño del producto y consultor, no un gate de código entre
+> ramas.
 
 ---
 
-## 1. Roles (no se mezclan)
+## 1. Rol de OpenCode
 
-| Rol | Quién | Qué hace | Qué NO hace |
-|---|---|---|---|
-| **Supervisor** | Claude (esta sesión/CLI, en la nube o en el equipo del dev) | Define requerimientos, diseño, contratos de API, criterios de aceptación; revisa diffs antes de merge; decide si algo rompe una invariante de `docs/RIESGOS.md` o `docs/CHECKLIST-SEGURIDAD.md` | No ejecuta comandos de escritura en el repo local del dev, no corre `git push`, no despliega |
-| **Ejecutor** | OpenCode (CLI local, máquina del dev) | Escribe código, corre tests/lint/migraciones localmente, abre commits en rama de trabajo, reporta resultado | No decide alcance ni arquitectura por su cuenta; no mergea a `main`/`develop`; no despliega a producción sin gate de Claude |
+| Aspecto | Qué hace | Qué NO hace |
+|---|---|---|
+| **OpenCode** | Define el detalle de la tarea a partir del requerimiento del humano, escribe código, corre tests/lint/migraciones localmente, abre commits en rama de trabajo, corre los gates de la sección 4 y **mergea a `main` cuando el CI está verde** | No toca `main` con código no verificado; no despliega a producción sin el paso operativo de la sección 4/DESPLIEGUE; no viola las invariantes de la sección 3 |
 
-Ninguno de los dos agentes empuja directo a `main`/`develop` ni dispara
-despliegue a producción sin pasar los gates de la sección 4.
+OpenCode puede operar sin pedir aprobación intermedia en el flujo normal
+(crear rama, commitear, pushear, abrir PR, mergear cuando el CI está verde).
+Las únicas operaciones que quedan a decisión humana explícita son las de la
+sección 7 (despliegue a producción, habilitar integraciones reales o
+comandos destructivos).
 
 ---
 
 ## 1.1 Consulta obligatoria del vault (todas las sesiones)
 
-Claude (supervisión) **y** OpenCode (ejecución) leen `docs/INDICE.md` (MOC
-del repo) y `vault/INDICE.md` (índice de notas del proyecto) antes de cada
-tarea y después de un merge relevante. Reglas:
+OpenCode lee `docs/INDICE.md` (MOC del repo) y `vault/INDICE.md` (índice de
+notas del proyecto) antes de cada tarea y después de un merge relevante.
+Reglas:
 
-- Si una nota del vault contradice el plan de una tarea, el ejecutor lo
-  declara en su reporte; el supervisor decide.
+- Si una nota del vault contradice el plan de una tarea, OpenCode lo declara
+  en su reporte y lo resuelve documentando la decisión (no lo ignora en
+  silencio).
 - Decisiones nuevas del trabajo se registran en `vault/decisiones.md` (con la
   plantilla `vault/plantillas/decision-nueva.md`), no solo en el commit.
 - `vault/auditoria-bugs-opencode.md` es el registro de bugs reales de OpenCode
@@ -39,23 +47,24 @@ tarea y después de un merge relevante. Reglas:
 
 ## 2. Flujo por tarea
 
-1. **Claude especifica** la tarea: objetivo, archivos/módulos tocados
-   (`backend/core`, `backend/cuentas`, `frontend/src/...`), criterios de
-   aceptación medibles (tests que deben pasar, endpoint que debe responder
-   X), e invariantes que no se pueden romper (tabla de la sección 3).
-2. **OpenCode implementa** en una rama nueva desde `develop`
-   (`feature/<slug>` o `fix/<slug>`), corriendo localmente los mismos
-   chequeos que el CI (sección 4) antes de reportar terminado.
-3. **OpenCode reporta**: diff, resultado de tests/lint, y cualquier
+1. **Origen de la tarea**: el humano plantea el requerimiento (objetivo,
+   archivos/módulos tocados, criterios de aceptación medibles, e invariantes
+   que no se pueden romper de la sección 3). También puede venir de un ítem
+   de `docs/ROADMAP.md` o un bug de `vault/auditoria-bugs-opencode.md`.
+2. **OpenCode implementa** en una rama nueva desde `main` (`feature/<slug>`
+   o `fix/<slug>`), corriendo localmente los mismos chequeos que el CI
+   (sección 4) antes de pushear.
+3. **OpenCode reporta** en el PR: diff, resultado de tests/lint, y cualquier
    desviación del plan original (si tuvo que tocar algo fuera de lo
    especificado, lo declara explícito, no lo hace silencioso).
-4. **Claude revisa** el diff contra el criterio de aceptación y las
-   invariantes. Devuelve: aprobado → merge a `develop`; o cambios
-   solicitados → vuelve a paso 2.
-5. **Merge a `main`** solo desde `develop` verde en CI (`.github/workflows/ci.yml`),
-   nunca directo desde una rama de feature.
-6. **Despliegue** vía enviso (sección 6) solo después de merge a `main` con
-   CI verde.
+4. **Merge**: OpenCode abre el PR, espera a que el CI quede verde y mergea a
+   `main` con squash. No hay revisión humana previa obligatoria al merge;
+   el humano puede revisar el PR después de mergeado y pedir correcciones
+   (se aplican en rama nueva).
+5. **Nada de cambios masivos automáticos**: un PR/tarea toca un módulo
+   acotado. Refactors amplios (tocar `core/` completo, cambiar ORM,
+   actualizar Angular major) se parten en pasos chicos revisables, nunca
+   una tarea única gigante.
 
 ---
 
@@ -63,8 +72,8 @@ tarea y después de un merge relevante. Reglas:
 
 Tomadas de `README.md`, `docs/RIESGOS.md`, `docs/CHECKLIST-SEGURIDAD.md`,
 `docs/DESPLIEGUE.md`. OpenCode no puede introducir un cambio que las viole;
-si una tarea lo requiere, es decisión de Claude explícita, documentada en el
-commit.
+si una tarea lo requiere, es decisión del humano del equipo explícita,
+documentada en el commit.
 
 - **Seguridad de arranque**: con `DEBUG=False` la app falla al arrancar si
   `SECRET_KEY` es placeholder/ausente o `ALLOWED_HOSTS` incluye `*`.
@@ -79,21 +88,21 @@ commit.
   DIAN (`services/dian_adapter.py`) permanece con `DIAN_MOCK=True` por
   defecto salvo tarea explícita de habilitación real con credenciales.
   DIAN real: **fuera de la actualización automática** — cambios a esa
-  integración siempre pasan por revisión manual (Claude no aprueba merge
-  automático).
-- **Migraciones**: nunca se edita una migración ya aplicada en `develop`/`main`;
+  integración siempre pasan por revisión manual del humano antes de merge.
+- **Migraciones**: nunca se edita una migración ya aplicada en `main`;
   siempre migración nueva. `python manage.py makemigrations --check --dry-run`
   debe devolver "No changes detected" antes de commit.
 - **Secretos**: `.env` real nunca se versiona; nada de credenciales
   (`SECRET_KEY`, `DB_PASSWORD`, `IA_API_KEY`, `WA_TOKEN`, `DIAN_*`) en código,
   logs o mensajes de commit.
 - **Contratos de API**: no se cambia forma de respuesta de un endpoint
-  existente (`{codigo, detalle, errores}` en errores) sin que Claude lo
-  marque como breaking change y actualice el frontend en la misma tarea.
+  existente (`{codigo, detalle, errores}` en errores). Si un cambio lo
+  amerita, se declara como breaking change y se actualiza el frontend en la
+  misma tarea.
 
 ---
 
-## 4. Gates de calidad obligatorios (antes de que OpenCode reporte "listo")
+## 4. Gates de calidad obligatorios (antes de que OpenCode mergee)
 
 Estos son los mismos pasos que corre `.github/workflows/ci.yml` — correrlos
 local evita que CI rebote la rama.
@@ -116,7 +125,9 @@ npm run test:ci
 ```
 
 Si cualquiera falla, la tarea no está lista — OpenCode corrige antes de
-reportar a Claude, no reporta "terminado con fallas conocidas".
+mergear, no mergea "con fallas conocidas" (salvo excepción explícita
+marcada por el humano, p. ej. un `npm audit` previo ajeno a la rama,
+documentada en el PR).
 
 ---
 
@@ -127,7 +138,7 @@ mejoras del `docs/ROADMAP.md`) de forma continua, sin que un cambio malo
 llegue a producción.
 
 1. **Alcance por tarea, no por sesión libre.** OpenCode nunca ejecuta "mejora
-   lo que veas" sin una tarea concreta de Claude (evita scope creep y
+   lo que veas" sin una tarea concreta del humano (evita scope creep y
    cambios no auditables). Cada tarea = un ítem del roadmap o un pedido
    explícito.
 2. **Rama aislada + commits atómicos.** Una tarea, una rama, commits
@@ -135,9 +146,9 @@ llegue a producción.
    `chore:`). Facilita revert quirúrgico si algo falla después.
 3. **Ningún cambio sin tests que lo cubran.** Si la tarea toca lógica de
    negocio (`core/models.py`, `services/`, `analytics.py`), agrega o ajusta
-   test antes de reportar. Cobertura no puede bajar de 70% (gate ya en CI).
-4. **Doble gate antes de `main`:** CI verde (automático) + revisión de
-   Claude (diseño/lógica/invariantes, sección 3) — ninguno sustituye al otro.
+   test antes de mergear. Cobertura no puede bajar de 70% (gate ya en CI).
+4. **Gate antes de `main`:** CI verde (automático) + verificación local de
+   invariantes de la sección 3. El CI es el gate que decide el merge.
 5. **Cambios reversibles primero.** Preferir flags/config sobre reescritura
    irreversible: el proyecto ya usa el patrón (`DIAN_MOCK`, `IA_PROVIDER`,
    `WA_VINCULADO`). Una mejora nueva que cambie comportamiento observable
@@ -146,9 +157,7 @@ llegue a producción.
    con datos reales: `migrate --plan`, backup, y confirmar que
    `migrate <app> <migración_anterior>` funciona en local.
 7. **Nada de cambios masivos automáticos.** Un PR/tarea toca un módulo
-   acotado. Refactors amplios (tocar `core/` completo, cambiar ORM,
-   actualizar Angular major) se parten en pasos chicos revisables, nunca
-   una tarea única gigante.
+   acotado. Refactors amplios se parten en pasos chicos revisables.
 8. **Registro de decisiones.** Cambios de arquitectura o que tocan una
    invariante de la sección 3 se anotan en `docs/RIESGOS.md` o
    `docs/ROADMAP.md` (igual que ya se hace ahí), no solo en el commit.
@@ -229,19 +238,21 @@ la sesión de cierre del módulo.
 
 ## 7. Qué puede hacer OpenCode sin pedir aprobación
 
-**Sin aprobación previa** (dentro de una tarea ya especificada por Claude):
-- Leer, editar, crear archivos dentro de `backend/`, `frontend/`, `docs/`.
+**Sin aprobación previa** (operación normal, dentro de una tarea):
+- Leer, editar, crear archivos dentro de `backend/`, `frontend/`, `docs/`,
+  `vault/`.
 - Correr tests, lint, migraciones locales, `npm`/`pip` en modo lectura
   (install de deps ya pinneadas en lockfile/requirements).
-- Commits en su rama de trabajo.
+- Commits en su rama de trabajo, push de la rama, apertura y **merge del PR
+  a `main` cuando el CI está verde**.
 
-**Requiere aprobación explícita de Claude antes de ejecutar:**
-- `git push` a `main`/`develop`, merge de PR.
-- Cualquier comando de despliegue (enviso, docker-compose contra un host
-  remoto).
+**Requiere aprobación explícita del humano antes de ejecutar:**
+- Cualquier comando de despliegue a producción (docker-compose contra un
+  host remoto, pasos de `docs/DESPLIEGUE.md` fuera de un entorno local).
 - Cambiar `DIAN_MOCK`, `IA_PROVIDER`, o cualquier variable de
-  `backend/.env.example` que afecte producción.
-- Borrar o editar una migración ya commiteada en `develop`/`main`.
+  `backend/.env.example` que afecte producción (integración real con
+  credenciales).
+- Borrar o editar una migración ya commiteada en `main`.
 - Instalar una dependencia nueva no pinneada (cambia `requirements.txt` /
   `package.json` con paquete no discutido).
 - Cualquier comando destructivo (`DROP`, `migrate zero`, `rm -rf`, reset de
@@ -252,9 +263,12 @@ la sesión de cierre del módulo.
 ## 8. Convención de ramas y commits
 
 - Ramas: `feature/<slug>`, `fix/<slug>`, `refactor/<slug>`, `chore/<slug>`
-  desde `develop`.
+  desde `main`.
 - Commits: Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`,
   `docs:`, `chore:`), en español o inglés consistente con el resto del repo
   (el repo actual mezcla, mantener lo que ya exista en el archivo tocado).
 - Un PR = una tarea de la sección 2. PRs grandes que agrupan varias tareas no
   se aceptan (dificulta revert y revisión).
+- Tras el merge, cuando corresponda, actualizar el registro vivo:
+  `vault/ACTUALIDAD.md`, la sección de riesgos resueltos de
+  `docs/RIESGOS.md` o `docs/PR-BODY-<n>.md`, como ya hace el repo.

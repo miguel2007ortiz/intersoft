@@ -1,7 +1,7 @@
 # Vault de trabajo — InterSoft
 
 Vault de **notas de trabajo y decisiones informales** para consulta rápida del
-equipo y de los agentes (Claude/OpenCode) durante una sesión. Es un
+equipo y del agente (OpenCode) durante una sesión. Es un
 complemento, **no** una fuente de verdad: el contrato sigue siendo
 `AGENTS.md` y la documentación formal de `docs/`.
 

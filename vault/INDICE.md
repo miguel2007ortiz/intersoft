@@ -1,8 +1,8 @@
 # Índice del vault — InterSoft
 
 Mapa de contenidos de las notas de trabajo informales. Este archivo es el
-punto de entrada que **Claude (supervisor) y OpenCode (ejecutor) deben leer
-antes de iniciar una tarea** (ver la sección de consulta en `AGENTS.md`).
+punto de entrada que **OpenCode debe leer antes de iniciar una tarea** (ver la
+sección de consulta en `AGENTS.md`).
 
 ## Notas del vault
 - [ACTUALIDAD.md](ACTUALIDAD.md) — estado actual, pendientes y rama (leer primero al retomar).
@@ -14,15 +14,15 @@ antes de iniciar una tarea** (ver la sección de consulta en `AGENTS.md`).
 ## Plantillas
 - [plantillas/decision-nueva.md](plantillas/decision-nueva.md) — plantilla para
   registrar una decisión nueva en `decisiones.md`.
-- [plantillas/revision-merge.md](plantillas/revision-merge.md) — prompt para que
-  el supervisor revise una rama y apruebe el merge a `main`.
+- [plantillas/revision-merge.md](plantillas/revision-merge.md) — checklist de
+  verificación previa al merge que OpenCode ejecuta (agente único).
 
 ## Cómo se usa
 1. Al arrancar cada sesión, leer `docs/INDICE.md` (MOC del repo) y este índice.
 2. Si una nota del vault contradice el plan de la tarea, declararlo en el
-   reporte del ejecutor y no tocarlo en silencio.
+   reporte de OpenCode y no tocarlo en silencio.
 3. Decisiones nuevas del trabajo → `decisiones.md` (usar la plantilla),
    **no** solo en el mensaje de commit.
 4. Si una nota es solo de tu equipo y no debe versionarse, vive en la config
-   local de Obsidian (`.obsidian/`, ignorada por git); lo que Claude/OpenCode
-   necesitan ver debe estar aquí dentro (versionado).
+   local de Obsidian (`.obsidian/`, ignorada por git); lo que OpenCode
+   necesita ver debe estar aquí dentro (versionado).
