@@ -1,5 +1,9 @@
 name: CI — build, tests y check de Django
 
+# CI fiable: runner pineado a ubuntu-24.04 (no a ubuntu-latest) para que la
+# migracion programada de ubuntu-latest a 26.04 no rompa el pipeline sin aviso.
+# Actions al tag actual (checkout/setup-node/setup-python v7, Node 24): evita
+# la deprecacion de las que corrian en Node 20 (v4/v5).
 on:
   push:
     branches: [main, develop]
@@ -14,16 +18,16 @@ jobs:
   # ================= FRONTEND (Angular) =================
   frontend:
     name: Frontend — build + tests (Vitest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
     steps:
       - name: Clonar repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configurar Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -47,7 +51,7 @@ jobs:
   # ================= BACKEND (Django) =================
   backend:
     name: Backend — check + migraciones + tests sobre MySQL
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mysql:
         image: mysql:8.0
@@ -87,7 +91,7 @@ jobs:
         working-directory: backend
     steps:
       - name: Clonar repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Instalar dependencias del sistema (compilar mysqlclient)
         run: |
@@ -96,7 +100,7 @@ jobs:
             build-essential pkg-config default-libmysqlclient-dev
 
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -138,7 +142,7 @@ jobs:
   # `frontend/e2e/` (docs/RIESGOS.md #3), ahora tambien como regresion en CI.
   e2e:
     name: E2E — Playwright (SPA + API sobre MySQL)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       mysql:
         image: mysql:8.0
@@ -169,7 +173,7 @@ jobs:
       WA_VINCULADO: 'False'
     steps:
       - name: Clonar repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Instalar dependencias del sistema (compilar mysqlclient)
         run: |
@@ -178,7 +182,7 @@ jobs:
             build-essential pkg-config default-libmysqlclient-dev
 
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -205,7 +209,7 @@ jobs:
             || { echo "API no arranco:"; cat /tmp/django-e2e.log; exit 1; }
 
       - name: Configurar Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
