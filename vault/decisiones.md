@@ -50,6 +50,16 @@ Formato liviano: cuando una decisión madura se promueve a
   PR y post-merge; Frontend sigue rojo **solo** por `npm audit` preexistente
   (`@angular/router <22.2.0`, GHSA-ff3f-86qr-9cv3, y `brace-expansion`) —
   pendiente de resolver subiendo Angular a `^22.2.0` en tarea aparte.
+- **OpenCode agente único y autónomo (2026-10-01)** → `chore/opencode-agente-unico`
+  merged a `main` (`f6ecae9`): se elimina el rol de supervisor (Claude).
+  `AGENTS.md` reescrito como contrato de agente único (flujo §2, gates §4,
+  aprobaciones §7); `opencode.json` habilita `git push`/`git merge`/`gh pr
+  merge` en `allow` (autonomía; docker/despliegue siguen `ask`, destructivos
+  `deny`). Índices y plantilla `revision-merge.md` actualizados (checklist
+  propio, no prompt de supervisor). Las notas históricas
+  (`vault/decisiones.md`, auditoría, `docs/RIESGOS.md`, `PR-BODY-*.md`)
+  conservan las menciones a Claude por decisión del usuario (registro
+  histórico, no se falsifica).
 
 ## Formato de una entrada nueva
 
