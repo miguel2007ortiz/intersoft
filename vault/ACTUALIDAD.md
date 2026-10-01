@@ -4,9 +4,28 @@ Bitácora de estado al corte para retomar sesión. **Supervisor (Claude) y
 ejecutor (OpenCode): leer esto primero en cada arranque**, además de
 `vault/INDICE.md` (regla 1.1 de `AGENTS.md`).
 
-Última actualización: 2026-09-10 (actualizado tras gate de supervisor:
-`vault/plantillas/revision-merge.md` corrido por Claude, PR #2 abierto y
-CI real en verde).
+Última actualización: 2026-10-01 (corte tras integración de QA y fix de CI).
+
+---
+
+## Corte 2026-10-01 — Integración de ramas QA y fix de CI
+
+- **`fix/qa-fase-2-seguridad` → SUPERSEDED (no se mergea)**. Sus 6 commits
+  (BUG-09/13/19/05, BUG-03/24, BUG-18, BUG-22/26) ya viven en `main`
+  (`a543111`) por las ramas integradas el 17–24/09 (`integracion/demo-local`,
+  `fix/modo-noche`, `fix/qa-fase-4-productos`, `fix/qa-bug-20-detalle-venta`).
+  Un merge forzado chocaría en 14 archivos, colisionaría el grafo de
+  migraciones de `cuentas` (`0010_verificar_email_unico`/`0011_actividad...`
+  vs `0010_actividadusuario...`/`0011_intentologinfallido`) y regresaría
+  diseños más nuevos (ej. bloqueo por intentos: campo en modelo vs tabla
+  `IntentoLoginFallido`). Registro: `vault/decisiones.md`.
+- **Fix CI del punto 1**: `7f10bcf` (`ConfiguracionSeguridadProduccionTest` —
+  restaurar entorno antes del reload) **push + PR → `main`**. Sin él, el job
+  `backend` de CI sigue rojo (`SECRET_KEY no esta definida`, 9 errores). Gate
+  local completo verificado: 749/749 tests, `ruff` 0, `bandit` 0, cobertura 82%.
+- `origin/main` está en `a543111` (HEAD actual). Las notas de secciones
+  antiguas de este archivo quedaron obsoletas (referencian `intersoft_miguel`/PR#2,
+  ya mergeado); revisar las secciones que sigan citando ese estado antes de retomar.
 
 ---
 
