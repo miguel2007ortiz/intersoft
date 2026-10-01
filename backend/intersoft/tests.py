@@ -30,6 +30,41 @@ MODULE = 'intersoft.settings'
 DEV_SECRET = 'django-insecure-cambia-esta-clave-en-produccion-intersoft-2026'
 REAL_SECRET = 'confiable-alef-93xYz12-zdqz3Ooo-1a2b3c4d5e6f7'
 
+# Todas las variables que tocan estas pruebas. `_snapshot_env`/`_restaurar_env`
+# trabajan sobre este set para que el revert siempre devuelva el entorno con el
+# que arranco la clase (DEBUG/SECRET_KEY/ALLOWED_HOSTS incluidos), tambien en CI
+# donde no existe un fichero `.env` y decouple solo lee el entorno real.
+CLAVES_ENV = {
+    'DEBUG', 'SECRET_KEY', 'ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS',
+    'CSRF_TRUSTED_ORIGINS', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
+    'DB_HOST', 'DB_PORT', 'EMAIL_BACKEND', 'EMAIL_HOST', 'EMAIL_PORT',
+    'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD', 'EMAIL_USE_TLS',
+    'DEFAULT_FROM_EMAIL', 'IA_PROVIDER', 'IA_API_KEY', 'IA_API_URL',
+    'IA_MODEL', 'IA_TIMEOUT', 'IA_MAX_HISTORIAL', 'WA_VINCULADO',
+    'WA_API_URL', 'WA_TOKEN', 'WA_NUMERO', 'FRONTEND_URL',
+    'SECURE_SSL_REDIRECT', 'SESSION_COOKIE_SECURE', 'CSRF_COOKIE_SECURE',
+    'SECURE_HSTS_SECONDS', 'SESSION_COOKIE_SAMESITE', 'CSRF_COOKIE_SAMESITE',
+    'CACHE_BACKEND', 'CACHE_LOCATION', 'NUM_PROXIES',
+}
+
+
+def _snapshot_env():
+    """Devuelve un dict `{clave: valor|None}` con el entorno actual.
+
+    `None` significa que la clave estaba ausente, para poder restaurar tanto
+    las claves presentes como eliminar las que no existian al hacer el snapshot.
+    """
+    return {k: os.environ.get(k) for k in CLAVES_ENV}
+
+
+def _restaurar_env(snapshot):
+    """Devuelve os.environ exactamente al estado capturado en `snapshot`."""
+    for k, v in snapshot.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
 
 def _cargar_con_env(nuevo_env):
     """Recarga settings.py con un diccionario de variables de entorno dado.
@@ -37,19 +72,7 @@ def _cargar_con_env(nuevo_env):
     Limpia cualquier variable relevante que no este en `nuevo_env` para que
     decouple no la lea del entorno del proceso padre (p.ej. la DEBUG del host).
     """
-    claves = {
-        'DEBUG', 'SECRET_KEY', 'ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS',
-        'CSRF_TRUSTED_ORIGINS', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
-        'DB_HOST', 'DB_PORT', 'EMAIL_BACKEND', 'EMAIL_HOST', 'EMAIL_PORT',
-        'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD', 'EMAIL_USE_TLS',
-        'DEFAULT_FROM_EMAIL', 'IA_PROVIDER', 'IA_API_KEY', 'IA_API_URL',
-        'IA_MODEL', 'IA_TIMEOUT', 'IA_MAX_HISTORIAL', 'WA_VINCULADO',
-        'WA_API_URL', 'WA_TOKEN', 'WA_NUMERO', 'FRONTEND_URL',
-        'SECURE_SSL_REDIRECT', 'SESSION_COOKIE_SECURE', 'CSRF_COOKIE_SECURE',
-        'SECURE_HSTS_SECONDS', 'SESSION_COOKIE_SAMESITE', 'CSRF_COOKIE_SAMESITE',
-        'CACHE_BACKEND', 'CACHE_LOCATION', 'NUM_PROXIES',
-    }
-    for k in claves:
+    for k in CLAVES_ENV:
         os.environ.pop(k, None)
     for k, v in nuevo_env.items():
         os.environ[k] = v
@@ -60,28 +83,27 @@ class ConfiguracionSeguridadProduccionTest(SimpleTestCase):
     """Validaciones de la configuracion critica del backend."""
 
     @classmethod
+    def setUpClass(cls):
+        # Guarda el entorno con el que arranco la clase (DEBUG/SECRET_KEY
+        # incluidos). Sin este snapshot el revert no tiene a que volver: en CI
+        # no hay `.env` y `_recargar_para_revertir` dejaba el settings sin
+        # SECRET_KEY/DEBUG -> el fail-fast tiraba 9 errores en cada push.
+        cls._ENV_ORIGINAL = _snapshot_env()
+        super().setUpClass()
+
+    @classmethod
     def tearDownClass(cls):
         # Restaura el entorno del proceso padre (lo que tuviera antes).
-        for k in list(os.environ):
-            if k.startswith(('DB_', 'EMAIL_HOST', 'IA_', 'WA_', 'SECURE_',
-                             'SESSION_', 'CSRF_', 'CACHE_')):
-                os.environ.pop(k, None)
-        os.environ.pop('NUM_PROXIES', None)
-        os.environ.pop('DEBUG', None)
-        os.environ.pop('SECRET_KEY', None)
-        os.environ.pop('ALLOWED_HOSTS', None)
-        os.environ.pop('CORS_ALLOWED_ORIGINS', None)
-        os.environ.pop('CSRF_TRUSTED_ORIGINS', None)
+        _restaurar_env(cls._ENV_ORIGINAL)
         super().tearDownClass()
 
     def _recargar_para_revertir(self):
-        # Vuelve a recargar settings con el .env de desarrollo/CI real para no
-        # dejar el settings del proceso (de tests) en modo produccion.
-        for k in list(os.environ):
-            if k.startswith(('DB_', 'EMAIL_HOST', 'IA_', 'WA_', 'SECURE_',
-                             'SESSION_', 'CSRF_', 'DEBUG', 'SECRET_KEY',
-                             'ALLOWED_HOSTS', 'CORS_', 'CACHE_', 'NUM_PROXIES')):
-                os.environ.pop(k, None)
+        # Devuelve el entorno al estado con el que arranco la clase (re-inyecta
+        # DEBUG/SECRET_KEY/ALLOWED_HOSTS y elimina los valores que las pruebas
+        # dejaron) y recarga settings para no dejar el modulo en modo
+        # produccion. En CI sin `.env` el reload solo es valido si SECRET_KEY y
+        # DEBUG vuelven a estar presentes antes de reimportar.
+        _restaurar_env(type(self)._ENV_ORIGINAL)
         importlib.reload(importlib.import_module(MODULE))
 
     # ------------------------- SECRET_KEY fail-fast -------------------------

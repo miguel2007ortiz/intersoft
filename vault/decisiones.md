@@ -29,6 +29,19 @@ Formato liviano: cuando una decisión madura se promueve a
   "no versionada" (decisión de supervisor).
 - **Obsidian**: vault = raíz del repo; `.obsidian/` ignorado en git;
   `vault/` para notas informales y `docs/INDICE.md` como MOC.
+- **`fix/qa-fase-2-seguridad` → SUPERSEDED (2026-10-01)**: no se mergea a
+  `main`. Su contenido (buges BUG-09/13/19/05/03/18/22/24/26 del QA FASE-2/0-1)
+  ya quedó integrado en `main` por las ramas del 17–24/09 con diseños más
+  nuevos e incompatibles (bloqueo por intentos como campo del modelo en vez de
+  tabla `IntentoLoginFallido`; migraciones con grafos distintos en `cuentas`).
+  Un merge forzado regresa 14 archivos en conflicto y rompe la invariante de
+  migraciones de `docs/RIESGOS.md`. Decisión del supervisor (corte
+  2026-10-01). Los `docs/PR-BODY-*.md` y `docs/QA-correcciones.md` del QA
+  reflejan esa versión obsoleta y no representan el estado de `main`.
+- **Fix de CI del corte 2026-10-01** → `7f10bcf` push + PR a `main`:
+  `ConfiguracionSeguridadProduccionTest` debe restaurar `SECRET_KEY`/`DEBUG`
+  (snapshot de entorno) antes del `importlib.reload`, porque en CI no existe
+  `.env` y el fail-fast de arranque tumba el job `backend` con 9 errores.
 
 ## Formato de una entrada nueva
 
