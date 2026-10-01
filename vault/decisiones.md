@@ -42,6 +42,14 @@ Formato liviano: cuando una decisión madura se promueve a
   `ConfiguracionSeguridadProduccionTest` debe restaurar `SECRET_KEY`/`DEBUG`
   (snapshot de entorno) antes del `importlib.reload`, porque en CI no existe
   `.env` y el fail-fast de arranque tumba el job `backend` con 9 errores.
+- **CI fiable (2026-10-01)** → `chore/ci-pin-ubuntu-24-actions-v7` merged a
+  `main` (`7dc2611`): runner pineado a `ubuntu-24.04` (no `ubuntu-latest`) para
+  que la migración programada de `ubuntu-latest` → 26.04 no rompa el pipeline;
+  actions subidas al tag actual (checkout/setup-node/setup-python v7, Node 24,
+  fuera de la deprecación de Node 20). Verificado: Backend y E2E verdes en el
+  PR y post-merge; Frontend sigue rojo **solo** por `npm audit` preexistente
+  (`@angular/router <22.2.0`, GHSA-ff3f-86qr-9cv3, y `brace-expansion`) —
+  pendiente de resolver subiendo Angular a `^22.2.0` en tarea aparte.
 
 ## Formato de una entrada nueva
 
