@@ -68,6 +68,22 @@ Formato liviano: cuando una decisión madura se promueve a
   vulnerabilidades; lint/build/134 tests locales OK; **CI completo en verde
   por primera vez** (Frontend incl. audit + Backend + E2E). Primer PNG con
   los 3 jobs en verde.
+- **B4 — Volumen de datos: índices de apoyo a la analítica (2026-10-06)** →
+  `feature/volumen-datos-indices-analitica` merged a `main` (`ab55847`): los
+  dashboards/reportes (`vw_*` + `analytics.py`) agregan el histórico completo;
+  se añaden 3 índices compuestos **aditivos** (migración `core/0025`) para
+  las agregaciones más costosas — `detventa_prod_venta_idx`
+  (DetalleVenta producto→vw_top_productos), `mov_prod_tipo_idx`
+  (MovimientoInventario producto+tipo→vw_rotacion) y `prod_emp_activo_cat_idx`
+  (Producto empresa+activo+categoria→vw_valor_inventario/bajo mínimo).
+  Sin cambios destructivos ni de lógica de dinero; reversible con migrate.
+  El **plan de archivado** de ventas viejas (`completada` > N, tablas fuera
+  del ciclo activo, vistas con UNION, invariante `Venta.total` respetada)
+  queda documentado en `docs/RIESGOS.md` §4 como siguiente paso, no
+  implementado. Gates: 750 tests backend OK, cobertura 82% (70%), ruff/bandit
+  limpios, `makemigrations --check` sin cambios, frontend 134 tests OK,
+  **CI 3/3 verde**. Test de regresión: `core/tests_volumen.py` (los índices
+  existen en el esquema real, no solo en el modelo).
 
 ## Formato de una entrada nueva
 
