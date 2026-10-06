@@ -60,6 +60,14 @@ Formato liviano: cuando una decisión madura se promueve a
   (`vault/decisiones.md`, auditoría, `docs/RIESGOS.md`, `PR-BODY-*.md`)
   conservan las menciones a Claude por decisión del usuario (registro
   histórico, no se falsifica).
+- **Angular ^22.2.1 (2026-10-06)** → `fix/angular-22-2-1-audit` merged a
+  `main` (`8dd3584`): sube los paquetes `@angular/*` 22.1.x → 22.2.1 para
+  cerrar el advisory GHSA-ff3f-86qr-9cv3 (`@angular/router <22.2.0`, el
+  `npm audit` que mantenía rojo el job Frontend de CI desde 24/09) y las
+  transitivas de `brace-expansion`. Verificado: `npm audit` → 0
+  vulnerabilidades; lint/build/134 tests locales OK; **CI completo en verde
+  por primera vez** (Frontend incl. audit + Backend + E2E). Primer PNG con
+  los 3 jobs en verde.
 
 ## Formato de una entrada nueva
 
