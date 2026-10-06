@@ -90,7 +90,11 @@ class Producto(TimeStampedModel):
         unique_together = ('empresa', 'sku')
         ordering = ['nombre']
         indexes = [models.Index(fields=['empresa', 'activo']),
-                   models.Index(fields=['stock'])]
+                   models.Index(fields=['stock']),
+                   # Apoya vw_valor_inventario: filtra por empresa + activo y
+                   # agrega por categoria_id (rows para agrupar, no scan total).
+                   models.Index(fields=['empresa', 'activo', 'categoria'],
+                                name='prod_emp_activo_cat_idx')]
         constraints = [
             # Validaciones globales de fase 1: montos y existencias nunca negativos
             models.CheckConstraint(condition=models.Q(precio__gte=0),
@@ -310,6 +314,10 @@ class DetalleVenta(TimeStampedModel):
     class Meta:
         # El mismo producto no se repite en lineas distintas de la misma venta
         unique_together = ('venta', 'producto')
+        # Apoya vw_top_productos: agrega por producto_id sobre el historico
+        # completo de lineas (evita el scan total de la tabla para el top).
+        indexes = [models.Index(fields=['producto', 'venta'],
+                                name='detventa_prod_venta_idx')]
         constraints = [
             models.CheckConstraint(condition=models.Q(cantidad__gt=0),
                                    name='detalle_cantidad_positiva'),
@@ -405,7 +413,11 @@ class MovimientoInventario(TimeStampedModel):
 
     class Meta:
         ordering = ['-created_at']
-        indexes = [models.Index(fields=['producto', '-created_at'])]
+        indexes = [models.Index(fields=['producto', '-created_at']),
+                   # Apoya vw_rotacion: filtra las salidas por producto
+                   # (tipo='salida') sin recorrer todos los movimientos.
+                   models.Index(fields=['producto', 'tipo'],
+                                name='mov_prod_tipo_idx')]
         constraints = [
             models.CheckConstraint(condition=models.Q(cantidad__gt=0),
                                    name='movimiento_cantidad_positiva'),

@@ -99,6 +99,20 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
     búsqueda por SKU, agregar, confirmar, exito-box). Suite `npm run test:e2e`
     3/3.
   - Tests: `core/tests_fase5.py::test_venta_pos_linea_sin_cantidad_default_a_1`.
+- **B4. Volumen de datos: índices de apoyo a las agregaciones (hecho)**:
+  las vistas del dashboard/reportes (`vw_*`, `analytics.py`) agregan el
+  histórico completo sobre las tablas base. Se añadieron 3 índices compuestos
+  aditivos (migración `core/0025`) para que las agregaciones más costosas no
+  recorran tablas enteras:
+  - `detventa_prod_venta_idx` (`DetalleVenta.producto, venta`) → `vw_top_productos`.
+  - `mov_prod_tipo_idx` (`MovimientoInventario.producto, tipo`) → `vw_rotacion`.
+  - `prod_emp_activo_cat_idx` (`Producto.empresa, activo, categoria`) →
+    `vw_valor_inventario` y `vw_productos_bajo_minimo`.
+  El plan de archivado de ventas viejas (`estado=completada`, antigüedad > N)
+  queda documentado en `docs/RIESGOS.md` §4 como siguiente paso para volumen
+  alto (no implementado; respeta la invariante de dinero). Tests:
+  `core/tests_volumen.py` (los índices existen en el esquema real de la BD de
+  prueba, no solo en el modelo).
 
 ---
 
@@ -250,6 +264,7 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
 | F2 Envíos frontend | Alto | Bajo | — (hecho) |
 | G1 Grabaciones backend | Medio | Medio | — (hecho) |
 | G2 Grabaciones frontend | Medio | Bajo | — (hecho) |
+| B4 Índices de apoyo a analítica | Alto | Bajo | — (hecho) |
 
 ---
 
@@ -276,6 +291,12 @@ Priorizado por valor/esfuerzo. Referencias a archivos reales del repo (`backend/
   clase `DescargaComprobantesTest`) que validan que la factura y la nota crédito aprobadas
   exponen URLs `/media/...` de su PDF/XML, que el archivo existe en disco con su contenido, y que
   un comprobante no aprobado no expone nada descargable.
+- **B4 índices de analítica (resuelta)**: las agregaciones del dashboard quedarían lentas con
+  volumen alto porque las vistas `vw_*` agregan el histórico completo. Se resuelve (como primer
+  paso, sin tocar dinero ni requerir migración destructiva) con 3 índices compuestos aditivos
+  (migración `core/0025`) que cubren las rutas de acceso más costosas
+  (`detventa_prod_venta_idx`, `mov_prod_tipo_idx`, `prod_emp_activo_cat_idx`). El archivado de
+  ventas viejas queda documentado como siguiente paso en `docs/RIESGOS.md` §4.
 - **E1 design system vivo (resuelta)**: documento `docs/DESIGN_SYSTEM.md` con los tokens reales de
   `frontend/src/styles.css` (colores claro/noche, espaciado, radios, sombras, tipografía),
   componentes reutilizables y referencia a `figma-marketplace/` (tokens + capturas, no versionado).
