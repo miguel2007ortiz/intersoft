@@ -93,9 +93,21 @@ ninguna es un bug critico abierto que bloquee la entrega.
    `intersoft1_db` migrada y `seed_demo`; levanta `ng serve` solo. Además
    corre como regresión en CI (`.github/workflows/ci.yml`, job `e2e`: MySQL
    limpia + migraciones + `seed_demo` + API en segundo plano).
-4. **Volumen de datos**: vistas SQL y agregaciones del dashboard están
-   optimizadas para el volumen actual; para volumen alto convendría
-   materializar/archivar ventas viejas.
+4. **Volumen de datos**: las vistas SQL y agregaciones del dashboard
+   (`vw_*`, `analytics.py`) consultan el histórico completo de las tablas
+   base. **Parcialmente resuelto**: las agregaciones más costosas ahora tienen
+   índices aditivos de apoyo (migración `core/0025`):
+   `detventa_prod_venta_idx` (top productos por producto),
+   `mov_prod_tipo_idx` (rotación, solo salidas por producto) y
+   `prod_emp_activo_cat_idx` (valor de inventario/bajo mínimo por categoría).
+   **Plan de archivado de ventas viejas** (no implementado, para volumen
+   alto): archivar `Venta`/`DetalleVenta`/`MovimientoInventario` de
+   `estado=completada` con antigüedad > N meses a tablas de archivo/`anulada`
+   fuera del ciclo activo, preservando las vistas con `UNION` sobre el
+   archivo si el reporte histórico lo exige, y respetando la invariante de
+   dinero (`Venta.total` = suma de `DetalleVenta.subtotal` se conserva en el
+   archivo, no se elimina). Filtros de rango de fechas (`FiltrosDashboard`)
+   evitan el peor caso de scan.
 5. **Media en disco local**: `MEDIA_ROOT`/`MEDIA_URL` ahora configurables por
    env (`MEDIA_ROOT` apuntable a un disco compartido/volumen en multi-servidor)
    y `python manage.py monitor` verifica que el directorio de media exista y
