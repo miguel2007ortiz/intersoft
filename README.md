@@ -14,7 +14,7 @@ asistente IA, notificaciones/cámaras y marketplace con carrito/checkout.
 
 | Componente | Versión verificada | Instalación sugerida |
 |---|---|---|
-| **Python** | **3.12.x** (3.12.10 usado en desarrollo) | python.org o version manager |
+| **Python** | **3.12.x – 3.14.x** (3.12.10 verificado; 3.14.5 compatible, Pillow 12.3.0 trae wheel para 3.14) | python.org o version manager |
 | **Node.js** | **24.x** (LTS) — 24.15.0 usado | nodejs.org o `nvm install 24` |
 | **npm** | 10.x/11.x | junto con Node |
 | **MySQL** | **8.0** (8.0.36+) | Laragon (Windows) o MySQL Server |
@@ -94,7 +94,7 @@ npm run start             # http://localhost:4200 (dev, apunta a :8000)
 En cada push/PR a `main`/`develop` se ejecuta:
 
 - **Frontend**: `npm ci` → `npm run lint` → `npm run build` → `npm run test:ci`.
-- **Backend**: Python 3.12 + MySQL 8 (servicio) → `pip install -r requirements.txt`
+- **Backend**: Python 3.12–3.14 + MySQL 8 (servicio) → `pip install -r requirements.txt`
   → `python manage.py check` → `python manage.py makemigrations --check --dry-run`
   → `python manage.py migrate` → `python manage.py test`.
 - El job de backend corre con `DEBUG=False` y `SECRET_KEY`/`ALLOWED_HOSTS`

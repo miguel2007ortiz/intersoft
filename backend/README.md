@@ -3,7 +3,7 @@
 Este directorio contiene la lógica del servidor y la gestión de datos (Django REST + MySQL 8).
 
 ## Requisitos
-- Python 3.12 (verificado en 3.12.x).
+- Python 3.12 – 3.14 (verificado en 3.12.x; compatible con 3.14.x).
 - MySQL 8 (8.0.36+), en desarrollo suele usarse Laragon.
 - Node.js no es necesario para el backend (solo es para compilar el frontend).
 - Dependencias **pinneadas** en `requirements.txt` (versiones exactas `==`
@@ -12,7 +12,7 @@ Este directorio contiene la lógica del servidor y la gestión de datos (Django 
     en Windows se usa el fallback **PyMySQL** (activado automáticamente por
     `intersoft/__init__.py`).
   - El runtime actual (Windows, PyMySQL): Django 5.2.17, DRF 3.18.0,
-    simplejwt 5.5.1, cors-headers 4.9.0, decouple 3.8, Pillow 11.2.1.
+    simplejwt 5.5.1, cors-headers 4.9.0, decouple 3.8, Pillow 12.3.0 (con wheel para Python 3.14).
 
 ## Instalación
 ```bash
