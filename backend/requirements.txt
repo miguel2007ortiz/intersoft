@@ -10,7 +10,8 @@ djangorestframework==3.18.0
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
 python-decouple==3.8
-Pillow==11.2.1
+# Pillow 12.3.0: wheels oficiales para Python 3.12, 3.13 y 3.14 (Windows/Linux/macOS).
+Pillow==12.3.0
 
 # Conector MySQL. En Linux/macOS y CI compila mysqlclient (requiere
 # libmysqlclient-dev / mysql-devel). En Windows suele no compilar:
